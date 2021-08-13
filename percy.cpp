@@ -9,6 +9,7 @@ typedef vector <Weights> Layer;
 typedef vector <Layer> Graph;
 
 class neuron {
+float eta=0.5;
 	float thres_func(float i)
 	{
 		float outs = 1/(1+exp(-i));
@@ -16,43 +17,45 @@ class neuron {
 	};
    public:
 	vector <float> input_weights;
+	vector <float> inputs;
+	vector <float> new_weights;
+	float netin;
 	float output;
 	float bias_val;
 	neuron(Weights w) {
 		int siz=w.size();
 
-#ifdef DEBUGON
-		   cout << "Creating neuron with (at most) " << w.size() << " inputs"<< endl;
-#endif
 		   for (int i=0;i<siz-1;i++)
 	   	{
-#ifdef DEBUGON
-	   		cout << "Pushing back weight of " << w[i] << endl;
-#endif
 			   input_weights.push_back(w[i]);
 		   }
-#ifdef DEBUGON
-	   	cout << "Including Bias weighting of " << w[siz-1] << endl;
-#endif
 	   	bias_val = w[siz-1];
 	};
 
 	float input_neuron(Signals s)
 	{
-		float outp=bias_val;
+                inputs.size=0;
+		netin = bias_val;
 		for (int i=0;i<s.size();i++)
 		{
-#ifdef DEBUGON
-	            cout << "outp=="<<outp << ",   += " << input_weights[i] << " * " << s[i] << endl;
-#endif
-                    outp += input_weights[i] * s[i];
+                    inputs.push_back(s[i]);
+                    netin += input_weights[i] * s[i];
 		}
-		output = thres_func(outp);
-#ifdef DEBUGON
-		cout << "outp=="<<outp<<endl;
-		cout << "output=="<<output<<endl;
-#endif
+		output = thres_func(netin);
 		return output;
+	};
+
+        void calc_partial(float err, float tgt)
+	{
+		deeEdeeO = output - tgt;
+		deeOdeeN = output * (1 - output);
+		new_weights.size=0;
+                for (int i=0;i<input_weights.size();i++)
+                {
+		     deeNdeeW = inputs[i];
+                     deeEdeeW = deeEdeeO * deeOdeeN * deeNdeeW;
+                     new_weights.push_back(input_weights[i]-eta*deeEdeeW);
+                }
 	};
 };
 
@@ -74,6 +77,15 @@ class neuron_layer {
 	   for (int i=0;i<nodes.size();i++)
 	   {
 		   out.push_back(nodes[i].input_neuron(in));
+	   }
+	   return out;
+   };
+   Signals descend_grad(float toterr, float ans)
+   {
+	   Signals out;
+	   for (int i=0;i<nodes.size();i++)
+	   {
+		   nodes[i].calc_partial(toterr, ans);
 	   }
 	   return out;
    };
@@ -118,6 +130,23 @@ class neuron_network {
 	}
 	return output;
    };
+   Signals back_prop(Signals output, Signals answer)
+   {
+        if (output.size() != answer.size())
+	{
+		cout << "Error: Expected " << answer.size() << " outputs , but got " << output.size() << endl;
+		exit(1);
+	}
+        float outerr = 0;
+	for (int i=0;i<answer.size();i++)
+            outerr += (answer[i] - output[i]) * (answer[i] - output[i]) / 2;
+      cout << "output err="<<outerr<<endl; 
+	for (int i=1;i<graph.size();i++)
+	{
+            graph[i].descend_grad(outerr, answer[i]);
+	}
+	return output;
+   };
 };
 
 float L1_Bias=0.35;
@@ -138,8 +167,11 @@ neuron_network perceptron({L1, L2});
 int main()
 {
 	Signals result;
+Signals input_train={0.05, 0.1};
+Signals train_answer={0.01, 0.99};
   //  perceptron.show_net();
-    result = perceptron.forward_feed({0.05, 0.1});
+    result = perceptron.forward_feed(input_train);
+    perceptron.back_prop(result, train_answer);
     cout << "result.size=" << result.size()<< endl;
     for (int i=0;i<result.size();i++)
 	    cout << result[i] << " is Output " << i << endl;
