@@ -25,6 +25,7 @@ class neuron
         float netin;
         float output;
         float bias_val;
+        string out_label;
         neuron(Weights w)
         {
                 int siz = w.size();
@@ -98,10 +99,41 @@ class neuron_layer
 {
         public:
                 vector<neuron> nodes;
+        void mark_node_output(int layer_from, int node_from, int layer_to, int node_to, float val)
+        {
+            string tmp_str = to_string(node_to);
+             if (val == 0)
+                tmp_str=" ";
+ 
+             if ( this->nodes[node_from].out_label.length() == 0)
+                this->nodes[node_from].out_label = "L"+to_string(layer_from)+":N"+to_string(node_from) + "->L" + to_string(layer_to) + ":N" +tmp_str;
+             else
+                this->nodes[node_from].out_label += ",N" + tmp_str;
+        }
+        void list_io ( neuron_layer nextLayer, int m)
+        {
+             // for each node in 'previous' layer
+             // go through 'new' layers nodes
+                for (int j=0;j<nextLayer.nodes.size();j++)
+                {
+                     for (int i=0;i<this->nodes.size();i++)
+                     {
+                       if (nextLayer.nodes[j].input_weights.size() != this->nodes.size())
+                       {
+                         cout << "Error in setup: nextLayer.nodes["<< j << "].input_weights.size() " << nextLayer.nodes[j].input_weights.size()<< " != prevLayer->nodes.size()=" << this->nodes.size() << endl;
+                         exit (-1);
+                       }
+                       this->mark_node_output(m-1,i,m,j,nextLayer.nodes[j].input_weights[i]);
+                     }
+                }
+                     for (int i=0;i<this->nodes.size();i++)
+                        //cout <<"Node "<< i << " outputs to " << this->nodes[i].out_label << endl;
+                        cout << this->nodes[i].out_label << endl;
+        }
         neuron_layer(Layers nl)
         {
                 int siz = nl.size();
-                cout << "Creating neuron layer of " << siz - 1 << " nodes" << endl;
+                cout << "Creating neuron layer of " << siz << " nodes" << endl;
                 for (int i = 0; i < siz; i++)
                 {
                         neuron tmp(nl[i]);
@@ -135,33 +167,6 @@ class neuron_layer
                 }
                 return out;
         };
-        void set_output_list(Layers s)
-        {
-             for (int i = 0; i < s.size(); i++)
-                 for (int j = 0; j < s[i].size(); j++)
-                    if (s[i][j]==1)
-                    {
-                       nodes[j].output_links.push_back(i);
-                       cout << "Node " << j << " links to next layer Node "<<i<<endl;
-                    }
-        };
-        Layers get_input_list()
-        {
-              Layers b;
-              for (int i = 0; i < nodes.size(); i++)
-              {
-                 Signals a;
-                 for (int j = 0; j < nodes[i].input_weights.size(); j++)
-                 {
-                    if (nodes[i].input_weights[j] == 0)
-                        a.push_back(0);
-                    else
-                        a.push_back(1);
-                 }
-                 b.push_back(a);
-              }      
-              return b;
-        };
 };
 
 class neuron_network
@@ -180,9 +185,8 @@ class neuron_network
                         graph.push_back(tmp);
                         if (i > 0)
                         {
-                           Layers s = graph[i].get_input_list();
-                           graph[i-1].set_output_list(s);
-                                          
+                           graph[i-1].list_io(graph[i], i);
+                           //graph[i].list_io(graph[i-1], i);
                         }
                 }
                 num_inputs = g[0].size();
@@ -228,37 +232,63 @@ class neuron_network
 
 float L1_Bias = 0.35;
 float L2_Bias = 0.60;
-// Layer 1 has 3 nodes, getting input from up to 4 nodes
-Layers L1 = { /*node 1 input weights from Inputs 1,2 */
+float L3_Bias = 0.60;
+Layers L1 = {
+                {
+// 3 nodes at L1 imply 3 inputs (plus one Bias) ALWAYS 1 to 1 (input to node)
+                0.4, 0.45, L1_Bias // for N1 in L1 its inputs are from I1, and I2 (and bias)
+        },        //L2N1 has input fro L1N1, L1N2
+                {
+                0.4, 0.45, L1_Bias // for N1 in L1 its inputs are from I1, and I2 (and bias)
+        },        //L2N1 has input fro L1N1, L1N2
         {
-                0.15, 0.2, L1_Bias
+                0.5, 0.55, L1_Bias // for N2 in L1 is inputs are for I1 and I2 (and bias)
+        }        //L2N2 has input fro L1N1, L1N2
+};
+// Layer 1 has 6 nodes, getting input from up to 3 nodes
+Layers L2 = { /*node 1 input weights from Inputs 1,2,3 */
+        {
+                0.9, 0.15, 0, L2_Bias  // Layer 2 Node 1 gets input from 
         },        // L1N1 has inputs from I1, I2 and I4
         /*node 2 input weights from Inputs 1,2 */
         {
-                0.25, 0.3, L1_Bias
+                0.5, 0, 0.25, L2_Bias
+        },        // L1N2 has inputs from I1, I2 and I3
+        {
+                0.5, 0.25, 0.3, L2_Bias
+        } ,       // L1N2 has inputs from I1, I2 and I3
+        {
+                0.25, 0.4, 0, L2_Bias
+        },        // L1N2 has inputs from I1, I2 and I3
+        {
+                0.25, 0.5, 0.3, L2_Bias
+        } ,       // L1N2 has inputs from I1, I2 and I3
+        {
+                0.25, 0.25, 0.3, L2_Bias
         }        // L1N2 has inputs from I1, I2 and I3
 };
-// Layer 2 has 4 nodes, getting input from up to 3 nodes (ie the output from L1 nodes)
-Layers L2 = {
+// Layer 3 has 2 nodes, getting input from up to 6 nodes (ie the output from L2 nodes) plus the Bias
+// 2 nodes at Last Layer imply 2 outputs ALWAYS 1 to 1 (output from node)
+Layers L3 = {
                 {
-                0.4, 0.45, L2_Bias
+                0.4, 0.45, 0, 0, 0.4, 0, L3_Bias
         },        //L2N1 has input fro L1N1, L1N2
         {
-                0.5, 0.55, L2_Bias
+                0.5, 0.55, 0.3, 0.5, 0.2, 0.2, L3_Bias
         }        //L2N2 has input fro L1N1, L1N2
 };
 
-neuron_network perceptron({ L1, L2 });
+neuron_network perceptron({ L1, L2, L3 });
 
 int main()
 {
         Signals result;
-        Signals input_train = { 0.05, 0.1 };
-        Signals train_answer = { 0.01, 0.99 };
+        Signals input_train = { 0.05, 0.1 , 0.5};
+        Signals train_answer = { 0.01, 0.99};
         //  perceptron.show_net();
         result = perceptron.forward_feed(input_train);
         perceptron.back_prop(result, train_answer);
-        cout << "result.size=" << result.size() << endl;
+
         for (int i = 0; i < result.size(); i++)
                 cout << result[i] << " is Output " << i << endl;
         // reference for verify
