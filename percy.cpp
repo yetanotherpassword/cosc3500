@@ -8,7 +8,7 @@ typedef Weights Signals;
 typedef Weights Partials;
 typedef vector<Weights> Layers;
 typedef vector<Layers> Graph;
-
+#define ETA 0.5
 class neuron
 {
         float eta = 0.5;
@@ -121,6 +121,7 @@ class neuron_layer
                 vector<neuron> nodes;
         float layer_bias_weight;
         Layers nodes_weights;
+        Layers nodes_weight_updates;
         Signals delta;
         Signals outputs;
         Signals netins;
@@ -155,6 +156,15 @@ class neuron_layer
                         //cout <<"Node "<< i << " outputs to " << this->nodes[i].out_label << endl;
                         cout << this->nodes[i].out_label << endl;
         }   
+        neuron_layer(int inputs)
+        {
+                cout << "Creating input neuron layer of " << inputs << " nodes" << endl;
+                for (int i = 0; i < inputs; i++)
+                {
+                        neuron tmp({}, 0);
+                        nodes.push_back(tmp);
+                }
+        }
         neuron_layer(Layers nl, float bias_wgt)
         {
                 nodes_weights = nl;
@@ -178,7 +188,35 @@ class neuron_layer
                 }
                 return out;
         };
-        void descend_grad_last(Signals ans, Signals & delta, Signals prev_outputs)
+
+
+void calc_new_weights(Signals delta, Signals prev_outputs)
+{
+                // calc transpose(delta_i)*prev_outputs to get Matrix === weight updates
+                nodes_weight_updates.clear();
+                for (int i=0;i<delta.size();i++)
+                {
+cout << "      For delta_" << i << " == " << delta[i] <<endl;
+                   Signals to_node_weights;
+                   for (int j=0;j<prev_outputs.size();j++)
+                   {
+cout << "         For prev_outputs_" << j << " == " << prev_outputs[j] <<endl;
+                        to_node_weights.push_back(delta[i]*prev_outputs[j]);
+cout << "         to_node_weights == " << delta[i]*prev_outputs[j] << endl;
+                   }
+                   nodes_weight_updates.push_back(to_node_weights);
+                }
+};
+void update_weights()
+{
+   for (int i = 0; i < nodes.size(); i++)
+        for (int j=0; j<nodes_weights[i].size(); j++) 
+        {   
+              nodes_weights[i][j] += ETA*nodes_weight_updates[i][j];
+        }
+}
+
+        void descend_grad_last(Signals ans, Signals & delta, Signals layer_inputs)
         {
 cout << "For output layer:" << endl;
                 delta.clear();
@@ -186,30 +224,33 @@ cout << "For output layer:" << endl;
                 {
                      float m = 1;
                      float delta_i=((ans[i] - outputs[i])* (outputs[i] *(1 - outputs[i])))/m;
-cout << "   Node " << i+1<<" has net in = " << nodes[i].netin << " giving output = " << nodes[i].output << " Comprising from : +Bias = " << layer_bias_weight  << endl;
+cout << "   Node " << i+1<<" has net in = " << nodes[i].netin << " giving output = " << nodes[i].output << " Comprising from : +Bias = " << layer_bias_weight  << " delta_" << i << " = " << delta_i << endl;
                     //   nodes[i].calc_partial_last(out[i]);
                      delta.push_back(delta_i);
 
                 }
-/*
-                for (int i = 0; i < nodes.size(); i++)
-                {
-                     float m = 1;
-                     float delta_i=((ans[i] - nodes[i].output)* (nodes[i].output *(1 - nodes[i].output)))/m;
-cout << "   Node " << i+1<<" has net in = " << nodes[i].netin << " giving output = " << nodes[i].output << " Comprising from : +Bias = " << layer_bias_weight  << endl;
-                    //   nodes[i].calc_partial_last(out[i]);
-                     delta.push_back(delta_i);
-                }
-*/
+                calc_new_weights(delta, layer_inputs);
         };
-        Signals descend_grad()
+        void descend_grad(Signals & delta, Signals layer_inputs)
         {
                 Signals out;
+                Signals new_delta;
                 for (int i = 0; i < nodes.size(); i++)
                 {
-                        nodes[i].calc_partial();
+cout << "   Node " << i+1<<" has net in = " << nodes[i].netin << " giving output = " << nodes[i].output << " Comprising from : +Bias = " << layer_bias_weight  << " delta_" << i << " = " << delta[i] << endl;
+                    float ele_sum=0;
+                    for (int j=0; j<nodes_weights[i].size(); j++) // or <nodes_weights[0].size() ???
+                    {
+cout << " nodes_weights["<<j<<"]["<< i <<"] == " <<  nodes_weights[j][i] << endl;
+                        ele_sum += delta[j] * nodes_weights[i][j];
+                    }
+                 //   ele_sum += layer_bias *  delta[i] ;
+                    ele_sum = ele_sum * (outputs[i] *(1 - outputs[i]));
+cout << "Pushing back " << ele_sum << " onto new delta" << endl;
+                    new_delta.push_back(ele_sum);
                 }
-                return out;
+                calc_new_weights(delta, layer_inputs);
+                delta = new_delta;
         };
 };
 
@@ -229,6 +270,10 @@ class neuron_network
                      exit;
                 }
                 cout << "Creating neuron network with " << g.size() << " layers" << endl;
+                // Am defining layers by weight matrices, so there is +1 column of nodes (input)
+                num_inputs = g[0][0].size();
+                neuron_layer input_nodes(num_inputs);
+                graph.push_back(input_nodes);
                 for (int i = 0; i < g.size(); i++)
                 {
                         cout << "Neuron layer " << i << " : ";
@@ -240,7 +285,6 @@ class neuron_network
                            //graph[i].list_io(graph[i-1], i);
                         }
                 }
-                num_inputs = g[0].size();
                 num_outputs = g[g.size() - 1].size();
                 cout << "Network has " << num_inputs << " inputs and " << num_outputs << " outputs" << endl;
         }
@@ -251,6 +295,13 @@ class neuron_network
                                 for (int k = 0; k < graph[i].nodes[j].input_weights.size(); k++)
                                         cout << "Layer " << i << " Node " << j << " input weight " << k << " is " << graph[i].nodes[j].input_weights[k] << endl;
         };
+        void update_weights()
+        {
+                for (int i = 1; i < graph.size(); i++)
+                {
+                        graph[i].update_weights();
+                }
+        }
         void forward_feed(Signals inputs)
         {
                 if (inputs.size() != num_inputs)
@@ -258,7 +309,7 @@ class neuron_network
                         cout << "Error: Expected " << num_inputs << " inputs, but got " << inputs.size() << endl;
                         exit(1);
                 }
-                graph[0].outputs = graph[0].input_layer(inputs);
+                graph[0].outputs = inputs;  // need inputs for 1st layer weight recalibration
                 for (int i = 1; i < graph.size(); i++)
                 {
                         graph[i].outputs = graph[i].input_layer( graph[i-1].outputs );
@@ -273,11 +324,12 @@ class neuron_network
                         exit(1);
                 }
                 graph[last].descend_grad_last(answer, delta, graph[last-1].outputs);
-                for (int i = last-1; i>=0; i--)
+                for (int i = last-1; i>0; i--)
                 {
 cout << "For previous layer: " << i << endl;
-                        graph[i].descend_grad();
+                        graph[i].descend_grad(delta, graph[i-1].outputs);
                 }
+                update_weights();
         };
 void results(Signals answer)
 {
@@ -328,10 +380,13 @@ int main()
         Signals input_train = { 0.05, 0.1 };
         Signals answer = { 0.01, 0.99};
         // perceptron.show_net();
+//for (int i=0;i<10000;i++)
+{
  cout << "*********** Feed Forward" << endl;
         perceptron.forward_feed(input_train);
  cout << "*********** Results" << endl;
         perceptron.results(answer);
  cout << "*********** Back Propagation" << endl;
         perceptron.back_prop(answer);
+}
 }
