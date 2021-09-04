@@ -43,6 +43,7 @@ rowvec sigmoid( rowvec  net)
 }
 int main()
 {
+float eta=0.5;
 float L0_Bias_weight = 0;
 float L1_Bias_weight = 0.35;
 float L2_Bias_weight = 0.60;
@@ -58,10 +59,11 @@ rowvec expected_answer = { 0.01, 0.99};
 rowvec AOnes={1,1};
 rowvec n1, n2;
 rowvec a1, a2;
-rowvec delta;
-rowvec ftick;
+rowvec delta1;
+rowvec ftick1;
 
-mat updates(2,2);
+mat updates1(2,2);
+mat new_weights1(2,2);
 mat L1 = {{   0.15, 0.25},   // L1N1 weights for I1 (col 1), I2 (col 2)and Bias
        {0.2, 0.3}};   
 
@@ -98,13 +100,17 @@ std::cout << a2<< std::endl;
 
 cout << "------------------------------------ BACKPROPAGATION" << endl;
 cout << "------------------------------------ Delta of Output Layer" << endl;
-ftick=(AOnes-a2);
-ftick=ftick % (a2);
-delta = (expected_answer - a2)%(ftick);
-std::cout << delta<< std::endl;
+ftick1=(AOnes-a2);
+ftick1=ftick1 % (a2);  //element wise multiply
+delta1 = (expected_answer - a2)%(ftick1);
+std::cout << delta1<< std::endl;
 
-updates = delta.t() * a1;
 cout << "------------------------------------ Updates to weights at Output Layer" << endl;
-std::cout << updates<< std::endl;
+updates1 = delta1.t() * a1;
+std::cout << updates1<< std::endl;
+
+cout << "------------------------------------ New updates are at Output Layer" << endl;
+new_weights1 = Loutput + (eta *  updates1.t()) ;
+std::cout << new_weights1 << std::endl;
 
 }
