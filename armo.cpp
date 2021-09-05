@@ -98,6 +98,7 @@ void load_an_image(int seq, unsigned char * mptr, rowvec & rv, rowvec & t, unsig
 {
     int offset=16;
     int start=(748*seq)+offset;
+    rv.set_size(784);
     for (int i=0;i<748;i++)
         rv(i) = ((float) mptr[start+i])/255.0;
     if (lp[offset+seq]==0)
@@ -121,7 +122,7 @@ int main (int argc, char *argv[])
     unsigned char * memptr = load_file("./tmp/cosc3500/data/neural-networks-and-deep-learning/src/mnist-neural-network-plain-c/data/train-images-idx3-ubyte", "./tmp/cosc3500/data/neural-networks-and-deep-learning/src/mnist-neural-network-plain-c/data/train-labels-idx1-ubyte", labptr);
     
     unsigned int NumberOfLayers=4;
-    int nodes[NumberOfLayers]={784, 100, 100, 10};  
+    int nodes[NumberOfLayers]={784, 1000, 1000, 10};  
 
     double eta = 0.5;
 
@@ -168,7 +169,7 @@ int main (int argc, char *argv[])
     vector<mat> new_layer_weights;
     
     //int nodes[]={784, 1000, 1000, 10};  
-    for (int i=1;i <= NumberOfLayers; i++)
+    for (int i=1;i < NumberOfLayers; i++)
     {
          netin.push_back({});
          actuation.push_back({});
