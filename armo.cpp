@@ -3,7 +3,7 @@
 #include <cmath>
 #define ARMA_64BIT_WORD
 #include <armadillo>
-#define TESTING
+#undef TESTING
 // g++ armo.cpp -g -o armo -std=c++11 -O2 -larmadillo
 
 // requires armodillo
@@ -197,6 +197,7 @@ int main (int argc, char *argv[])
     vector<mat> new_layer_weights;
     rowvec tmpbias; 
     mat tmpwgt; 
+    colvec v;
 
     for (int i=0;i < NumberOfLayers; i++)
     {
@@ -231,14 +232,18 @@ int main (int argc, char *argv[])
          if (i==0)
          {
             tmpwgt = ones<mat>(nodes[i],1); // (not used) but no weight change to inputs
-            tmpbias=zeros<rowvec>(nodes[i]);  // (not used) but no bias to inputs
+            //tmpbias=zeros<rowvec>(nodes[i]);  // (not used) but no bias to inputs
+            tmpbias=rand();
+            v = ones<vec>(tmpwgt.n_rows)*tmpbias;
          }
          else
          {
             tmpwgt = randu<mat>(nodes[i],nodes[i-1]);
-            tmpbias=randu<rowvec>(nodes[i]);
+            tmpbias=rand();
+            v = ones<vec>(tmpwgt.n_rows)*tmpbias;
          }
 #endif
+            tmpwgt.insert_cols(tmpwgt.n_cols, v);
          layer_weights.push_back( tmpwgt );
 cout << "Layer_weights[ "<<i <<"]: has rows="<< layer_weights[i].n_rows << " and cols=" << layer_weights[i].n_cols << endl;
 //cout << layer_weights[i-1] << endl;
@@ -256,27 +261,33 @@ cout << "Layer_bias[ "<<i <<"]: has rows="<< layer_bias[i].n_rows << " and cols=
     layer_bias[2] = L2Bias;
    */ 
 #ifdef TESTING
-            rowvec input={0.05, 0.1};
-            actuation[0]=input;
-            actuation[0].insert_cols(actuation[0].n_cols, ones<colvec>(1));
+            actuation[0]={0.05, 0.1};
             tgt={0.01, 0.99};
+#else
+            load_an_image(0, memptr, actuation[0], tgt, labptr);
+#endif
             tgt.insert_cols(tgt.n_cols, ones<colvec>(1));
-for (int y=0;y<10000;y++)
+            actuation[0].insert_cols(actuation[0].n_cols, ones<colvec>(1));
+tmprw=actuation[0];
+for (int y=1;y<10000;y++)
 {
+            load_an_image(y, memptr, actuation[0], tgt, labptr);
+            tgt.insert_cols(tgt.n_cols, ones<colvec>(1));
+            actuation[0].insert_cols(actuation[0].n_cols, ones<colvec>(1));
             for (int i=1;i<NumberOfLayers;i++)  // only n-1 transitions between n layers
             {
                 // sum layer 1 weighted input
                 cout << "------------------------------------ Net Input into L" << i << endl;
-cout << actuation[i-1] << " * " << layer_weights[i].t() <<  " == " << endl;
-cout << " == " << (actuation[i-1] * layer_weights[i].t()) << endl;
+//cout << actuation[i-1] << " * " << layer_weights[i].t() <<  " == " << endl;
+//cout << " == " << (actuation[i-1] * layer_weights[i].t()) << endl;
                 netin[i] =  (actuation[i-1] * layer_weights[i].t());
  outp(netin[i], "netin[i]");           
-                std::cout << netin[i] << std::endl;
+//                std::cout << netin[i] << std::endl;
             
                 cout << "------------------------------------ Activation out of L" << i << endl;
                 actuation[i] = sigmoid(netin[i]);
  outp(actuation[i], "actuation[i]");           
-                std::cout << actuation[i] << std::endl;
+//                std::cout << actuation[i] << std::endl;
              //   actuation[i-1].shed_col(actuation[i-1].n_cols-1);
             }
         //    actuation[NumberOfLayers-1].shed_col(actuation[NumberOfLayers-1].n_cols-1);
@@ -298,16 +309,16 @@ cout << " == " << (actuation[i-1] * layer_weights[i].t()) << endl;
             for (int i=NumberOfLayers-2;i>=0;i--)
             {
                 cout << "------------------------------------ Delta of Layer"<< i << endl;
-               std::cout << deltafn[i+1]<< std::endl;
+//               std::cout << deltafn[i+1]<< std::endl;
                 
                 cout << "------------------------------------ Updates to weights at Layer" << i << endl;
                 weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
 //weight_updates[i].shed_row(weight_updates[i].n_rows-1);
-                std::cout << weight_updates[i]<< std::endl;
+//                std::cout << weight_updates[i]<< std::endl;
                 
                 cout << "------------------------------------ New weights are at Layer"<<i << endl;
                 new_layer_weights[i+1]  =  layer_weights[i+1] + (eta *  weight_updates[i]) ;
-                std::cout << new_layer_weights[i+1] << std::endl;
+//                std::cout << new_layer_weights[i+1] << std::endl;
                 
                 here:
                 ftick[i] = -actuation[i] + 1;
@@ -323,7 +334,7 @@ cout << " == " << (actuation[i-1] * layer_weights[i].t()) << endl;
 }            
 
         
-#else
+#if 0
     forward_feed:
         for (int y=0;y < 60000; y++)
         {
@@ -335,7 +346,6 @@ cout << " == " << (actuation[i-1] * layer_weights[i].t()) << endl;
             
 //            std::cout << actuation[0]<< std::endl;
            // actuation[0] = L0_Input;
-tmprw=actuation[0];
  outp(actuation[0], "Actuation[0]");           
             
             for (int i=1;i<NumberOfLayers;i++)  // only n-1 transitions between n layers
@@ -389,8 +399,9 @@ tmprw=actuation[0];
                layer_weights[i] =  new_layer_weights[i];
             }
             
-
         }
+#endif
+// test
         actuation[0]=tmprw;
             for (int i=1;i<NumberOfLayers;i++)  // only n-1 transitions between n layers
             {
@@ -407,7 +418,6 @@ tmprw=actuation[0];
             }
                 std::cout << "Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
                 std::cout << "Expec output : " << endl << tgt << std::endl;
-#endif
     
         delete[] memptr;
 }
