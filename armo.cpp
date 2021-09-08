@@ -203,7 +203,6 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     rowvec tgt;
     int correct_num=-1;
     int best_guess=-1;
-    double max_guess=-100.0;
     int num_correct[10]={0,0,0,0,0,0,0,0,0,0};
     int num_wrong[10]={0,0,0,0,0,0,0,0,0,0};
     int chosen_wrongly[10][10]={{ 0,0,0,0,0,0,0,0,0,0},
@@ -239,7 +238,8 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         }
         else
         {
-            for (int i=0;i< actuation[NumberOfLayers-1].n_cols;i++)
+            double max_guess=-100.0;
+            for (int i=0;i< actuation[NumberOfLayers-1].n_cols-1;i++)
             {
                    if (tgt(i)==1)
                        correct_num = i;
@@ -285,9 +285,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          cout << "     0      1      2      3      4      5       6       7        8       9 " << endl;;
          for (int i=0;i<10;i++)
          {
-               cout << "   " << num_correct[i];
+               cout << "   " << num_wrong[i];
          }
-         
+         cout << endl << endl; 
     }
                 
 }
