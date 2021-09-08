@@ -3,14 +3,13 @@
 #include <cmath>
 #include <armadillo>
 
-#undef TESTING
 #undef DEBUGON
 
 #define ARMA_64BIT_WORD
 #define INPUT_LINES 784
 #define OUTPUT_LINES 10
 #define MATRIX_SIDE 28
-#define MAX_PIXEL_VAL 255.0
+#define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 // g++ armo.cpp -g -o armo -std=c++11 -O2 -larmadillo
 
@@ -23,17 +22,25 @@ using namespace arma;
 using namespace std;
 
 
+    const unsigned int NumberOfLayers=3;
+    int nodes[NumberOfLayers]={INPUT_LINES, 30, OUTPUT_LINES};  
+    double eta = 3.0;               // Learning factor
+    vector<rowvec> netin;
+    vector<rowvec> actuation;
+    vector<rowvec> deltafn;
+    vector<rowvec> ftick;
+    vector<mat> layer_weights;
+    vector<mat> weight_updates;
+    vector<mat> new_layer_weights;
+    rowvec tmpbias; 
+    mat tmpwgt; 
+    colvec vbias;
+
 rowvec sigmoid( rowvec  & net)
 {
-   rowvec norml = net;  // normalise
-   rowvec out = 1/(1+exp(-norml));
-//for (int i=0;i<out.n_cols;i++)
-//  if (out(i) > 0.5)
-//     out(i)=1;
-//  else
-//     out(i)=0;
-   out.insert_cols(out.n_cols, 1); // add bias signal (1)
-   out(out.n_cols-1)=1.0;
+   rowvec out = 1/(1+exp(-net));
+   out.insert_cols(out.n_cols, 1); // add bias signal (1) column
+   out(out.n_cols-1)=1.0;          // add bias signal value
    return out;
 }
 
@@ -144,23 +151,21 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
 
 }
 
-void load_an_image(int seq, unsigned char * mptr, rowvec & img, rowvec & t, unsigned char * lp)
+void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, unsigned char * &lp)
 {
     int start=(INPUT_LINES*seq)+IMAGE_OFFSET;
+    double greyval=MAX_PIXEL_VAL;
     img.set_size(INPUT_LINES+1);
     for (int i=0;i<INPUT_LINES;i++)
     {
-        //if (mptr[start+i] != 0)
-        //  mptr[start+i]=1;
-        //img(i) = mptr[start+i];
-    
-        img(i) = ((float) mptr[start+i])/MAX_PIXEL_VAL;
+        img(i) = ((double ) mptr[start+i])/greyval;
     }
+     //   cout << img << endl << "an image ************************" << endl;
     img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
 
-    print_an_image(&mptr[start], img_is_digit);
+//    print_an_image(&mptr[start], img_is_digit);
 
     t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
     t(img_is_digit)=1;               // set the target 'bit'
@@ -168,7 +173,124 @@ void load_an_image(int seq, unsigned char * mptr, rowvec & img, rowvec & t, unsi
 
 }
 
+void backprop(rowvec tgt)
+{
+        cout << "------------------------------------ BACK PROPAGATION" << endl;
+     
+        ftick[NumberOfLayers-1] = -actuation[NumberOfLayers-1] + 1;
+        ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
+        deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
+        deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
+        for (int i=NumberOfLayers-2;i>=0;i--)
+        {
+            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
+            new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
+             
+            ftick[i] = -actuation[i] + 1;
+            ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
+            deltafn[i] = deltafn[i+1]*layer_weights[i];
+            deltafn[i] = deltafn[i] % ftick[i];
+            deltafn[i].shed_col(deltafn[i].n_cols-1);
+        }
+        for (int i=0;i<NumberOfLayers;i++)
+        {
+           layer_weights[i] =  new_layer_weights[i];
+        }
+}
 
+void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
+{
+    rowvec tgt;
+    int correct_num=-1;
+    int best_guess=-1;
+    double max_guess=-100.0;
+    int num_correct[10]={0,0,0,0,0,0,0,0,0,0};
+    int num_wrong[10]={0,0,0,0,0,0,0,0,0,0};
+    int chosen_wrongly[10][10]={{ 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0},
+                                { 0,0,0,0,0,0,0,0,0,0}} ;
+    for (int y=0;y<samples;y++)
+    {
+        load_an_image(y, imgdata, actuation[0], tgt, labdata);
+        for (int i=0;i<NumberOfLayers-1;i++)  // only n-1 transitions between n layers
+        {
+            cout << "------------------------------------ All inputs into L" << i << endl;
+            // sum layer 1 weighted input
+            netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
+            cout << "------------------------------------ Net weighted sum into L" << i << endl;
+            cout << "------------------------------------ Activation out of L" << i << endl;
+
+            actuation[i+1] = sigmoid(netin[i]);
+        }
+        std::cout << "Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
+        std::cout << "Expec output : " << endl << tgt << std::endl;
+        
+                //////////////////////////// forward feed end
+        if (train)
+        {
+            backprop(tgt);
+        }
+        else
+        {
+            for (int i=0;i< actuation[NumberOfLayers-1].n_cols;i++)
+            {
+                   if (tgt(i)==1)
+                       correct_num = i;
+                   if ( actuation[NumberOfLayers-1](i) > max_guess)
+                   {
+                       best_guess = i;
+                       max_guess = actuation[NumberOfLayers-1](i);
+                   }
+                   cout << " Guessed " << best_guess << " and it was " << correct_num << endl;
+                   if (best_guess == correct_num)
+                   {
+                        num_correct[correct_num]++;
+                   }
+                   else
+                   {
+                        num_wrong[correct_num]++;
+                        chosen_wrongly[correct_num][best_guess]++;
+                   }
+                   std::cout << "Test Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
+                   std::cout << "Test Expec output : " << endl << tgt << std::endl;
+  	    }
+        }
+    }
+    if (!train)
+    {
+         cout << "     0      1      2      3      4      5       6       7        8       9 Guessed" << endl;;
+         for (int i=0;i<10;i++)
+         {
+            cout << endl << i << ":   ";
+            for (int j=0;j<10;j++)
+            {
+                cout << chosen_wrongly[i][j] << "      ";
+            }
+         }
+         cout << endl << "Correct" << endl;
+         cout << endl << endl << endl << endl << "Correct selections:" << endl;
+         cout << "     0      1      2      3      4      5       6       7        8       9 " << endl;;
+         for (int i=0;i<10;i++)
+         {
+               cout << "   " << num_correct[i];
+         }
+         cout << endl << endl << "Incorrect selections:" << endl;
+         cout << "     0      1      2      3      4      5       6       7        8       9 " << endl;;
+         for (int i=0;i<10;i++)
+         {
+               cout << "   " << num_correct[i];
+         }
+         
+    }
+                
+}
 int main (int argc, char *argv[])
 {
     /*
@@ -179,207 +301,43 @@ int main (int argc, char *argv[])
         }
         filename = string(argv[1]);
     */
-    unsigned char * labptr; 
-#ifdef TESTING
-    unsigned int NumberOfLayers=3;
-    int nodes[NumberOfLayers]={2,2,2};
-#else
-    //unsigned int NumberOfLayers=4;
-    //int nodes[NumberOfLayers]={INPUT_LINES, 100, 100, OUTPUT_LINES};  
-    unsigned int NumberOfLayers=3;
-    int nodes[NumberOfLayers]={INPUT_LINES, 30, OUTPUT_LINES};  
-    unsigned char * memptr = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &labptr);
-#endif
-    //double eta = 0.5;               // Learning factor
-    double eta = 3.0;               // Learning factor
+    unsigned char * trainlabels; 
+    unsigned char * testlabels; 
+    unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
+    unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
 
-    rowvec endtestcase; 
-    rowvec tgt; 
-    vector<rowvec> netin;
-    vector<rowvec> actuation;
-    vector<rowvec> deltafn;
-    vector<rowvec> ftick;
-    vector<mat> layer_weights;
-    vector<mat> weight_updates;
-    vector<mat> new_layer_weights;
-    rowvec tmpbias; 
-    mat tmpwgt; 
-    colvec vbias;
-
+///////////////////////////////////////////////
+//
+//  CREATE ARRAY OF MATRICES AND VECTORS
+//  AND SET WEIGHTS TO RANDOM (0 < w < 1)
+//
     for (int i=0;i <= NumberOfLayers-1; i++)
     {
          netin.push_back({});   // size=nodes[i],1
          actuation.push_back({}); // size= nodes[i],1
          deltafn.push_back({});
          ftick.push_back({});
-         if (i==0)
-         {
-#ifdef TESTING
-            tmpwgt = {{ 0.15, 0.2, 0.35 }, {0.25, 0.3, 0.35}};   // TEST CASE
-#else
-            //tmpwgt = ones<mat>(nodes[i]+1,nodes[i]); // (not used) but no weight change to inputs, but needs an entry to match indices
-            //tmpwgt = eye<mat>(nodes[i],nodes[i]); // (not used) but no weight change to inputs, but needs an entry to match indices
-            tmpwgt = randu<mat>(nodes[i+1],nodes[i]+1); // network weights for each node + 1 node bias weight
-#endif
-         }
-         else
-         {
-#ifdef TESTING
-            tmpwgt = { { 0.4, 0.45, 0.6 }, {0.5, 0.55, 0.6}};   // TEST CASE
-#else
           if (i<NumberOfLayers-1)
             tmpwgt = randu<mat>(nodes[i+1],nodes[i]+1); // network weights for each node + 1 node bias weight
-          //else
-          //   push last value of tmpwgt back onto vector (not used)
-#endif
-         }
          layer_weights.push_back( tmpwgt );
          new_layer_weights.push_back({});
          weight_updates.push_back({});
     }
+   
+/////////////////////////////////////////////// 
+//
+// TRAIN THE DATA
+//
+    forward_feed(traindata, trainlabels, true, 60000);
+   
+/////////////////////////////////////////////// 
+//
+// TEST THE DATA
+//
+    forward_feed(testdata, testlabels, false, 10000);
     
-#ifndef TESTING
-            load_an_image(0, memptr, actuation[0], tgt, labptr);
-            endtestcase=actuation[0];
-            for (int y=1;y<60000;y++)
-#endif
-            {
-#ifdef TESTING
-                actuation[0]={0.05, 0.1, 1};
-                tgt={0.01, 0.99, 1};
-#else
-                load_an_image(y, memptr, actuation[0], tgt, labptr);
-#endif
-                for (int i=0;i<NumberOfLayers-1;i++)  // only n-1 transitions between n layers
-                {
-                    // sum layer 1 weighted input
-#ifdef TESTING
-                    cout << "------------------------------------ Net Input into L" << i << endl;
-                    netin[i] =  (actuation[i] * layer_weights[i].t());
-#else
-                    //netin[i] =  (actuation[i] * layer_weights[i]) / layer_weights[i].n_rows;
-                    netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
-#endif
-#ifdef TESTING
-                    cout << "----- Actuation In" << endl;
-                    std::cout << actuation[i] << std::endl;
-                    cout << "----- Weights" << endl;
-                    std::cout << layer_weights[i].t() << std::endl;
-                    cout << "----- Netin" << endl;
-                    std::cout << netin[i] << std::endl;
-#endif                
-                    cout << "------------------------------------ Activation out of L" << i << endl;
-
-                    actuation[i+1] = sigmoid(netin[i]);
-#ifdef DEBUGON
-                    cout << "----- Actuation Out" << endl;
-                    std::cout << actuation[i+1] << std::endl;
-                    outp(actuation[i+1], "actuation[i+1]");           
-#endif
-                }
-/*
-for (int i=0;i< actuation[NumberOfLayers-1].n_cols;i++)
-  if ( actuation[NumberOfLayers-1](i) >0.5)
-        actuation[NumberOfLayers-1](i)=1;
-  else
-        actuation[NumberOfLayers-1](i)=0;
-*/
-                    std::cout << "Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
-                    std::cout << "Expec output : " << endl << tgt << std::endl;
-        
-                //////////////////////////// forward feed end
-                
-                cout << "------------------------------------ BACK PROPAGATION" << endl;
-     
-                ftick[NumberOfLayers-1] = -actuation[NumberOfLayers-1] + 1;
-#ifdef DEBUGON
-                outp(ftick[NumberOfLayers-1], "ftick[NumberOfLayers-1]");
-#endif
-                ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
-#ifdef DEBUGON
-                outp(ftick[NumberOfLayers-1], "ftick[NumberOfLayers-1]*2");
-#endif
-                deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
-                deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
-#ifdef DEBUGON
-                outp(deltafn[NumberOfLayers-1], "deltafn[NumberOfLayers-1]");
-#endif  
-                for (int i=NumberOfLayers-2;i>=0;i--)
-                {
-#ifdef DEBUGON
-                    cout << "------------------------------------ Delta of Layer"<< i << endl;
-                   std::cout << deltafn[i+1]<< std::endl;
-#endif                    
-                    weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
-#ifdef DEBUGON
-                    cout << "------------------------------------ Updates to weights at Layer" << i << endl;
-                    std::cout << weight_updates[i]<< std::endl;
-#endif                    
-#ifdef TESTING
-                    new_layer_weights[i]  =  layer_weights[i] - (eta *  weight_updates[i]) ;
-#else
-                    //new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i].t()) ;
-                    new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
-#endif
-#ifdef DEBUGON
-                    cout << "------------------------------------ New weights are at Layer"<<i << endl;
-                    std::cout << new_layer_weights[i] << std::endl;
-#endif
-                    
-                    here:
-                    ftick[i] = -actuation[i] + 1;
-                    ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
-#ifdef TESTING        
-                    deltafn[i] = deltafn[i+1]*layer_weights[i];
-#else
-                    //deltafn[i] = deltafn[i+1]*layer_weights[i].t();
-                    deltafn[i] = deltafn[i+1]*layer_weights[i];
-#endif
-                    deltafn[i] = deltafn[i] % ftick[i];
-                     deltafn[i].shed_col(deltafn[i].n_cols-1);
-                }
-                for (int i=0;i<NumberOfLayers;i++)
-                {
-                   layer_weights[i] =  new_layer_weights[i];
-                }
-            }            
-
-#ifndef TESTING        
-// test
-            actuation[0]=endtestcase;
-            for (int i=0;i<NumberOfLayers-1;i++)  // only n-1 transitions between n layers
-            {
-                cout << "------------------------------------ Net Input into L" << i << endl;
-                    netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
-#ifdef DEBUGON
-                outp(netin[i], "netin[i]");           
-                std::cout << netin[i] << std::endl;
-#endif
-            
-                cout << "------------------------------------ Activation out of L" << i << endl;
-                actuation[i+1] = sigmoid(netin[i]);
-#ifdef DEBUGON
-                outp(actuation[i+1], "actuation[i+1]");           
-                std::cout << actuation[i+1] << std::endl;
-#endif
-            }
-             int correct_num=-1;
-             int best_guess=-1;
-             double max_guess=-100.0;
-            for (int i=0;i< actuation[NumberOfLayers-1].n_cols;i++)
-            {
-                   if (tgt(i)==1)
-                       correct_num = i+1;
-                   if ( actuation[NumberOfLayers-1](i) > best_guess)
-                   {
-                       best_guess = i+1;
-                       max_guess = actuation[NumberOfLayers-1](i);
-                   }
-            }
-cout << " Guessed " << best_guess << " and it was " << correct_num << endl;
-            std::cout << "Test Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
-            std::cout << "Test Expec output : " << endl << tgt << std::endl;
-    
-        delete[] memptr;
-#endif
+        delete[] traindata;
+        delete[] trainlabels;
+        delete[] testdata;
+        delete[] testlabels;
 }
