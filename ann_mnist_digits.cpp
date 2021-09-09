@@ -14,11 +14,36 @@
 #define DEFAULT_HIDDEN 30
 #define ETA_DEFAULT 0.5f
 
+
+
+/*
+ * ALLAN CAMPTON
+ * COSC3500 Milestone 1 Serial Version
+ *
+ * To perform a full build and run from scratch, to the following
+ *
+ *    git clone git://github.com/yetanotherpassword/cosc3500
+ *    cd ~/cosc3500/
+ *    unzip mnist.zip
+ *    unxz armadillo-10.6.2.tar.xz
+ *    tar xvf armadillo-10.6.2.tar
+ *    cd armadillo-10.6.2/
+ *    	#Made lib static and issue with MKL on Centos
+ *    	#Below changes done in my git, but may need to do if download from
+ *    	#http://sourceforge.net/projects/arma/files/armadillo-10.6.2.tar.xz
+ *    	#sed -i "s/add_library( armadillo/add_library( armadillo STATIC/" CMakeLists.txt
+ *    	#sed -i "s/include(ARMA_FindMKL)/#include(ARMA_FindMKL)/" CMakeLists.txt
+ *    mkdir build
+ *    cd build
+ *    cmake ..
+ *    make
+ *    cd ../..
+ *    make
+ *    sbatch ./goslurm.sh ann_mnist_digits
+ */
 // g++ armo.cpp -g -o armo -std=c++11 -O2 -larmadillo
 
-// requires armodillo
-// http://arma.sourceforge.net/docs.html#element_access
-// (For testing data) https://mattmazur.com/2015/03/17/a-step-by-step-backpropagation-example/
+// requires armodillo (see above)
 
  
 using namespace arma;
