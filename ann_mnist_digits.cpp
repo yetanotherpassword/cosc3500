@@ -204,6 +204,8 @@ void backprop(rowvec tgt)
 void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
 {
     rowvec tgt;
+    int tot_correct=0;
+    int tot_wrong=0;
     int correct_num=-1;
     int best_guess=-1;
     int num_correct[10]={0,0,0,0,0,0,0,0,0,0};
@@ -219,16 +221,20 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
+    string intype="TEST    ";
+    if (train)
+       intype="TRAINING";
     for (int y=0;y<samples;y++)
     {
+        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         for (int i=0;i<NumberOfLayers-1;i++)  // only n-1 transitions between n layers
         {
-            cout << "------------------------------------ All inputs into L" << i << endl;
+           // cout << "------------------------------------ All inputs into L" << i << endl;
             // sum layer 1 weighted input
             netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
-            cout << "------------------------------------ Net weighted sum into L" << i << endl;
-            cout << "------------------------------------ Activation out of L" << i << endl;
+            //cout << "------------------------------------ Net weighted sum into L" << i << endl;
+            //cout << "------------------------------------ Activation out of L" << i << endl;
 
             actuation[i+1] = sigmoid(netin[i]);
         }
@@ -259,11 +265,13 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             if (best_guess == correct_num)
             {
                  num_correct[correct_num]++;
+                 tot_correct++;
             }
             else
             {
                  num_wrong[correct_num]++;
                  chosen_wrongly[correct_num][best_guess]++;
+                 tot_wrong++;
             }
             num_tested++;
         }
@@ -271,29 +279,56 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     if (!train)
     {
          cout << "Tested " << num_tested << " samples"<<endl;
-         cout << "     0      1      2      3      4      5       6       7        8       9 Guessed" << endl;;
+         for (int i=0;i<10;i++)
+             cout  <<  "      "<< dec << std::setw(7) << i ;
+         cout << "      Guessed" << endl;;
+         cout << "---------------------------------------------------------------------------------------------------------------------------------------" << endl;
+         double colsum[10]={0,0,0,0,0,0,0,0,0,0};
+         double rowsum[10]={0,0,0,0,0,0,0,0,0,0};
          for (int i=0;i<10;i++)
          {
-            cout << endl << i << ":   ";
+            cout << endl << i << " |  ";
             for (int j=0;j<10;j++)
             {
-                cout << chosen_wrongly[i][j] << "      ";
+                rowsum[i] +=  chosen_wrongly[i][j];
+                colsum[j] +=  chosen_wrongly[i][j];
+                cout  << std::setw(7) << chosen_wrongly[i][j] <<  "      ";
             }
+            float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
+            cout << "| " <<  setw(7)  <<rowsum[i] ;
+            cout <<  setw(7)   <<"         " << pctg  <<  resetiosflags( ios::fixed  |ios::showpoint )<< "%";
+
          }
-         cout << endl << "Correct" << endl;
-         cout << endl << endl << endl << endl << "Correct selections:" << endl;
-         cout << "     0      1      2      3      4      5       6       7        8       9 " << endl;;
+         cout << endl;
+         cout << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << "     ";
+         for (int i=0;i<10;i++)
+             cout  << dec << std::setw(7) << colsum[i] << "      ";
+         cout << endl << "     ";
          for (int i=0;i<10;i++)
          {
-               cout << "   " << num_correct[i];
+             float pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
+            cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     ";
+         }
+         cout << endl;
+         cout << "Target " << endl << endl << endl << endl << endl << "Correct selections:" << endl;
+         for (int i=0;i<10;i++)
+             cout  << dec << std::setw(7) << i << "      ";
+         cout << endl;
+         for (int i=0;i<10;i++)
+         {
+                cout  << std::setw(7) << num_correct[i] <<  "      ";
          }
          cout << endl << endl << "Incorrect selections:" << endl;
-         cout << "     0      1      2      3      4      5       6       7        8       9 " << endl;;
+         for (int i=0;i<10;i++)
+             cout  << dec << std::setw(7) << i << "      ";
+         cout << endl;
          for (int i=0;i<10;i++)
          {
-               cout << "   " << num_wrong[i];
+                cout  << std::setw(7) << num_wrong[i] <<  "      ";
          }
          cout << endl << endl; 
+         float pctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
+         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<pctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
     }
                 
 }
