@@ -11,6 +11,9 @@
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
+#define DEFAULT_HIDDEN 30
+#define ETA_DEFAULT 0.5f
+
 // g++ armo.cpp -g -o armo -std=c++11 -O2 -larmadillo
 
 // requires armodillo
@@ -22,9 +25,9 @@ using namespace arma;
 using namespace std;
 
 
-    const unsigned int NumberOfLayers=3;
-    int nodes[NumberOfLayers]={INPUT_LINES, 30, OUTPUT_LINES};  
-    double eta = 3.0;               // Learning factor
+    unsigned int NumberOfLayers;
+    unsigned int * nodes;
+    double eta;               // Learning factor
     vector<rowvec> netin;
     vector<rowvec> actuation;
     vector<rowvec> deltafn;
@@ -215,6 +218,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
+    int num_tested = 0;
     for (int y=0;y<samples;y++)
     {
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
@@ -249,22 +253,24 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                        max_guess = actuation[NumberOfLayers-1](i);
                    }
                    cout << " Guessed " << best_guess << " and it was " << correct_num << endl;
-                   if (best_guess == correct_num)
-                   {
-                        num_correct[correct_num]++;
-                   }
-                   else
-                   {
-                        num_wrong[correct_num]++;
-                        chosen_wrongly[correct_num][best_guess]++;
-                   }
                    std::cout << "Test Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
                    std::cout << "Test Expec output : " << endl << tgt << std::endl;
   	    }
+            if (best_guess == correct_num)
+            {
+                 num_correct[correct_num]++;
+            }
+            else
+            {
+                 num_wrong[correct_num]++;
+                 chosen_wrongly[correct_num][best_guess]++;
+            }
+            num_tested++;
         }
     }
     if (!train)
     {
+         cout << "Tested " << num_tested << " samples"<<endl;
          cout << "     0      1      2      3      4      5       6       7        8       9 Guessed" << endl;;
          for (int i=0;i<10;i++)
          {
@@ -293,14 +299,54 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 }
 int main (int argc, char *argv[])
 {
-    /*
+    
         if (argc < 2)
         {
-            cout << "Usage: entropy FILENAME" << endl;
-            return 1;
+            NumberOfLayers=3;
+            nodes = new unsigned int [NumberOfLayers];
+            nodes[0]=INPUT_LINES;
+            nodes[1]=DEFAULT_HIDDEN;
+            nodes[2]=OUTPUT_LINES;
+            eta = ETA_DEFAULT;
+            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl;
+            cout << "And ETA=" << eta << endl;;
         }
-        filename = string(argv[1]);
-    */
+        else if (argc < 5)
+        {
+             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl;
+             cout << "       Where ETA is the learning factor, &" << endl;
+             cout << "       Where number of parameters after ETA is the number of layers" << endl;
+             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl;
+             cout << "       And the parameters themselves are numbers, "<< endl;
+             cout << "       indicating the number of nodes in that layer." << endl;
+             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl;
+             cout << "       and is the default, if no params supplied." << endl;
+             exit (1);
+        }
+        else
+        {
+             NumberOfLayers = argc-2;
+             nodes = new unsigned int [NumberOfLayers];
+             eta = stod(string(argv[1]));
+             if (eta <= 0)
+             {
+                   cout << "Error: ETA must be positive, usually less than 1" << endl;
+                   exit(1);
+             }
+             for (int i=2;i<argc;i++)
+             {
+                int p = stoi(string(argv[i]));
+                if (p > 0)
+                {
+                   nodes[i-2] = stoi(string(argv[i]));
+                }
+                else
+                {
+                   cout << "Error in parameter " << i << " - must be positive" << endl;
+                   exit (1);
+                }
+             }
+        }
     unsigned char * trainlabels; 
     unsigned char * testlabels; 
     unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
