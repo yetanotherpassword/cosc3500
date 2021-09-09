@@ -20,7 +20,7 @@
  * ALLAN CAMPTON
  * COSC3500 Milestone 1 Serial Version
  *
- * To perform a full build and run from scratch, to the following
+ * To perform a full build and run from scratch, do the following
  *
  *    git clone git://github.com/yetanotherpassword/cosc3500
  *    cd ~/cosc3500/
