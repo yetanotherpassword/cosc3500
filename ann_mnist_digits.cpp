@@ -14,7 +14,7 @@
 #define DEFAULT_HIDDEN 30
 #define ETA_DEFAULT 0.5f
 
-
+#define SAVE_RAND_WGTS
 
 /*
  * ALLAN CAMPTON
@@ -51,15 +51,15 @@ using namespace std;
 
 
     unsigned int NumberOfLayers;
-    unsigned int * nodes;
+    unsigned int * layers;
     double eta;               // Learning factor
-    vector<rowvec> netin;
-    vector<rowvec> actuation;
+    vector<rowvec> node_netin;
+    vector<rowvec> node_actuation;
     vector<rowvec> deltafn;
     vector<rowvec> ftick;
-    vector<mat> layer_weights;
+    vector<mat> node_weights;
     vector<mat> weight_updates;
-    vector<mat> new_layer_weights;
+    vector<mat> new_node_weights;
     rowvec tmpbias; 
     mat tmpwgt; 
     colvec vbias;
@@ -205,24 +205,23 @@ void backprop(rowvec tgt)
 {
         cout << "------------------------------------ BACK PROPAGATION" << endl;
      
-        ftick[NumberOfLayers-1] = -actuation[NumberOfLayers-1] + 1;
-        ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
-        deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
+        ftick[NumberOfLayers-1] = (-node_actuation[NumberOfLayers-1] + 1)  % (node_actuation[NumberOfLayers-1]);  //element wise multiply
+        deltafn[NumberOfLayers-1]  =  (tgt - node_actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1])/(node_actuation[NumberOfLayers-1].n_cols-1);
         deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
         for (int i=NumberOfLayers-2;i>=0;i--)
         {
-            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
-            new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
+            weight_updates[i]  =  deltafn[i+1].t() * node_actuation[i];
+            new_node_weights[i]  =  node_weights[i] + (eta *  weight_updates[i]) ;
              
-            ftick[i] = -actuation[i] + 1;
-            ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
-            deltafn[i] = deltafn[i+1]*layer_weights[i];
+            ftick[i] = -node_actuation[i] + 1;
+            ftick[i] = ftick[i] % (node_actuation[i]);  //element wise multiply
+            deltafn[i] = deltafn[i+1]*node_weights[i];
             deltafn[i] = deltafn[i] % ftick[i];
             deltafn[i].shed_col(deltafn[i].n_cols-1);
         }
         for (int i=0;i<NumberOfLayers;i++)
         {
-           layer_weights[i] =  new_layer_weights[i];
+           node_weights[i] =  new_node_weights[i];
         }
 }
 
@@ -249,23 +248,31 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     string intype="TEST    ";
     if (train)
        intype="TRAINING";
+float minJ=1000000;
     for (int y=0;y<samples;y++)
     {
-        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
-        load_an_image(y, imgdata, actuation[0], tgt, labdata);
+        cout << "-------XXXXXXXXXXXXXXXXX------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
+        load_an_image(y, imgdata, node_actuation[0], tgt, labdata);
         for (int i=0;i<NumberOfLayers-1;i++)  // only n-1 transitions between n layers
         {
            // cout << "------------------------------------ All inputs into L" << i << endl;
             // sum layer 1 weighted input
-            netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
+            node_netin[i] =  (node_actuation[i] * node_weights[i].t()/node_actuation[i].n_cols);
             //cout << "------------------------------------ Net weighted sum into L" << i << endl;
             //cout << "------------------------------------ Activation out of L" << i << endl;
-
-            actuation[i+1] = sigmoid(netin[i]);
+// float qq=max(node_netin[i]);
+            node_actuation[i+1] = sigmoid(node_netin[i]);
+// float qq2=max(node_actuation[i+1]);
+//cout << " Node In :" << endl << node_netin[i] << endl << " max=" << qq << " i=" << node_netin[i].index_max() << endl;
+//cout << " Node Out:" << endl << node_actuation[i+1] << endl << " max=" << qq2<< " i=" << node_actuation[i+1].index_max() << endl;
+//if ((qq >1) || (qq2>1))
+//   exit(1);
         }
-        std::cout << "Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
+        std::cout << "Final output : " << endl << node_actuation[NumberOfLayers-1] << std::endl;
         std::cout << "Expec output : " << endl << tgt << std::endl;
-        
+        double J=sum(pow(tgt-node_actuation[NumberOfLayers-1],2))/(2.0*(float)y);
+        cout << "Cost Function == J == " << J << " prev min J ===" << minJ;
+if (J<minJ) minJ=J;
                 //////////////////////////// forward feed end
         if (train)
         {
@@ -274,17 +281,17 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         else
         {
             double max_guess=-100.0;
-            for (int i=0;i< actuation[NumberOfLayers-1].n_cols-1;i++)
+            for (int i=0;i< node_actuation[NumberOfLayers-1].n_cols-1;i++)
             {
                    if (tgt(i)==1)
                        correct_num = i;
-                   if ( actuation[NumberOfLayers-1](i) > max_guess)
+                   if ( node_actuation[NumberOfLayers-1](i) > max_guess)
                    {
                        best_guess = i;
-                       max_guess = actuation[NumberOfLayers-1](i);
+                       max_guess = node_actuation[NumberOfLayers-1](i);
                    }
                    cout << " Guessed " << best_guess << " and it was " << correct_num << endl;
-                   std::cout << "Test Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
+                   std::cout << "Test Final output : " << endl << node_actuation[NumberOfLayers-1] << std::endl;
                    std::cout << "Test Expec output : " << endl << tgt << std::endl;
   	    }
             if (best_guess == correct_num)
@@ -363,12 +370,12 @@ int main (int argc, char *argv[])
         if (argc < 2)
         {
             NumberOfLayers=3;
-            nodes = new unsigned int [NumberOfLayers];
-            nodes[0]=INPUT_LINES;
-            nodes[1]=DEFAULT_HIDDEN;
-            nodes[2]=OUTPUT_LINES;
+            layers = new unsigned int [NumberOfLayers];
+            layers[0]=INPUT_LINES;
+            layers[1]=DEFAULT_HIDDEN;
+            layers[2]=OUTPUT_LINES;
             eta = ETA_DEFAULT;
-            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl;
+            cout << "Using default setting of \"" << layers[0] << " " << layers[1] << " " << layers[2]<<  "\" " << endl;
             cout << "And ETA=" << eta << endl;;
         }
         else if (argc < 5)
@@ -378,7 +385,7 @@ int main (int argc, char *argv[])
              cout << "       Where number of parameters after ETA is the number of layers" << endl;
              cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl;
              cout << "       And the parameters themselves are numbers, "<< endl;
-             cout << "       indicating the number of nodes in that layer." << endl;
+             cout << "       indicating the number of layers in that layer." << endl;
              cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl;
              cout << "       and is the default, if no params supplied." << endl;
              exit (1);
@@ -386,7 +393,7 @@ int main (int argc, char *argv[])
         else
         {
              NumberOfLayers = argc-2;
-             nodes = new unsigned int [NumberOfLayers];
+             layers = new unsigned int [NumberOfLayers];
              eta = stod(string(argv[1]));
              if (eta <= 0)
              {
@@ -398,7 +405,7 @@ int main (int argc, char *argv[])
                 int p = stoi(string(argv[i]));
                 if (p > 0)
                 {
-                   nodes[i-2] = stoi(string(argv[i]));
+                   layers[i-2] = stoi(string(argv[i]));
                 }
                 else
                 {
@@ -417,18 +424,39 @@ int main (int argc, char *argv[])
 //  CREATE ARRAY OF MATRICES AND VECTORS
 //  AND SET WEIGHTS TO RANDOM (0 < w < 1)
 //
+
+#ifdef SAVE_RAND_WGTS
+    cout<<endl << "layers:"<<NumberOfLayers<<endl;
+#endif
+
     for (int i=0;i <= NumberOfLayers-1; i++)
     {
-         netin.push_back({});   // size=nodes[i],1
-         actuation.push_back({}); // size= nodes[i],1
+         node_netin.push_back({});   // size=layers[i],1
+         node_actuation.push_back({}); // size= layers[i],1
          deltafn.push_back({});
          ftick.push_back({});
           if (i<NumberOfLayers-1)
-            tmpwgt = randu<mat>(nodes[i+1],nodes[i]+1); // network weights for each node + 1 node bias weight
-         layer_weights.push_back( tmpwgt );
-         new_layer_weights.push_back({});
+            tmpwgt = randu<mat>(layers[i+1],layers[i]+1); // network weights for each node + 1 node bias weight
+         node_weights.push_back( tmpwgt );
+#ifdef SAVE_RAND_WGTS
+         cout << "layer:" << i << ":rows:" << tmpwgt.n_rows << ":cols:" << tmpwgt.n_cols << endl;
+         for (int j=0;j<tmpwgt.n_rows; j++)
+         {
+           for (int k=0;k<tmpwgt.n_cols;k++)
+           {
+                cout << tmpwgt(j,k) << " ";
+           }
+           cout << endl;
+         }
+#endif
+
+         new_node_weights.push_back({});
          weight_updates.push_back({});
     }
+#ifdef SAVE_RAND_WGTS
+    cout << "Exiting as  if SAVE_RAND_WGTS defined: dont forget to create layer.weights by './ann_mnist_digits > layer.weights'" << endl;
+    exit(0);
+#endif
    
 /////////////////////////////////////////////// 
 //
