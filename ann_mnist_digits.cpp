@@ -6,9 +6,12 @@
 #undef DEBUGON
 
 #define ARMA_64BIT_WORD
+
 #define INPUT_LINES 784
 #define DEFAULT_HIDDEN 30
 #define OUTPUT_LINES 10
+
+
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
@@ -66,6 +69,8 @@ using namespace std;
     vector<rowvec> netin;
     vector<rowvec> actuation;
     vector<rowvec> deltafn;
+    vector<rowvec> last_deltafn;
+    vector<rowvec> theta;
     vector<rowvec> ftick;
     vector<mat> layer_weights;
     vector<mat> weight_updates;
@@ -77,13 +82,6 @@ using namespace std;
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
-#ifdef orig
-   out.insert_cols(out.n_cols, 1); // add bias signal (1) column
-   out(out.n_cols-1)=1.0;          // add bias signal value
-#else
-   //out.insert_cols(out.n_cols, 1); // add bias signal (1) column
-//   out(out.n_cols-1)=0.0;          //remove bias for comp 
-#endif
    return out;
 }
 
@@ -198,41 +196,20 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 {
     int start=(INPUT_LINES*seq)+IMAGE_OFFSET;
     double greyval=MAX_PIXEL_VAL;
-#ifdef orig
-    img.set_size(INPUT_LINES+1);
-#else
     img.set_size(INPUT_LINES);
-#endif
     for (int i=0;i<INPUT_LINES;i++)
     {
-#ifdef orig
-        img(i) = ((double ) mptr[start+i])/greyval;
-#else
         if (mptr[start+i] == 0)
            img(i)=0.0;
         else
            img(i)=1.0;
-#endif
     }
-     //   cout << img << endl << "an image ************************" << endl;
-#ifdef orig
-    img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
-#else
-//    img(INPUT_LINES)=0;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
-#endif
 
     int img_is_digit=(int) lp[8+seq];
 
-//    print_an_image(&mptr[start], img_is_digit);
-
-#ifdef orig
-    t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
-    t(t.n_cols-1)=1;                 // set bias signal (redundant for target, but keeps vectors same size)
-#else
     t=zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
-    //t(t.n_cols-1)=0;                 // set bias signal (redundant for target, but keeps vectors same size)
-#endif
-    t(img_is_digit)=1;               // set the target 'bit'
+    //t(img_is_digit)=1;               // set the target 'bit'
+    t(2)=1;               // set the target 'bit'
 
 }
 
@@ -240,30 +217,18 @@ void backprop2(rowvec tgt)
 {
         cout << "------------------------------------ BACK PROPAGATION2" << endl;
      
-        ftick[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]);  //element wise multiply
-        //ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
-        deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
-#ifdef orig
-        deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
-#endif
+        last_deltafn[NumberOfLayers-1] = 0 * deltafn[NumberOfLayers-1];
+        theta[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]) %  (tgt - actuation[NumberOfLayers-1]);
+
         for (int i=NumberOfLayers-2;i>=0;i--)
         {
+         deltafn[i] =  (eta * theta[i+1].t()) * (actuation[i].t() + (MOMENTUM * last_deltafn[i+1].t()));
 cout << "Delta for layer " << i <<endl;
 cout <<  deltafn[i+1] << endl;
-            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
-            new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]);
+            layer_weights[i] +=  deltafn[i];
              
-            ftick[i] = (-actuation[i] + 1) % actuation[i];
-        //    ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
-            deltafn[i] = (deltafn[i+1]*layer_weights[i] ) % ftick[i];
-        //    deltafn[i] = deltafn[i] % ftick[i];
-#ifdef orig
-            deltafn[i].shed_col(deltafn[i].n_cols-1);
-#endif
-        }
-        for (int i=0;i<NumberOfLayers;i++)
-        {
-           layer_weights[i] =  new_layer_weights[i];
+            last_deltafn[i] = deltafn[i];
+         theta[i] = (-actuation[i] + 1) % (actuation[i]) *  layer_weights[i].t() % theta[i+1];
         }
 }
 void backprop(rowvec tgt)
@@ -271,11 +236,8 @@ void backprop(rowvec tgt)
         cout << "------------------------------------ BACK PROPAGATION" << endl;
      
         ftick[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]);  //element wise multiply
-        //ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
+
         deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
-#ifdef orig
-        deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
-#endif
         for (int i=NumberOfLayers-2;i>=0;i--)
         {
 cout << "Delta for layer " << i <<endl;
@@ -284,12 +246,8 @@ cout <<  deltafn[i+1] << endl;
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
              
             ftick[i] = (-actuation[i] + 1) % actuation[i];
-        //    ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
+
             deltafn[i] = (deltafn[i+1]*layer_weights[i] ) % ftick[i];
-        //    deltafn[i] = deltafn[i] % ftick[i];
-#ifdef orig
-            deltafn[i].shed_col(deltafn[i].n_cols-1);
-#endif
         }
         for (int i=0;i<NumberOfLayers;i++)
         {
@@ -345,16 +303,12 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 //////////////////////////// forward feed end
         if (train)
         {
-            backprop2(tgt);
+            backprop(tgt);
         }
         else
         {
             double max_guess=-100.0;
-#ifdef orig
-            for (int i=0;i< actuation[NumberOfLayers-1].n_cols-1;i++)
-#else
             for (int i=0;i< actuation[NumberOfLayers-1].n_cols;i++)
-#endif
             {
                    if (tgt(i)==1)
                        correct_num = i;
@@ -502,9 +456,12 @@ int main (int argc, char *argv[])
 #endif
     for (int i=0;i <= NumberOfLayers-1; i++)
     {
+         rowvec t(nodes[i]);
          netin.push_back({});   // size=nodes[i],1
          actuation.push_back({}); // size= nodes[i],1
-         deltafn.push_back({});
+         deltafn.push_back(t);
+         last_deltafn.push_back(t);
+         theta.push_back({});
          ftick.push_back({});
           if (i<NumberOfLayers-1)
 #ifdef orig
