@@ -236,12 +236,42 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
 }
 
+void backprop2(rowvec tgt)
+{
+        cout << "------------------------------------ BACK PROPAGATION2" << endl;
+     
+        ftick[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]);  //element wise multiply
+        //ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
+        deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
+#ifdef orig
+        deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
+#endif
+        for (int i=NumberOfLayers-2;i>=0;i--)
+        {
+cout << "Delta for layer " << i <<endl;
+cout <<  deltafn[i+1] << endl;
+            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
+            new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]);
+             
+            ftick[i] = (-actuation[i] + 1) % actuation[i];
+        //    ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
+            deltafn[i] = (deltafn[i+1]*layer_weights[i] ) % ftick[i];
+        //    deltafn[i] = deltafn[i] % ftick[i];
+#ifdef orig
+            deltafn[i].shed_col(deltafn[i].n_cols-1);
+#endif
+        }
+        for (int i=0;i<NumberOfLayers;i++)
+        {
+           layer_weights[i] =  new_layer_weights[i];
+        }
+}
 void backprop(rowvec tgt)
 {
         cout << "------------------------------------ BACK PROPAGATION" << endl;
      
-        ftick[NumberOfLayers-1] = -actuation[NumberOfLayers-1] + 1;
-        ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
+        ftick[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]);  //element wise multiply
+        //ftick[NumberOfLayers-1] = ftick[NumberOfLayers-1] % (actuation[NumberOfLayers-1]);  //element wise multiply
         deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
 #ifdef orig
         deltafn[NumberOfLayers-1].shed_col(deltafn[NumberOfLayers-1].n_cols-1);
@@ -253,10 +283,10 @@ cout <<  deltafn[i+1] << endl;
             weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
              
-            ftick[i] = -actuation[i] + 1;
-            ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
-            deltafn[i] = deltafn[i+1]*layer_weights[i];
-            deltafn[i] = deltafn[i] % ftick[i];
+            ftick[i] = (-actuation[i] + 1) % actuation[i];
+        //    ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
+            deltafn[i] = (deltafn[i+1]*layer_weights[i] ) % ftick[i];
+        //    deltafn[i] = deltafn[i] % ftick[i];
 #ifdef orig
             deltafn[i].shed_col(deltafn[i].n_cols-1);
 #endif
@@ -315,7 +345,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 //////////////////////////// forward feed end
         if (train)
         {
-            backprop(tgt);
+            backprop2(tgt);
         }
         else
         {
