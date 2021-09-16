@@ -202,12 +202,12 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     for (int i=0;i<INPUT_LINES;i++)
     {
         img(i) = ((double ) mptr[start+i])/greyval;
-       
+      /* 
         if (mptr[start+i] == 0)
            img(i)=0.0;
         else
            img(i)=1.0;
-      
+     */ 
     }
      //   cout << img << endl << "an image ************************" << endl;
 
@@ -311,7 +311,8 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         {
            // cout << "------------------------------------ All inputs into L" << i << endl;
             // sum layer 1 weighted input
-            netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
+                     //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
+            netin[i] =  (actuation[i] * layer_weights[i]);
             //cout << "------------------------------------ Net weighted sum into L" << i << endl;
             //cout << "------------------------------------ Activation out of L" << i << endl;
                    cout << "L"<<i<< "has netin==" << endl << netin[i]<< endl; 
