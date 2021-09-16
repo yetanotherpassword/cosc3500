@@ -1,5 +1,5 @@
 #!/bin/bash -l
-#SBATCH --job-name=HelloWorld_Test
+#SBATCH --job-name=ANNet
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
