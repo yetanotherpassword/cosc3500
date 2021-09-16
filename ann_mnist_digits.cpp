@@ -35,7 +35,7 @@
  *
  * To perform a full build and run from scratch, do the following
  *
- *    git clone git://github.com/yetanotherpassword/cosc3500
+ *    git clone git@github.com:yetanotherpassword/cosc3500 --branch="Milestone1"
  *    cd ~/cosc3500/
  *    unzip mnist.zip
  *    unxz armadillo-10.6.2.tar.xz
@@ -76,7 +76,7 @@ using namespace std;
     vector<mat> weight_updates;
     vector<mat> new_layer_weights;
     rowvec tmpbias; 
-    mat tmpwgt; 
+    rowvec input, output; 
     colvec vbias;
 
 rowvec sigmoid( rowvec  & net)
@@ -196,23 +196,50 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 {
     int start=(INPUT_LINES*seq)+IMAGE_OFFSET;
     double greyval=MAX_PIXEL_VAL;
+    //img.set_size(INPUT_LINES+1);
+    //img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
     img.set_size(INPUT_LINES);
     for (int i=0;i<INPUT_LINES;i++)
     {
+        img(i) = ((double ) mptr[start+i])/greyval;
+       
         if (mptr[start+i] == 0)
            img(i)=0.0;
         else
            img(i)=1.0;
+      
     }
+     //   cout << img << endl << "an image ************************" << endl;
 
     int img_is_digit=(int) lp[8+seq];
 
+    print_an_image(&mptr[start], img_is_digit);
+
+//    t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
+//    t(t.n_cols-1)=1;                 // set bias signal (redundant for target, but keeps vectors same size)
+
     t=zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
-    //t(img_is_digit)=1;               // set the target 'bit'
-    t(2)=1;               // set the target 'bit'
+    t(img_is_digit)=1;               // set the target 'bit'
 
 }
+#if 0
+void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, unsigned char * &lp)
+{
+    int start=(INPUT_LINES*seq)+IMAGE_OFFSET;
+    double greyval=MAX_PIXEL_VAL;
+    img.set_size(INPUT_LINES);
+/*
+    for (int i=0;i<INPUT_LINES;i++)
+    {
+    }
+*/
+    int img_is_digit=(int) lp[8+seq];
 
+    t=zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
+    t(img_is_digit)=1;               // set the target 'bit'
+
+}
+#endif
 void backprop2(rowvec tgt)
 {
         cout << "------------------------------------ BACK PROPAGATION2" << endl;
@@ -240,16 +267,14 @@ void backprop(rowvec tgt)
         deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
         for (int i=NumberOfLayers-2;i>=0;i--)
         {
-cout << "Delta for layer " << i <<endl;
-cout <<  deltafn[i+1] << endl;
-            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
+            weight_updates[i] = actuation[i].t() * deltafn[i+1];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
              
             ftick[i] = (-actuation[i] + 1) % actuation[i];
 
-            deltafn[i] = (deltafn[i+1]*layer_weights[i] ) % ftick[i];
+            deltafn[i] = ( layer_weights[i] * deltafn[i+1].t() ).t() % ftick[i];
         }
-        for (int i=0;i<NumberOfLayers;i++)
+        for (int i=0;i<NumberOfLayers-1;i++)
         {
            layer_weights[i] =  new_layer_weights[i];
         }
@@ -286,10 +311,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         {
            // cout << "------------------------------------ All inputs into L" << i << endl;
             // sum layer 1 weighted input
-            netin[i] =  (actuation[i] * layer_weights[i].t());
-            mat yyy=layer_weights[i].t(); float rrr=0;
-            for (int q=0;q<nodes[i];q++) {rrr+= actuation[i](q)*yyy(q,0);
-                   cout << "c=" << q << "  " <<  actuation[i](q) << " * " << yyy(q,0)<< "=" <<  actuation[i](q)*yyy(q,0) << "accum=" << rrr<< endl; }
+            netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
             //cout << "------------------------------------ Net weighted sum into L" << i << endl;
             //cout << "------------------------------------ Activation out of L" << i << endl;
                    cout << "L"<<i<< "has netin==" << endl << netin[i]<< endl; 
@@ -307,20 +329,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         }
         else
         {
-            double max_guess=-100.0;
-            for (int i=0;i< actuation[NumberOfLayers-1].n_cols;i++)
-            {
-                   if (tgt(i)==1)
-                       correct_num = i;
-                   if ( actuation[NumberOfLayers-1](i) > max_guess)
-                   {
-                       best_guess = i;
-                       max_guess = actuation[NumberOfLayers-1](i);
-                   }
-                   cout << " Guessed " << best_guess << " and it was " << correct_num << endl;
-                   std::cout << "Test Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
-                   std::cout << "Test Expec output : " << endl << tgt << std::endl;
-  	    }
+            correct_num = tgt.index_max();
+            best_guess = actuation[NumberOfLayers-1].index_max();
+
             if (best_guess == correct_num)
             {
                  num_correct[correct_num]++;
@@ -454,50 +465,29 @@ int main (int argc, char *argv[])
 #ifdef SAVE_RAND_WGTS
     cout<<endl << "layers:"<<NumberOfLayers<<endl;
 #endif
-    for (int i=0;i <= NumberOfLayers-1; i++)
+    input =  zeros< rowvec > ( nodes[0] );
+    actuation.push_back( input );
+    deltafn.push_back( input );
+    ftick.push_back( input );
+    last_deltafn.push_back( {} );
+    for (int i = 0; i < NumberOfLayers - 1; i++)
     {
-         rowvec t(nodes[i]);
-         netin.push_back({});   // size=nodes[i],1
-         actuation.push_back({}); // size= nodes[i],1
-         deltafn.push_back(t);
-         last_deltafn.push_back(t);
-         theta.push_back({});
-         ftick.push_back({});
-          if (i<NumberOfLayers-1)
-#ifdef orig
-            tmpwgt = randu<mat>(nodes[i+1],nodes[i]+1); // network weights for each node + 1 node bias weight
-#else
-            tmpwgt = randu<mat>(nodes[i+1],nodes[i]); // network weights for each node + 1 node bias weight
-#endif
-#ifndef orig
-float flip=-1.0;
-if (i !=  NumberOfLayers-1)
-{
-for (int n=0;n<tmpwgt.n_rows;n++)
-   for (int m=0;m<tmpwgt.n_cols;m++) {
-      tmpwgt(n,m) = flip * tmpwgt(n,m);
-      flip = -flip; }
-}
-#endif
-#ifdef SAVE_RAND_WGTS
-         cout << "layer:" << i << ":rows:" << tmpwgt.n_rows << ":cols:" << tmpwgt.n_cols << endl;
-         for (int j=0;j<tmpwgt.n_rows; j++)
-         {
-           for (int k=0;k<tmpwgt.n_cols;k++)
-           {
-                cout << tmpwgt(j,k) << " ";
-           }
-           cout << endl;
-         }
-#endif
+         rowvec t( nodes[i+1] );
+         mat tmpwgt1 = 2 * randu< mat >( nodes[i], nodes[i+1] ) - 1; // network weights for each node + 1 node bias weight
+         mat zzzwgt2 =  zeros< mat >( nodes[i], nodes[i+1] ); // network weights for each node + 1 node bias weight
+cout << tmpwgt1.max() << endl;
+cout << tmpwgt1.min() << endl;
+         netin.push_back( t );   // size=nodes[i],1
+         actuation.push_back( t ); // size= nodes[i],1
+         deltafn.push_back( t );
+         last_deltafn.push_back( {} );
+//         theta.push_back( tmpwgt1  );
+         ftick.push_back( t );
 
-         layer_weights.push_back( tmpwgt );
-         new_layer_weights.push_back({});
-         weight_updates.push_back({});
+         layer_weights.push_back( tmpwgt1 );
+         new_layer_weights.push_back( zzzwgt2 );
+         weight_updates.push_back( zzzwgt2 );
     }
-#ifdef SAVE_RAND_WGTS
-    exit(0);
-#endif
    
 /////////////////////////////////////////////// 
 //
