@@ -287,7 +287,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     if (train)
     {
        intype="TRAINING";
-       epochs=512;
+       epochs=64;
     }
     for (int y=0;y<samples;y++)
     {
@@ -497,9 +497,6 @@ int main (int argc, char *argv[])
 //  CREATE ARRAY OF MATRICES AND VECTORS
 //  AND SET WEIGHTS TO RANDOM (0 < w < 1)
 //
-#ifdef SAVE_RAND_WGTS
-    cout<<endl << "layers:"<<NumberOfLayers<<endl;
-#endif
     input =  zeros< rowvec > ( nodes[0] );
     actuation.push_back( input );
     deltafn.push_back( input );
@@ -522,13 +519,13 @@ int main (int argc, char *argv[])
          new_layer_weights.push_back( zzzwgt2 );
          weight_updates.push_back( zzzwgt2 );
     }
-   
+   save_weights("initial_random_values"); 
 /////////////////////////////////////////////// 
 //
 // TRAIN THE DATA
 //
     forward_feed(traindata, trainlabels, true, 60000);
-    save_weights("mnist");   
+    save_weights("post_training_weights");   
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
