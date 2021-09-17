@@ -62,22 +62,23 @@
 using namespace arma;
 using namespace std;
 
-
-    unsigned int NumberOfLayers;
-    unsigned int * nodes;
-    double eta;               // Learning factor
-    vector<rowvec> netin;
-    vector<rowvec> actuation;
-    vector<rowvec> deltafn;
-    vector<rowvec> last_deltafn;
-    vector<rowvec> theta;
-    vector<rowvec> ftick;
-    vector<mat> layer_weights;
-    vector<mat> weight_updates;
-    vector<mat> new_layer_weights;
-    rowvec tmpbias; 
-    rowvec input, output; 
-    colvec vbias;
+const double epsilon = 1e-3;
+unsigned int NumberOfLayers;
+unsigned int OLayer;         // Output Layer as index to NumberOfLayers
+unsigned int * nodes;
+double eta;               // Learning factor
+vector<rowvec> netin;
+vector<rowvec> actuation;
+vector<rowvec> deltafn;
+vector<rowvec> last_deltafn;
+vector<rowvec> theta;
+vector<rowvec> ftick;
+vector<mat> layer_weights;
+vector<mat> weight_updates;
+vector<mat> new_layer_weights;
+rowvec tmpbias; 
+rowvec input, output; 
+colvec vbias;
 
 rowvec sigmoid( rowvec  & net)
 {
@@ -244,10 +245,10 @@ void backprop2(rowvec tgt)
 {
         cout << "------------------------------------ BACK PROPAGATION2" << endl;
      
-        last_deltafn[NumberOfLayers-1] = 0 * deltafn[NumberOfLayers-1];
-        theta[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]) %  (tgt - actuation[NumberOfLayers-1]);
+        last_deltafn[OLayer] = 0 * deltafn[OLayer];
+        theta[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]) %  (tgt - actuation[OLayer]);
 
-        for (int i=NumberOfLayers-2;i>=0;i--)
+        for (int i = OLayer - 1;i >= 0;i--)
         {
          deltafn[i] =  (eta * theta[i+1].t()) * (actuation[i].t() + (MOMENTUM * last_deltafn[i+1].t()));
 cout << "Delta for layer " << i <<endl;
@@ -260,12 +261,18 @@ cout <<  deltafn[i+1] << endl;
 }
 void backprop(rowvec tgt)
 {
-        cout << "------------------------------------ BACK PROPAGATION" << endl;
+        double err = accu((tgt - actuation[OLayer]) %  (tgt - actuation[OLayer]))*0.5;
+        if (err < epsilon)
+        {
+             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, so error is acceptable, returning" << endl;
+             return;
+        }
+        cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl;
      
-        ftick[NumberOfLayers-1] = (-actuation[NumberOfLayers-1] + 1) % (actuation[NumberOfLayers-1]);  //element wise multiply
+        ftick[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]);  //element wise multiply
 
-        deltafn[NumberOfLayers-1]  =  (tgt - actuation[NumberOfLayers-1])%(ftick[NumberOfLayers-1]);
-        for (int i=NumberOfLayers-2;i>=0;i--)
+        deltafn[OLayer]  =  (tgt - actuation[OLayer])%(ftick[OLayer]);
+        for (int i = OLayer - 1; i >= 0; i--)
         {
             weight_updates[i] = actuation[i].t() * deltafn[i+1];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
@@ -274,7 +281,7 @@ void backprop(rowvec tgt)
 
             deltafn[i] = ( layer_weights[i] * deltafn[i+1].t() ).t() % ftick[i];
         }
-        for (int i=0;i<NumberOfLayers-1;i++)
+        for (int i=0;i<OLayer;i++)
         {
            layer_weights[i] =  new_layer_weights[i];
         }
@@ -300,38 +307,58 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
+    int epochs=1;
     string intype="TEST    ";
+
     if (train)
+    {
        intype="TRAINING";
+       epochs=512;
+    }
     for (int y=0;y<samples;y++)
     {
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
-        for (int i=0;i<NumberOfLayers-1;i++)  // only n-1 transitions between n layers
+        for (int z=0;z<epochs;z++)
         {
-           // cout << "------------------------------------ All inputs into L" << i << endl;
-            // sum layer 1 weighted input
-                     //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
-            netin[i] =  (actuation[i] * layer_weights[i]);
-            //cout << "------------------------------------ Net weighted sum into L" << i << endl;
-            //cout << "------------------------------------ Activation out of L" << i << endl;
-                   cout << "L"<<i<< "has netin==" << endl << netin[i]<< endl; 
-            actuation[i+1] = sigmoid(netin[i]);
-                   cout << "out=" <<  actuation[i+1]<< endl; 
+            cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
+            for (int i=0;i<OLayer;i++)  // only n-1 transitions between n layers
+            {
+               // cout << "------------------------------------ All inputs into L" << i << endl;
+                // sum layer 1 weighted input
+                         //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
+                netin[i] =  (actuation[i] * layer_weights[i]);
+                //cout << "------------------------------------ Net weighted sum into L" << i << endl;
+                //cout << "------------------------------------ Activation out of L" << i << endl;
+                actuation[i+1] = sigmoid(netin[i]);
+            }
+            if (train)
+            {
+                // printout intermediate result
+                int tgtval = tgt.index_max();
+                int outval = actuation[OLayer].index_max();
+                std::cout << "Train output : " << endl << actuation[OLayer] << std::endl;
+                int minval= tgtval<outval?tgtval:outval;
+                int maxval= tgtval>outval?tgtval:outval;
+                string minc= tgtval == minval ? to_string(minval)+string("A"):to_string(minval)+string("O");
+                string maxc= tgtval == maxval ? to_string(maxval)+"A":to_string(maxval)+"O";
+                if (minval==maxval)
+                   minc="*"+to_string(minval); // correct
+                for (int z = 0; z < minval; z++)
+                    cout << "         ";
+                cout << "       " << minc;  
+                for (int z = 0; z < maxval - minval-1; z++)
+                    cout << "         ";
+                if (minval != maxval)
+                    cout << "       " << maxc;  // expected
+                cout << endl;
+                backprop(tgt);
+            }
         }
-
-        std::cout << "Final output : " << endl << actuation[NumberOfLayers-1] << std::endl;
-        std::cout << "Expec output : " << endl << tgt << std::endl;
-        
-                //////////////////////////// forward feed end
-        if (train)
-        {
-            backprop(tgt);
-        }
-        else
+        if (!train)
         {
             correct_num = tgt.index_max();
-            best_guess = actuation[NumberOfLayers-1].index_max();
+            best_guess = actuation[OLayer].index_max();
 
             if (best_guess == correct_num)
             {
@@ -346,6 +373,13 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
+        std::cout << "Final output : " << endl << actuation[OLayer] << std::endl;
+        for (int z=0;z<actuation[OLayer].index_max();z++)
+             cout << "         ";
+        cout << "       ^" << endl;
+        std::cout << "Expec output : " << endl << tgt << std::endl;
+        
+                //////////////////////////// forward feed end
     }
     if (!train)
     {
@@ -453,6 +487,7 @@ int main (int argc, char *argv[])
                 }
              }
         }
+        OLayer = NumberOfLayers - 1;
     unsigned char * trainlabels; 
     unsigned char * testlabels; 
     unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
@@ -471,13 +506,12 @@ int main (int argc, char *argv[])
     deltafn.push_back( input );
     ftick.push_back( input );
     last_deltafn.push_back( {} );
-    for (int i = 0; i < NumberOfLayers - 1; i++)
+    for (int i = 0; i < OLayer; i++)
     {
          rowvec t( nodes[i+1] );
-         mat tmpwgt1 = 2 * randu< mat >( nodes[i], nodes[i+1] ) - 1; // network weights for each node + 1 node bias weight
+          // initialise weights randomly between -0.5 and 0.5
+         mat tmpwgt1 = (2 * randu< mat >( nodes[i], nodes[i+1] ) - 1)/2; // network weights for each node + 1 node bias weight
          mat zzzwgt2 =  zeros< mat >( nodes[i], nodes[i+1] ); // network weights for each node + 1 node bias weight
-cout << tmpwgt1.max() << endl;
-cout << tmpwgt1.min() << endl;
          netin.push_back( t );   // size=nodes[i],1
          actuation.push_back( t ); // size= nodes[i],1
          deltafn.push_back( t );
