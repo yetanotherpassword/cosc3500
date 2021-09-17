@@ -3,6 +3,10 @@
 #include <cmath>
 #include <armadillo>
 
+#include <ctime>
+ 
+
+
 #undef DEBUGON
 
 #define ARMA_64BIT_WORD
@@ -80,6 +84,7 @@ rowvec tmpbias;
 rowvec input, output; 
 colvec vbias;
 
+rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * 9999;
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
@@ -223,49 +228,16 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     t(img_is_digit)=1;               // set the target 'bit'
 
 }
-#if 0
-void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, unsigned char * &lp)
-{
-    int start=(INPUT_LINES*seq)+IMAGE_OFFSET;
-    double greyval=MAX_PIXEL_VAL;
-    img.set_size(INPUT_LINES);
-/*
-    for (int i=0;i<INPUT_LINES;i++)
-    {
-    }
-*/
-    int img_is_digit=(int) lp[8+seq];
 
-    t=zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
-    t(img_is_digit)=1;               // set the target 'bit'
-
-}
-#endif
-void backprop2(rowvec tgt)
-{
-        cout << "------------------------------------ BACK PROPAGATION2" << endl;
-     
-        last_deltafn[OLayer] = 0 * deltafn[OLayer];
-        theta[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]) %  (tgt - actuation[OLayer]);
-
-        for (int i = OLayer - 1;i >= 0;i--)
-        {
-         deltafn[i] =  (eta * theta[i+1].t()) * (actuation[i].t() + (MOMENTUM * last_deltafn[i+1].t()));
-cout << "Delta for layer " << i <<endl;
-cout <<  deltafn[i+1] << endl;
-            layer_weights[i] +=  deltafn[i];
-             
-            last_deltafn[i] = deltafn[i];
-         theta[i] = (-actuation[i] + 1) % (actuation[i]) *  layer_weights[i].t() % theta[i+1];
-        }
-}
-void backprop(rowvec tgt)
+int backprop(rowvec tgt)
 {
         double err = accu((tgt - actuation[OLayer]) %  (tgt - actuation[OLayer]))*0.5;
         if (err < epsilon)
         {
-             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, so error is acceptable, returning" << endl;
-             return;
+             int val=tgt.index_max();
+             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
+             err_summary(val) = err;
+             return 1;
         }
         cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl;
      
@@ -285,6 +257,7 @@ void backprop(rowvec tgt)
         {
            layer_weights[i] =  new_layer_weights[i];
         }
+        return 0;
 }
 
 void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
@@ -306,6 +279,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
+    rowvec tgtcompleted = zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
     int num_tested = 0;
     int epochs=1;
     string intype="TEST    ";
@@ -319,6 +293,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     {
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
+        int tgtval = tgt.index_max();
+        if ((tgtcompleted(tgtval) == 1) && (train))
+            continue;
         for (int z=0;z<epochs;z++)
         {
             cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
@@ -335,7 +312,6 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             if (train)
             {
                 // printout intermediate result
-                int tgtval = tgt.index_max();
                 int outval = actuation[OLayer].index_max();
                 std::cout << "Train output : " << endl << actuation[OLayer] << std::endl;
                 int minval= tgtval<outval?tgtval:outval;
@@ -352,7 +328,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 if (minval != maxval)
                     cout << "       " << maxc;  // expected
                 cout << endl;
-                backprop(tgt);
+                tgtcompleted(tgtval) = backprop(tgt);
+                if (tgtcompleted(tgtval) == 1)
+                         break;
             }
         }
         if (!train)
@@ -437,6 +415,27 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     }
                 
 }
+
+void save_weights(string hdr)
+{
+    ofstream oFile;
+    std::time_t result = std::time(nullptr);
+    string fname = hdr+string("_weights") + std::asctime(std::localtime(&result));
+    oFile.open(fname, ios::out);
+    oFile << "NumberOfLayers=" << NumberOfLayers << endl;
+    for (int i=0; i< OLayer; i++)
+    {
+        
+        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
+        oFile << layer_weights[i] << endl;
+    }
+    oFile << "Error Summary" << endl;
+    oFile << err_summary << endl;
+    oFile << "EndFile" << endl;
+    oFile.close();
+
+}
+
 int main (int argc, char *argv[])
 {
     
@@ -529,7 +528,7 @@ int main (int argc, char *argv[])
 // TRAIN THE DATA
 //
     forward_feed(traindata, trainlabels, true, 60000);
-   
+    save_weights("mnist");   
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
