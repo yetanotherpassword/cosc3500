@@ -420,7 +420,7 @@ void save_weights(string hdr)
 {
     ofstream oFile;
     std::time_t result = std::time(nullptr);
-    string fname = hdr+string("_weights") + std::asctime(std::localtime(&result));
+    string fname = hdr+string("_weights_") + to_string(result)+string(".txt");
     oFile.open(fname, ios::out);
     oFile << "NumberOfLayers=" << NumberOfLayers << endl;
     for (int i=0; i< OLayer; i++)
