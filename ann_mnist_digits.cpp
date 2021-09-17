@@ -84,7 +84,7 @@ rowvec tmpbias;
 rowvec input, output; 
 colvec vbias;
 
-rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * 9999;
+rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
