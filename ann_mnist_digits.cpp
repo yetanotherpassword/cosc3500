@@ -6,9 +6,6 @@
 #include <ctime>
  
 
-
-#undef DEBUGON
-
 #define ARMA_64BIT_WORD
 
 #define INPUT_LINES 784
@@ -20,17 +17,11 @@
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 
-#undef orig
-#undef SAVE_RAND_WGTS
-
-#ifdef orig
-#define ETA_DEFAULT 0.5f
-#else
 #define ETA_DEFAULT 1e-3
 #define MOMENTUM 0.9f
 #define EPSILON 1e-3
-#endif
 
+#undef USE_BIASES
 
 
 /*
@@ -68,21 +59,21 @@ using namespace std;
 
 const double epsilon = 1e-3;
 unsigned int NumberOfLayers;
-unsigned int OLayer;         // Output Layer as index to NumberOfLayers
 unsigned int * nodes;
+unsigned int OLayer;         // Output Layer as index to NumberOfLayers
 double eta;               // Learning factor
 vector<rowvec> netin;
+#ifdef USE_BIASES
+vector<rowvec> layer_biases;
+#endif
 vector<rowvec> actuation;
 vector<rowvec> deltafn;
-vector<rowvec> last_deltafn;
 vector<rowvec> theta;
 vector<rowvec> ftick;
 vector<mat> layer_weights;
 vector<mat> weight_updates;
 vector<mat> new_layer_weights;
-rowvec tmpbias; 
-rowvec input, output; 
-colvec vbias;
+rowvec input; 
 
 rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 rowvec sigmoid( rowvec  & net)
@@ -104,7 +95,7 @@ void print_an_image(unsigned char * c, int i)
          cout << endl;
        cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " ";
      }
-     cout << endl;
+     cout << setfill(' ') << endl;
 }
    
 
@@ -118,6 +109,7 @@ void print_images(unsigned char * c,  int size)
            cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl;
        cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " ";
     }
+    cout << setfill(' ');
 }
 
 void outp(mat m, string s)
@@ -244,6 +236,7 @@ int backprop(rowvec tgt)
         ftick[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]);  //element wise multiply
 
         deltafn[OLayer]  =  (tgt - actuation[OLayer])%(ftick[OLayer]);
+
         for (int i = OLayer - 1; i >= 0; i--)
         {
             weight_updates[i] = actuation[i].t() * deltafn[i+1];
@@ -256,6 +249,9 @@ int backprop(rowvec tgt)
         for (int i=0;i<OLayer;i++)
         {
            layer_weights[i] =  new_layer_weights[i];
+#ifdef USE_BIASES
+           layer_biases[i] += deltafn[i+1];
+#endif
         }
         return 0;
 }
@@ -279,7 +275,6 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
-    rowvec tgtcompleted = zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
     int num_tested = 0;
     int epochs=1;
     string intype="TEST    ";
@@ -287,15 +282,13 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     if (train)
     {
        intype="TRAINING";
-       epochs=64;
+       epochs=512;
     }
     for (int y=0;y<samples;y++)
     {
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.index_max();
-        if ((tgtcompleted(tgtval) == 1) && (train))
-            continue;
         for (int z=0;z<epochs;z++)
         {
             cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
@@ -304,7 +297,11 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                // cout << "------------------------------------ All inputs into L" << i << endl;
                 // sum layer 1 weighted input
                          //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
+#ifdef USE_BIASES
+                netin[i] =  (actuation[i] * layer_weights[i]) + (layer_biases[i]);
+#else
                 netin[i] =  (actuation[i] * layer_weights[i]);
+#endif
                 //cout << "------------------------------------ Net weighted sum into L" << i << endl;
                 //cout << "------------------------------------ Activation out of L" << i << endl;
                 actuation[i+1] = sigmoid(netin[i]);
@@ -328,8 +325,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 if (minval != maxval)
                     cout << "       " << maxc;  // expected
                 cout << endl;
-                tgtcompleted(tgtval) = backprop(tgt);
-                if (tgtcompleted(tgtval) == 1)
+                if (backprop(tgt))
                          break;
             }
         }
@@ -361,16 +357,16 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     }
     if (!train)
     {
+         cout << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl;
          cout << "Tested " << num_tested << " samples"<<endl;
          for (int i=0;i<10;i++)
              cout  <<  "      "<< dec << std::setw(7) << i ;
-         cout << "      Guessed" << endl;;
-         cout << "---------------------------------------------------------------------------------------------------------------------------------------" << endl;
+         cout << "      Guessed" ;
          double colsum[10]={0,0,0,0,0,0,0,0,0,0};
          double rowsum[10]={0,0,0,0,0,0,0,0,0,0};
          for (int i=0;i<10;i++)
          {
-            cout << endl << i << " |  ";
+            cout << endl  << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << i << " |  ";
             for (int j=0;j<10;j++)
             {
                 rowsum[i] +=  chosen_wrongly[i][j];
@@ -393,7 +389,8 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     ";
          }
          cout << endl;
-         cout << "Target " << endl << endl << endl << endl << endl << "Correct selections:" << endl;
+         float totpctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
+         cout << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie " << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl;
          for (int i=0;i<10;i++)
              cout  << dec << std::setw(7) << i << "      ";
          cout << endl;
@@ -410,8 +407,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 cout  << std::setw(7) << num_wrong[i] <<  "      ";
          }
          cout << endl << endl; 
-         float pctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<pctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
+         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
     }
                 
 }
@@ -421,6 +417,7 @@ void save_weights(string hdr)
     ofstream oFile;
     std::time_t result = std::time(nullptr);
     string fname = hdr+string("_weights_") + to_string(result)+string(".txt");
+    cout << "Saving weights to file : " << fname << endl;
     oFile.open(fname, ios::out);
     oFile << "NumberOfLayers=" << NumberOfLayers << endl;
     for (int i=0; i< OLayer; i++)
@@ -428,6 +425,12 @@ void save_weights(string hdr)
         
         oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
         oFile << layer_weights[i] << endl;
+        oFile <<  "LayerBiases"<<i<< endl;
+#ifdef USE_BIASES
+        oFile << layer_biases[i] << endl;
+#else
+        oFile << "No layer biases are used" << endl;
+#endif
     }
     oFile << "Error Summary" << endl;
     oFile << err_summary << endl;
@@ -501,17 +504,19 @@ int main (int argc, char *argv[])
     actuation.push_back( input );
     deltafn.push_back( input );
     ftick.push_back( input );
-    last_deltafn.push_back( {} );
     for (int i = 0; i < OLayer; i++)
     {
-         rowvec t( nodes[i+1] );
+         rowvec t =  ones< rowvec >( nodes[i+1] ); // network weights for each node + 1 node bias weight
+         rowvec r =  randu< rowvec >( nodes[i+1] ); // network weights for each node + 1 node bias weight
           // initialise weights randomly between -0.5 and 0.5
          mat tmpwgt1 = (2 * randu< mat >( nodes[i], nodes[i+1] ) - 1)/2; // network weights for each node + 1 node bias weight
          mat zzzwgt2 =  zeros< mat >( nodes[i], nodes[i+1] ); // network weights for each node + 1 node bias weight
          netin.push_back( t );   // size=nodes[i],1
+#ifdef USE_BIASES
+         layer_biases.push_back( r );   // size=nodes[i],1
+#endif
          actuation.push_back( t ); // size= nodes[i],1
          deltafn.push_back( t );
-         last_deltafn.push_back( {} );
 //         theta.push_back( tmpwgt1  );
          ftick.push_back( t );
 
