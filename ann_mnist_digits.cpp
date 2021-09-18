@@ -2,7 +2,10 @@
 #include <iomanip>
 #include <cmath>
 #include <armadillo>
+#include <boost/algorithm/string.hpp>
 
+//#include <stdlib.h>
+//#include <stdio.h>
 #include <ctime>
  
 
@@ -20,6 +23,7 @@
 #define ETA_DEFAULT 1e-3
 #define MOMENTUM 0.9f
 #define EPSILON 1e-3
+#define EPOCHS 512
 
 #undef USE_BIASES
 
@@ -62,6 +66,7 @@ unsigned int NumberOfLayers;
 unsigned int * nodes;
 unsigned int OLayer;         // Output Layer as index to NumberOfLayers
 double eta;               // Learning factor
+int epochs;
 vector<rowvec> netin;
 #ifdef USE_BIASES
 vector<rowvec> layer_biases;
@@ -279,14 +284,15 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
-    int epochs=1;
     string intype="TEST    ";
 
     if (train)
     {
-       intype="TRAINING";
-       epochs=512;
+       intype = "TRAINING";
+       epochs = 512;
     }
+    else
+       epochs = 1;
     for (int y=0;y<samples;y++)
     {
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
@@ -320,16 +326,16 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 string maxc= tgtval == maxval ? to_string(maxval)+"A":to_string(maxval)+"O";
                 if (minval==maxval)
                    minc="*"+to_string(minval); // correct
-                for (int z = 0; z < minval; z++)
+                for (int x = 0; x < minval; x++)
                     cout << "         ";
                 cout << "       " << minc;  
-                for (int z = 0; z < maxval - minval-1; z++)
+                for (int x = 0; x < maxval - minval-1; x++)
                     cout << "         ";
                 if (minval != maxval)
                     cout << "       " << maxc;  // expected
                 cout << endl;
                 if (backprop(tgt))
-                         break;
+                         z = epochs;
             }
         }
         if (!train)
@@ -351,7 +357,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             num_tested++;
         }
         std::cout << "Final output : " << endl << actuation[OLayer] << std::endl;
-        for (int z=0;z<actuation[OLayer].index_max();z++)
+        for (int t=0;t<actuation[OLayer].index_max();t++)
              cout << "         ";
         cout << "       ^" << endl;
         std::cout << "Expec output : " << endl << tgt << std::endl;
@@ -443,7 +449,25 @@ void save_weights(string hdr)
 
 int main (int argc, char *argv[])
 {
-    
+
+
+
+extern char **environ;
+
+    vector<string> strs;
+
+    // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
+    for(char **current = environ; *current; current++) {
+        string tmp = *current;
+        boost::split(strs, tmp, boost::is_any_of("="));
+        if ((strs[0] == "SLURM_JOBID") || (strs[0] == "SLURM_JOB_ID"))
+           if (strs[1].length() > 0)
+           {
+             fid = strs[1];
+             break;
+           }
+    }
+
         if (argc < 2)
         {
             NumberOfLayers=3;
@@ -496,6 +520,12 @@ int main (int argc, char *argv[])
     unsigned char * testlabels; 
     unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
     unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
+    cout << "Training epochs per test data is : " << EPOCHS << endl;
+#ifdef USE_BIASES
+    cout << "Bias weighting is used " << endl;
+#else
+    cout << "Bias weighting is NOT used " << endl;
+#endif
 
 ///////////////////////////////////////////////
 //
