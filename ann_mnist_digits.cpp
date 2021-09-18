@@ -75,6 +75,9 @@ vector<mat> weight_updates;
 vector<mat> new_layer_weights;
 rowvec input; 
 
+std::time_t result = std::time(nullptr);
+string fid = to_string(result);
+
 rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 rowvec sigmoid( rowvec  & net)
 {
@@ -415,8 +418,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 void save_weights(string hdr)
 {
     ofstream oFile;
-    std::time_t result = std::time(nullptr);
-    string fname = hdr+string("_weights_") + to_string(result)+string(".txt");
+    string fname = hdr+string("_weights_") + fid +string(".txt");
     cout << "Saving weights to file : " << fname << endl;
     oFile.open(fname, ios::out);
     oFile << "NumberOfLayers=" << NumberOfLayers << endl;
