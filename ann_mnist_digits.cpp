@@ -8,7 +8,7 @@
 //#include <stdio.h>
 #include <ctime>
  
-
+#define BACKOPUT
 #define ARMA_64BIT_WORD
 
 #define INPUT_LINES 784
@@ -83,7 +83,7 @@ rowvec input;
 std::time_t result = std::time(nullptr);
 string fid = to_string(result);
 
-rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
+//rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
@@ -236,10 +236,11 @@ int backprop(rowvec tgt)
         {
              int val=tgt.index_max();
              cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
-             err_summary(val) = err;
              return 1;
         }
+#ifdef BACKOPUT
         cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl;
+#endif
      
         ftick[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]);  //element wise multiply
 
@@ -284,6 +285,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
+    bool fin_this_epoch = false;
     string intype="TEST    ";
 
     if (train)
@@ -295,12 +297,17 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
        epochs = 1;
     for (int y=0;y<samples;y++)
     {
+        fin_this_epoch = false;
+#ifdef BACKOPUT
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
+#endif
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.index_max();
-        for (int z=0;z<epochs;z++)
+        for (int z = 0; z < epochs && !fin_this_epoch; z++)
         {
+#ifdef BACKOPUT
             cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
+#endif
             for (int i=0;i<OLayer;i++)  // only n-1 transitions between n layers
             {
                // cout << "------------------------------------ All inputs into L" << i << endl;
@@ -319,7 +326,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                 // printout intermediate result
                 int outval = actuation[OLayer].index_max();
+#ifdef BACKOPUT
                 std::cout << "Train output : " << endl << actuation[OLayer] << std::endl;
+#endif
                 int minval= tgtval<outval?tgtval:outval;
                 int maxval= tgtval>outval?tgtval:outval;
                 string minc= tgtval == minval ? to_string(minval)+string("A"):to_string(minval)+string("O");
@@ -334,8 +343,8 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 if (minval != maxval)
                     cout << "       " << maxc;  // expected
                 cout << endl;
-                if (backprop(tgt))
-                         z = epochs;
+                if (backprop(tgt)==1)
+                         fin_this_epoch=true;
             }
         }
         if (!train)
@@ -356,12 +365,13 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
+#ifdef BACKOPUT
         std::cout << "Final output : " << endl << actuation[OLayer] << std::endl;
         for (int t=0;t<actuation[OLayer].index_max();t++)
              cout << "         ";
         cout << "       ^" << endl;
         std::cout << "Expec output : " << endl << tgt << std::endl;
-        
+#endif 
                 //////////////////////////// forward feed end
     }
     if (!train)
@@ -440,8 +450,8 @@ void save_weights(string hdr)
         oFile << "No layer biases are used" << endl;
 #endif
     }
-    oFile << "Error Summary" << endl;
-    oFile << err_summary << endl;
+//    oFile << "Error Summary" << endl;
+//    oFile << err_summary << endl;
     oFile << "EndFile" << endl;
     oFile.close();
 
