@@ -8,13 +8,13 @@
 //#include <stdio.h>
 #include <ctime>
  
-#define BACKOPUT
+#undef EXTRA_OUTPUT
 #define ARMA_64BIT_WORD
 
 #define INPUT_LINES 784
 #define DEFAULT_HIDDEN 30
 #define OUTPUT_LINES 10
-
+#define EXTRA_MESSAGE "Something"
 
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
@@ -24,6 +24,7 @@
 #define MOMENTUM 0.9f
 #define EPSILON 1e-3
 #define EPOCHS 512
+#undef STOP_AT_EPSILON
 
 #undef USE_BIASES
 
@@ -96,14 +97,14 @@ rowvec sigmoid( rowvec  & net)
 //
 void print_an_image(unsigned char * c, int i)
 {
-     cout << "This is a : " << i << endl;
+     cout << "This is a : " << i << endl << flush;
      for (int i=0;i<INPUT_LINES;i++)
      {
        if (i%MATRIX_SIDE==0)
-         cout << endl;
-       cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " ";
+         cout << endl << flush;
+       cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " " << flush;
      }
-     cout << setfill(' ') << endl;
+     cout << setfill(' ') << endl << flush;
 }
    
 
@@ -112,58 +113,57 @@ void print_images(unsigned char * c,  int size)
     for (int i=IMAGE_OFFSET;i<size;i++)
     {
        if (((i-IMAGE_OFFSET)%MATRIX_SIDE)==0)
-           cout << endl;
+           cout << endl << flush;
        if (((i-IMAGE_OFFSET)%INPUT_LINES)==0)
-           cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl;
-       cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " ";
+           cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl << flush;
+       cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " " << flush;
     }
-    cout << setfill(' ');
+    cout << setfill(' ') << flush;
 }
 
 void outp(mat m, string s)
 {
-   cout << "matrix:" << s << " rows=" << m.n_rows <<   " cols=" << m.n_cols << endl;
+   cout << "matrix:" << s << " rows=" << m.n_rows <<   " cols=" << m.n_cols << endl << flush;
 
 }
 
 void outp(rowvec v, string s)
 {
-   cout << "vector:" << s << " rows=" << v.n_rows <<   " cols=" << v.n_cols << endl;
+   cout << "vector:" << s << " rows=" << v.n_rows <<   " cols=" << v.n_cols << endl << flush;
 
 }
 //
 //
 /////////////////////////////////////////////
 
-unsigned char * load_file(string filename, string labels, unsigned char * * labs)
+void load_file(string filename, string labels, unsigned char * * labs, unsigned char * * data)
 {
-    unsigned char * memblock;
     ifstream inFile;
     streampos size;
 
-    cout << "Using file '" << filename << "'" << endl;
+    cout << "Using file '" << filename << "'" << endl << flush;
 //
 // Load MNIST DIGIT IMAGES
 //
     inFile.open(filename, ios::in|ios::binary|ios::ate);
     if (!inFile) {
-        cout << "Unable to open file '" << filename << "'" << endl;
+        cout << "Unable to open file '" << filename << "'" << endl << flush;
         exit(1); // terminate with error
     }
     else
     {
-       cout << "OK opened '" << filename << "' Successfully" << endl;
+       cout << "OK opened '" << filename << "' Successfully" << endl << flush;
     }
 
     if (inFile.is_open())
     {
         size = inFile.tellg();
-        memblock = new unsigned char [size];
+        *data = new unsigned char [size];
         inFile.seekg (0, ios::beg);
-        inFile.read ((char *)memblock, size);
+        inFile.read ((char *)*data , size);
         inFile.close();
 
-        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl;
+        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl << flush;
          //print_images(memblock, size);
  
     }
@@ -173,12 +173,12 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
 //
     inFile.open(labels, ios::in|ios::binary|ios::ate);
     if (!inFile) {
-        cout << "Unable to open file '" << labels << "'" << endl;
+        cout << "Unable to open file '" << labels << "'" << endl << flush;
         exit(1); // terminate with error
     }
     else
     {
-       cout << "OK opened '" << labels << "' Successfully" << endl;
+       cout << "OK opened '" << labels << "' Successfully" << endl << flush;
     }
 
     if (inFile.is_open())
@@ -189,12 +189,11 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
         inFile.read ((char *) *labs, size);
         inFile.close();
 
-        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl;
+        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl << flush;
         // print_images(memblock, size);
  
     }
     inFile.close();
-    return memblock;
 
 }
 
@@ -215,11 +214,13 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
            img(i)=1.0;
      */ 
     }
-     //   cout << img << endl << "an image ************************" << endl;
+     //   cout << img << endl << "an image ************************" << endl << flush;
 
     int img_is_digit=(int) lp[8+seq];
 
+#ifdef EXTRA_OUTPUT 
     print_an_image(&mptr[start], img_is_digit);
+#endif
 
 //    t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
 //    t(t.n_cols-1)=1;                 // set bias signal (redundant for target, but keeps vectors same size)
@@ -229,17 +230,19 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
 }
 
-int backprop(rowvec tgt)
+int backprop(rowvec tgt, int s, int e)
 {
         double err = accu((tgt - actuation[OLayer]) %  (tgt - actuation[OLayer]))*0.5;
+#ifdef STOP_AT_EPSILON
         if (err < epsilon)
         {
              int val=tgt.index_max();
-             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
+             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon (" << epsilon <<"), for tgt '"<< val <<"' so error is acceptable (for epoch "<< e << " of sample " << s << "), returning" << endl << flush;
              return 1;
         }
-#ifdef BACKOPUT
-        cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl;
+#endif
+#ifdef EXTRA_OUTPUT 
+        cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl << flush;
 #endif
      
         ftick[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]);  //element wise multiply
@@ -298,19 +301,19 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     for (int y=0;y<samples;y++)
     {
         fin_this_epoch = false;
-#ifdef BACKOPUT
-        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
+#ifdef EXTRA_OUTPUT 
+        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl << flush;
 #endif
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.index_max();
         for (int z = 0; z < epochs && !fin_this_epoch; z++)
         {
-#ifdef BACKOPUT
-            cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
+#ifdef  EXTRA_OUTPUT
+            cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl << flush;
 #endif
             for (int i=0;i<OLayer;i++)  // only n-1 transitions between n layers
             {
-               // cout << "------------------------------------ All inputs into L" << i << endl;
+               // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
                          //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
 #ifdef USE_BIASES
@@ -318,17 +321,16 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 #else
                 netin[i] =  (actuation[i] * layer_weights[i]);
 #endif
-                //cout << "------------------------------------ Net weighted sum into L" << i << endl;
-                //cout << "------------------------------------ Activation out of L" << i << endl;
+                //cout << "------------------------------------ Net weighted sum into L" << i << endl << flush;
+                //cout << "------------------------------------ Activation out of L" << i << endl << flush;
                 actuation[i+1] = sigmoid(netin[i]);
             }
             if (train)
             {
                 // printout intermediate result
                 int outval = actuation[OLayer].index_max();
-#ifdef BACKOPUT
-                std::cout << "Train output : " << endl << actuation[OLayer] << std::endl;
-#endif
+#ifdef EXTRA_OUTPUT
+                std::cout << "Train output : " << endl << actuation[OLayer] << std::endl << flush;
                 int minval= tgtval<outval?tgtval:outval;
                 int maxval= tgtval>outval?tgtval:outval;
                 string minc= tgtval == minval ? to_string(minval)+string("A"):to_string(minval)+string("O");
@@ -336,14 +338,15 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 if (minval==maxval)
                    minc="*"+to_string(minval); // correct
                 for (int x = 0; x < minval; x++)
-                    cout << "         ";
-                cout << "       " << minc;  
+                    cout << "         " << flush;
+                cout << "       " << minc << flush;  
                 for (int x = 0; x < maxval - minval-1; x++)
-                    cout << "         ";
+                    cout << "         " << flush;
                 if (minval != maxval)
-                    cout << "       " << maxc;  // expected
-                cout << endl;
-                if (backprop(tgt)==1)
+                    cout << "       " << maxc << flush;  // expected
+                cout << endl << flush;
+#endif
+                if (backprop(tgt,y,z)==1)
                          fin_this_epoch=true;
             }
         }
@@ -365,68 +368,68 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
-#ifdef BACKOPUT
-        std::cout << "Final output : " << endl << actuation[OLayer] << std::endl;
+#ifdef EXTRA_OUTPUT
+        std::cout << "Final output : " << endl << actuation[OLayer] << std::endl << flush;
         for (int t=0;t<actuation[OLayer].index_max();t++)
-             cout << "         ";
-        cout << "       ^" << endl;
-        std::cout << "Expec output : " << endl << tgt << std::endl;
+             cout << "         " << flush;
+        cout << "       ^" << endl << flush;
+        std::cout << "Expec output : " << endl << tgt << std::endl << flush;
 #endif 
                 //////////////////////////// forward feed end
     }
     if (!train)
     {
-         cout << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl;
-         cout << "Tested " << num_tested << " samples"<<endl;
+         cout << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl << flush;
+         cout << "Tested " << num_tested << " samples"<<endl << flush;
          for (int i=0;i<10;i++)
-             cout  <<  "      "<< dec << std::setw(7) << i ;
-         cout << "      Guessed" ;
+             cout  <<  "      "<< dec << std::setw(7) << i  << flush;
+         cout << "      Guessed"  << flush;
          double colsum[10]={0,0,0,0,0,0,0,0,0,0};
          double rowsum[10]={0,0,0,0,0,0,0,0,0,0};
          for (int i=0;i<10;i++)
          {
-            cout << endl  << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << i << " |  ";
+            cout << endl  << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << i << " |  " << flush;
             for (int j=0;j<10;j++)
             {
                 rowsum[i] +=  chosen_wrongly[i][j];
                 colsum[j] +=  chosen_wrongly[i][j];
-                cout  << std::setw(7) << chosen_wrongly[i][j] <<  "      ";
+                cout  << std::setw(7) << chosen_wrongly[i][j] <<  "      " << flush;
             }
             float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
-            cout << "| " <<  setw(7)  <<rowsum[i] ;
-            cout <<  setw(7)   <<"         " << pctg  <<  resetiosflags( ios::fixed  |ios::showpoint )<< "%";
+            cout << "| " <<  setw(7)  <<rowsum[i]  << flush;
+            cout <<  setw(7)   <<"         " << pctg  <<  resetiosflags( ios::fixed  |ios::showpoint )<< "%" << flush;
 
          }
-         cout << endl;
-         cout << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << "     ";
+         cout << endl << flush;
+         cout << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << "     " << flush;
          for (int i=0;i<10;i++)
-             cout  << dec << std::setw(7) << colsum[i] << "      ";
-         cout << endl << "     ";
+             cout  << dec << std::setw(7) << colsum[i] << "      " << flush;
+         cout << endl << "     " << flush;
          for (int i=0;i<10;i++)
          {
              float pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
-            cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     ";
+            cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     " << flush;
          }
-         cout << endl;
+         cout << endl << flush;
          float totpctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         cout << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie " << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl;
+         cout << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie " << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl << flush;
          for (int i=0;i<10;i++)
-             cout  << dec << std::setw(7) << i << "      ";
-         cout << endl;
-         for (int i=0;i<10;i++)
-         {
-                cout  << std::setw(7) << num_correct[i] <<  "      ";
-         }
-         cout << endl << endl << "Incorrect selections:" << endl;
-         for (int i=0;i<10;i++)
-             cout  << dec << std::setw(7) << i << "      ";
-         cout << endl;
+             cout  << dec << std::setw(7) << i << "      " << flush;
+         cout << endl << flush;
          for (int i=0;i<10;i++)
          {
-                cout  << std::setw(7) << num_wrong[i] <<  "      ";
+                cout  << std::setw(7) << num_correct[i] <<  "      " << flush;
          }
-         cout << endl << endl; 
-         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
+         cout << endl << endl << "Incorrect selections:" << endl << flush;
+         for (int i=0;i<10;i++)
+             cout  << dec << std::setw(7) << i << "      " << flush;
+         cout << endl << flush;
+         for (int i=0;i<10;i++)
+         {
+                cout  << std::setw(7) << num_wrong[i] <<  "      " << flush;
+         }
+         cout << endl << endl << flush; 
+         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl << flush;
     }
                 
 }
@@ -435,24 +438,24 @@ void save_weights(string hdr)
 {
     ofstream oFile;
     string fname = hdr+string("_weights_") + fid +string(".txt");
-    cout << "Saving weights to file : " << fname << endl;
+    cout << "Saving weights to file : " << fname << endl << flush;
     oFile.open(fname, ios::out);
-    oFile << "NumberOfLayers=" << NumberOfLayers << endl;
+    oFile << "NumberOfLayers=" << NumberOfLayers << endl << flush;
     for (int i=0; i< OLayer; i++)
     {
         
-        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
-        oFile << layer_weights[i] << endl;
-        oFile <<  "LayerBiases"<<i<< endl;
+        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl << flush;
+        oFile << layer_weights[i] << endl << flush;
+        oFile <<  "LayerBiases"<<i<< endl << flush;
 #ifdef USE_BIASES
-        oFile << layer_biases[i] << endl;
+        oFile << layer_biases[i] << endl << flush;
 #else
-        oFile << "No layer biases are used" << endl;
+        oFile << "No layer biases are used" << endl << flush;
 #endif
     }
-//    oFile << "Error Summary" << endl;
-//    oFile << err_summary << endl;
-    oFile << "EndFile" << endl;
+//    oFile << "Error Summary" << endl << flush;
+//    oFile << err_summary << endl << flush;
+    oFile << "EndFile" << endl << flush;
     oFile.close();
 
 }
@@ -461,11 +464,13 @@ int main (int argc, char *argv[])
 {
 
 
-
-extern char **environ;
+    extern char **environ;
 
     vector<string> strs;
 
+#ifdef EXTRA_MESSAGE
+    cout << EXTRA_MESSAGE << endl;
+#endif
     // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
     for(char **current = environ; *current; current++) {
         string tmp = *current;
@@ -486,19 +491,19 @@ extern char **environ;
             nodes[1]=DEFAULT_HIDDEN;
             nodes[2]=OUTPUT_LINES;
             eta = ETA_DEFAULT;
-            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl;
-            cout << "And ETA=" << eta << endl;;
+            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl << flush;
+            cout << "And ETA=" << eta << endl << flush;;
         }
         else if (argc < 5)
         {
-             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl;
-             cout << "       Where ETA is the learning factor, &" << endl;
-             cout << "       Where number of parameters after ETA is the number of layers" << endl;
-             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl;
-             cout << "       And the parameters themselves are numbers, "<< endl;
-             cout << "       indicating the number of nodes in that layer." << endl;
-             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl;
-             cout << "       and is the default, if no params supplied." << endl;
+             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl << flush;
+             cout << "       Where ETA is the learning factor, &" << endl << flush;
+             cout << "       Where number of parameters after ETA is the number of layers" << endl << flush;
+             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl << flush;
+             cout << "       And the parameters themselves are numbers, "<< endl << flush;
+             cout << "       indicating the number of nodes in that layer." << endl << flush;
+             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl << flush;
+             cout << "       and is the default, if no params supplied." << endl << flush;
              exit (1);
         }
         else
@@ -508,9 +513,23 @@ extern char **environ;
              eta = stod(string(argv[1]));
              if (eta <= 0)
              {
-                   cout << "Error: ETA must be positive, usually less than 1" << endl;
+                   cout << "Error: ETA must be positive, usually less than 1" << endl << flush;
                    exit(1);
              }
+             cout << "And ETA=" << eta << endl << flush;;
+             nodes[0] = stoi(string(argv[2]));
+             if (nodes[0] != 784)
+             {
+                  cout << "Error: For this application, number of input nodes MUST be 784 (as flattening a 28x28 pixel image)" << endl;
+                  exit(1);
+             }
+             nodes[argc-3] = stoi(string(argv[argc-1]));
+             if (nodes[argc-3] != 10)
+             {
+                  cout << "Error: For this application, number of output nodes MUST be 10 (as categorising this many classes)" << endl;
+                  exit(1);
+             }
+             string optns="";
              for (int i=2;i<argc;i++)
              {
                 int p = stoi(string(argv[i]));
@@ -520,21 +539,29 @@ extern char **environ;
                 }
                 else
                 {
-                   cout << "Error in parameter " << i << " - must be positive" << endl;
+                   cout << "Error in parameter " << i << " - must be positive" << endl << flush;
                    exit (1);
                 }
+                optns = optns + " " + string(argv[i]);
              }
+             cout << "Using 1 input and " << NumberOfLayers-2 << " hiddenlayers and 1 outputlayer" << endl;
+             cout << "That contain number of nodes " << optns << " respectively" << endl;
         }
         OLayer = NumberOfLayers - 1;
+        
     unsigned char * trainlabels; 
     unsigned char * testlabels; 
-    unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
-    unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
-    cout << "Training epochs per test data is : " << EPOCHS << endl;
+    unsigned char * traindata;
+    unsigned char * testdata;
+
+
+    load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels, &traindata);
+    load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels, &testdata);
+    cout << "Training epochs per test data is : " << EPOCHS << endl << flush;
 #ifdef USE_BIASES
-    cout << "Bias weighting is used " << endl;
+    cout << "Bias weighting is used " << endl << flush;
 #else
-    cout << "Bias weighting is NOT used " << endl;
+    cout << "Bias weighting is NOT used " << endl << flush;
 #endif
 
 ///////////////////////////////////////////////
@@ -579,10 +606,10 @@ extern char **environ;
 //
     forward_feed(testdata, testlabels, false, 10000);
     
-        delete[] traindata;
-        delete[] trainlabels;
-        delete[] testdata;
-        delete[] testlabels;
+//        delete[] traindata;
+//        delete[] trainlabels;
+//        delete[] testdata;
+//        delete[] testlabels;
 }
 
 
