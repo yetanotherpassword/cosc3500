@@ -1,0 +1,56 @@
+# set some defaults.  ?= means don't override the value if it was set already
+MPICXX?=mpic++
+CXX?=g++
+CXXFLAGS?=-std=c++11 -O2
+NVCC?=nvcc
+NVFLAGS?=-O2 --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets
+
+# all targets
+TARGETS = Assignment2_serial Assignment2_openmp Assignment2_mpi Assignment2_cuda Assignment2_avx
+
+# The first rule in the Makefile is the default target that is made if 'make' is invoked with
+# no parameters.  'all' is a dummy target that will make everything
+default : all
+
+## Dependencies
+
+# all targets depend on the helper programs
+$(TARGETS) : randutil.h randutil.ipp randutil.o eigensolver.h eigensolver.o
+
+LIBS_Assignment2_serial = -larpack
+LIBS_Assignment2_avx    = -larpack
+LIBS_Assignment2_openmp = -larpack
+LIBS_Assignment2_mpi    = -larpack
+LIBS_Assignment2_cuda   = -larpack
+
+CXXFLAGS_Assignment2_openmp = -fopenmp
+CXXFLAGS_Assignment2_avx = -mavx
+
+randutil.o : randutil.h randutil.ipp
+eigensolver.o : eigensolver.h
+
+# wildcard rules
+%_mpi.o : %_mpi.cpp
+	$(MPICXX) $(CXXFLAGS) $(CFLAGS_$(basename $<)) -c $< -o $@
+
+%_mpi : %_mpi.cpp
+	$(MPICXX) $(CXXFLAGS) $(CXXFLAGS_$@) $(filter %.o %.cpp, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
+
+%.o : %.cu
+	$(NVCC) $(NVFLAGS) $(NVFLAGS_$(basename $<)) -c $< -o $@
+
+% : %.cu
+	$(NVCC) $(NVFLAGS) $(NVFLAGS_$@) $(filter %.o %.cu, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
+
+%.o : %.cpp
+	$(CXX) $(CXXFLAGS) $(CFLAGS_$(basename $<)) -c $< -o $@
+
+% : %.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGS_$@) $(filter %.o %.cpp, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
+
+all : $(TARGETS)
+
+clean:
+	rm -f $(TARGETS) *.o
+
+.PHONY: clean default all
