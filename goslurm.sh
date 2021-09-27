@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=1G # memory (MB)
 #SBATCH --time=0-10:01 # time (D-HH:MM)
 
@@ -21,8 +21,8 @@ if [ ! -f "$1" ] ; then
    echo "you probably need to compile code"
    exit 2
 fi
-
+#set
 #shift
-echo "Running: time $@"
-time $@
-
+#gdb -x ann_dbg $@
+echo "Running: '$@'"
+$@
