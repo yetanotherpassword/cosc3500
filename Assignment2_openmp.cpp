@@ -17,43 +17,6 @@ int N = 0;
 int NUM_THREADS=0;
 string msg="";
 
-#if 0
-void initial()
-{
-   omp_set_num_threads(NUM_THREADS);
-   int nthreads_allocd = 0;
-   #pragma omp parallel
-   {
-       int id = omp_get_thread_num();
-       int nthrds = omp_get_num_threads();
-       int from, to;
-       update_cyclic_params( id, nthrds, from, to, 0, N);
-       omp_set_num_threads(NUM_THREADS);
-       for (int i = from ; i < to; ++i)
-       {
-          M[i*N+i] = std::sqrt(2.0) * randutil::randn();
-#ifdef nested_parallel
-          #pragma omp parallel
-          {
-             int jid = omp_get_thread_num();
-             int jnthrds = omp_get_num_threads();
-             int jfrom, jto;
-             update_cyclic_params( jid, jnthrds, jfrom, jto, i+1, N);
-             for (int j = jfrom; j < jto; ++j)
-             {
-                M[i*N + j] = M[j*N + i] = randutil::randn();
-             }
-          }
-#else
-             for (int j = i+1; j < N; ++j)
-             {
-                M[i*N + j] = M[j*N + i] = randutil::randn();
-             }
-#endif
-       }
-   }
-}
-#endif
 
    void update_cyclic_params ( int thread_num, int num_of_threads, int & from, int & to, int orig_from, int orig_to)
    {
@@ -69,7 +32,7 @@ void initial()
    }
 
 // implementation of the matrix-vector multiply function
-void MatrixVectorMultiply(double* Y, const double* X)
+void MatrixVectorMultiply_good(double* Y, const double* X)
 {
    omp_set_num_threads(NUM_THREADS);
    #pragma omp parallel
@@ -88,6 +51,63 @@ void MatrixVectorMultiply(double* Y, const double* X)
       }
    }
 }
+
+void MatrixVectorMultiply3(double* Y, const double* X)
+{
+   omp_set_num_threads(NUM_THREADS);
+   {
+      int id = omp_get_thread_num();
+      int nthrds = omp_get_num_threads();
+      int from, to;
+      update_cyclic_params( id, nthrds, from, to, 0, N);
+   #pragma omp parallel
+   {
+      #pragma omp for
+      for (int i = from; i < to; ++i)
+      {
+         Y[i] = 0;
+         for (int j = 0; j < N; ++j)
+         {
+            Y[i] += M[i*N+j] * X[j];
+         }
+      }
+    }
+   }
+}
+
+
+// implementation of the matrix-vector multiply function
+void MatrixVectorMultiply(double* Y, const double* X)
+{
+   omp_set_num_threads(NUM_THREADS);
+   omp_set_schedule( omp_sched_dynamic, 80 );
+   for (int i = 0; i < N; ++i)
+   {
+      double tmp = 0;
+      #pragma omp parallel for reduction(+:tmp)
+      for (int j = 0; j < N; ++j)
+      {
+         tmp += M[i*N+j] * X[j];
+      //if (omp_get_thread_num()==0) cout << "No fo threads=" << omp_get_num_threads()<<endl;
+      }
+      Y[i] = tmp;
+   }
+}
+
+// implementation of the matrix-vector multiply function
+void MatrixVectorMultiply_orig(double* Y, const double* X)
+{
+   for (int i = 0; i < N; ++i)
+   {
+      Y[i] = 0;
+      for (int j = 0; j < N; ++j)
+      {
+         Y[i] += M[i*N+j] * X[j];
+      }
+   }
+}
+
+
 
 int main(int argc, char** argv)
 {
