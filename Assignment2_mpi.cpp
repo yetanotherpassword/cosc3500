@@ -7,25 +7,108 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
+#include <mpi.h>
+#include <unistd.h>
 
 // global variables to store the matrix
 
+using namespace std;
+
 double* M = nullptr;
 int N = 0;
+int world_size;
+int my_rank;
+int root_process=0;
+ int matrix_chunk;
+void partial_matrix_multiply(const double * Xin, double * inM, double * retbuf)
+{
+   void * dummy_null_void = NULL;
+    int dummy_int = 0;
+    double *myXbuff, *outgoing, *incoming;
+    incoming = (double *)malloc(matrix_chunk * sizeof(double));
+    int retcnt = 2*matrix_chunk; /// N) +1; // first and last are partial entries middle ones are return vector entries
+    int cnt=0;
+   double *datain;
+cout << my_rank << " hitting partial_matrix_multiply"<< endl << flush;
+    outgoing = (double *)malloc(retcnt * sizeof(double));
+    myXbuff = (double *)malloc(N*sizeof(double));
+   if (my_rank==0)
+       datain=(double *)Xin;
+   else
+       datain=myXbuff;
+cout << my_rank << " hitting MPI_Bcast"<< endl << flush;
+   MPI_Bcast((void *)datain, N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+cout << my_rank << " hitting MPI_Scatter inM="<<inM << " incoming=" << incoming << " matrix_chunk=" << matrix_chunk<< endl << flush;
+   MPI_Scatter(inM, matrix_chunk, MPI_DOUBLE, incoming, matrix_chunk, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+cout << my_rank << " finishing MPI_Scatter"<< endl << flush;
+/*
+    if (my_rank != 0)
+    {
+       sleep(10);
+cout << my_rank << " Doing MPI_Bcast rx"<< endl << flush;
+       MPI_Bcast(myXbuff, N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+cout << my_rank << " Doing MPI_Scatter rx"<< endl << flush;
+       MPI_Scatter(dummy_null_void, dummy_int, MPI_DOUBLE, incoming, matrix_chunk, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+    }
+    else
+    {
+       incoming = rootin;
+cout << my_rank << " root setting point to its scattered data"<< endl << flush;
+    }
+*/
+    int from = my_rank * matrix_chunk;
+    int to = (my_rank + 1) * matrix_chunk;
+    outgoing[cnt] = 0.0;
 
+cout << my_rank << " from="<< from << " to=" << to<< " N=" << N <<endl << flush;
+    for (int k = from; k < to; k++)
+    {
+        int col = k % N;
+cout << my_rank << " col="<< col<< " k=" << k<< " N=" << N <<endl << flush;
+        int row = k / N;
+        if (col == 0 && k > 0)
+           outgoing[++cnt]=0;
+        outgoing[cnt] += myXbuff[col] * incoming[row*N+col];
+   } 
+cout << "cnt="<< cnt<<endl;
+cout << my_rank << " Doing MPI_Gather tx"<< endl << flush;
+   MPI_Gather(&outgoing, retcnt, MPI_DOUBLE, retbuf, matrix_chunk*2, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+}
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply(double* Y, const double* X)
 {
-   for (int i = 0; i < N; ++i)
-   {
-      Y[i] = 0;
-      for (int j = 0; j < N; ++j)
+   void * dummy_null_void = NULL;
+  
+cout << my_rank << " hitting MatrixVectorMultiply"<< endl << flush;
+   int dummy_int = 0;
+cout << my_rank << " Doing MPI_Bcast tx"<< endl << flush;
+   MPI_Bcast((void *)X, N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
+cout << my_rank << " Done tx"<< endl << flush;
+   int vec_block = matrix_chunk*2; //(matrix_chunk / N +1 )*N;
+cout << my_rank << " vec_block "<<vec_block<<  endl << flush;
+   double * ret_buffer = (double *)malloc(vec_block*sizeof(double));
+   double * Xcopy =  (double *)malloc(matrix_chunk*sizeof(double)); 
+   int left_over = (N*N) % world_size;
+   int cnt=0;
+      Y[cnt]=0;
+//cout << my_rank << " Doing MPI_Scatter tx"<< endl << flush;
+      //MPI_Scatter(M, matrix_chunk, MPI_DOUBLE, Xcopy, matrix_chunk, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
+      partial_matrix_multiply(X, M, ret_buffer);
+//cout << my_rank << " Doing MPI_Gather rx"<< endl << flush;
+      //MPI_Gather(dummy_null_void, dummy_int, MPI_DOUBLE, ret_buffer, N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
+      double partial=0.0;
+      for (int i=0; i< vec_block*world_size; i++)
       {
-         Y[i] += M[i*N+j] * X[j];
+          if ((i+1) % vec_block == 0)
+             partial = ret_buffer[i];
+          else if (i % vec_block == 0)
+              Y[cnt++] = ret_buffer[i] + partial;
+          else
+              Y[cnt++] = ret_buffer[i];
       }
-   }
+      cout << "cnt = " << cnt << endl << flush;
+      //Y[i] += M[i*N+j] * X[j];
 }
-
 int main(int argc, char** argv)
 {
    // get the current time, for benchmarking
@@ -38,6 +121,22 @@ int main(int argc, char** argv)
       return 1;
    }
    N = std::stoi(argv[1]);
+
+   MPI_Init(&argc, &argv);
+
+   MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+   matrix_chunk = (N*N) / world_size;
+
+   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+   if (my_rank == root_process)
+     cout << "matrix_chunk = " << matrix_chunk << " where N=" << N << endl << flush;
+   if (my_rank != 0)
+   {
+     while (true)
+       partial_matrix_multiply(NULL,NULL,NULL);
+   }
 
    // Allocate memory for the matrix
    M = static_cast<double*>(malloc(N*N*sizeof(double)));
