@@ -14,19 +14,19 @@
 #define INPUT_LINES 784
 #define DEFAULT_HIDDEN 30
 #define OUTPUT_LINES 10
-#define EXTRA_MESSAGE "Something"
 
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 
-#define ETA_DEFAULT 1e-3
+#define ETA_DEFAULT -1e-3
 #define MOMENTUM 0.9f
 #define EPSILON 1e-3
 #define EPOCHS 512
 #undef STOP_AT_EPSILON
 
-#undef USE_BIASES
+#define USE_BIASES
+#define EXTRA_MESSAGE ""
 
 
 /*
@@ -412,7 +412,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          }
          cout << endl << flush;
          float totpctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         cout << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie " << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl << flush;
+         cout << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie ~" << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl << flush;
          for (int i=0;i<10;i++)
              cout  << dec << std::setw(7) << i << "      " << flush;
          cout << endl << flush;
