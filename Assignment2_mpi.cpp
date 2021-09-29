@@ -11,7 +11,8 @@
 #include <unistd.h>
 
 // global variables to store the matrix
-
+//  module load gnu/7.2.0 gnutools mpi/openmpi3_eth
+//
 using namespace std;
 
 double* M = nullptr;

@@ -1,7 +1,7 @@
 # set some defaults.  ?= means don't override the value if it was set already
 MPICXX?=mpic++
 CXX?=g++
-CXXFLAGS?=-std=c++11 -O2
+CXXFLAGS?=-std=c++11  -O2
 NVCC?=nvcc
 NVFLAGS?=-O2 --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets
 

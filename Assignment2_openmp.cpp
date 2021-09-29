@@ -32,7 +32,7 @@ string msg="";
    }
 
 // implementation of the matrix-vector multiply function
-void MatrixVectorMultiply_good(double* Y, const double* X)
+void MatrixVectorMultiply(double* Y, const double* X)
 {
    omp_set_num_threads(NUM_THREADS);
    #pragma omp parallel
@@ -77,7 +77,7 @@ void MatrixVectorMultiply3(double* Y, const double* X)
 
 
 // implementation of the matrix-vector multiply function
-void MatrixVectorMultiply(double* Y, const double* X)
+void MatrixVectorMultiply_poor(double* Y, const double* X)
 {
    omp_set_num_threads(NUM_THREADS);
    omp_set_schedule( omp_sched_dynamic, 80 );
