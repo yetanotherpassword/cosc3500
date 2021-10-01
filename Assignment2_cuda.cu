@@ -14,6 +14,9 @@
 #include <iostream>
 #include <iomanip>
 
+//  For goliath (getafix - not required)
+//  module load cuda/10.1 gcc
+
 // global variables to store the matrix
 
 double* M = nullptr;
