@@ -7,23 +7,36 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
+#include <string.h>
+#include <immintrin.h> 
+#include <fmaintrin.h>
 
+#define ALIGN 64
 // global variables to store the matrix
 
 double* M = nullptr;
 int N = 0;
+__m256d* quad_block;
+__m256d* quad_vec_in;
+__m256d* quad_vec_out;
+int quad_double_mat_size;
+int quad_double_vec_size;
 
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply(double* Y, const double* X)
 {
-   for (int i = 0; i < N; ++i)
+   memcpy(quad_vec_in, X, N*sizeof(double));
+   for (int i = 0; i < quad_double_vec_size; i++)
    {
-      Y[i] = 0;
-      for (int j = 0; j < N; ++j)
+      //memset(&quad_y[i], 0, sizeof(__m256d));
+      quad_vec_out[i] = _mm256_setzero_pd();
+      for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
       {
-         Y[i] += M[i*N+j] * X[j];
+         //Y[i] += M[i*N+j] * X[j];
+         quad_vec_out[i] = _mm256_fmadd_pd (quad_block[i*quad_double_vec_size+j], quad_vec_in[j], quad_vec_out[i]);
       }
    }
+   memcpy(Y, quad_vec_out, N*sizeof(double));
 }
 
 int main(int argc, char** argv)
@@ -39,8 +52,21 @@ int main(int argc, char** argv)
    }
    N = std::stoi(argv[1]);
 
+   quad_double_vec_size = N / 4;
+   if (N % 4 != 0)
+      quad_double_vec_size++;
+
+   quad_double_mat_size =  quad_double_vec_size *  quad_double_vec_size;
+      
    // Allocate memory for the matrix
-   M = static_cast<double*>(malloc(N*N*sizeof(double)));
+   quad_block = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_mat_size));
+   quad_vec_in = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_vec_size));
+   quad_vec_out = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_vec_size));
+   memset(quad_block, 0, quad_double_mat_size);
+   memset(quad_vec_in, 0, quad_double_vec_size);
+   memset(quad_vec_out, 0, quad_double_vec_size);
+   //M = static_cast<double*>(quad_block);
+   M = (double*)(quad_block);
 
    // seed the random number generator to a known state
    randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
