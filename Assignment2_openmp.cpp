@@ -14,7 +14,7 @@ using namespace std;
 
 double* M = nullptr;
 int N = 0;
-int NUM_THREADS=0;
+string REQUEST_NUM_THREADS="";
 string msg="";
 
 
@@ -26,15 +26,14 @@ string msg="";
        if (thread_num == num_of_threads - 1)
        {
            to += (orig_to - orig_from) - (num_of_threads * thread_len);
-           msg += "Reqested:" + to_string(NUM_THREADS) + " Got " + to_string(num_of_threads)+ "\n";
-      //     cout << "Num of threads : " << num_of_threads << endl;
+           if (msg == "")
+               msg = "Reqested:" + REQUEST_NUM_THREADS + " Got " + to_string(num_of_threads)+ "\n";
        }
    }
 
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply(double* Y, const double* X)
 {
-   omp_set_num_threads(NUM_THREADS);
    #pragma omp parallel
    {
       int id = omp_get_thread_num();
@@ -54,7 +53,6 @@ void MatrixVectorMultiply(double* Y, const double* X)
 
 void MatrixVectorMultiply3(double* Y, const double* X)
 {
-   omp_set_num_threads(NUM_THREADS);
    {
       int id = omp_get_thread_num();
       int nthrds = omp_get_num_threads();
@@ -79,7 +77,6 @@ void MatrixVectorMultiply3(double* Y, const double* X)
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply_poor(double* Y, const double* X)
 {
-   omp_set_num_threads(NUM_THREADS);
    omp_set_schedule( omp_sched_dynamic, 80 );
    for (int i = 0; i < N; ++i)
    {
@@ -113,17 +110,30 @@ int main(int argc, char** argv)
 {
    // get the current time, for benchmarking
    auto StartTime = std::chrono::high_resolution_clock::now();
-   bool dbg=false;
+   bool dbg=true;
    // get the input size from the command line
-   if (argc < 3)
+   if (argc < 2)
    {
-      std::cerr << "expected: matrix size <N> <Threads>\n";
+      std::cerr << "expected: matrix size <N> \n";
       return 1;
    } 
    N = std::stoi(argv[1]);
-   NUM_THREADS = std::stoi(argv[2]);
-   if (argc > 3)
-     dbg=true;
+
+   cout << "N passed in as " << N << endl;
+
+   if (std::getenv("OMP_NUM_THREADS")==NULL) 
+   {
+      cout << "OMP_NUM_THREADS not set, using default (will print at end)" << endl;
+      REQUEST_NUM_THREADS="NONE";
+   }
+   else
+   {
+       REQUEST_NUM_THREADS= string(getenv("OMP_NUM_THREADS"));
+       if (stoi(REQUEST_NUM_THREADS) > 0)
+         cout << "OMP_NUM_THREADS set to "<< REQUEST_NUM_THREADS<< endl;
+       else
+         cout << "Error: OMP_NUM_THREADS set to "<< REQUEST_NUM_THREADS<< " - lets see what happens !" << endl;
+   }
 
    // Allocate memory for the matrix
    M = static_cast<double*>(malloc(N*N*sizeof(double)));
