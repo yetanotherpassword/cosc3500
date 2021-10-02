@@ -18,6 +18,7 @@ using namespace std;
 
 double* M = nullptr;
 double* Y_chunk = nullptr;
+double* M_chunk = nullptr;
 int N = 0;
 int world_size;
 int my_rank;
@@ -28,7 +29,7 @@ int matrix_remainder;
 int vector_remainder;
 bool thread_multiply_active = true;
 
-void partial_matrix_multiply(const double * X, double * M, double * Y_chunk, double * out_Y)
+void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * out_Y)
 {
     int cnt=0;
     MPI_Status recv_status;
@@ -37,68 +38,75 @@ void partial_matrix_multiply(const double * X, double * M, double * Y_chunk, dou
     MPI_Bcast((void *)X, N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
 
     int from = my_rank * matrix_chunk;
-    int to = (my_rank + 1) * matrix_chunk;
+    int to = (my_rank + 1) * matrix_chunk-1;
     int real_start_row = from / N;
     int real_start_col = from % N;
     int real_end_row = to / N;
     int real_end_col = to % N;
-    int this_start, this_end;
+    int whole_row_start, whole_row_end;
     double prev_partial=0.0;
     double first_partial = 0.0;
     double final_partial = 0.0;
- cout << "rank: " << my_rank << " doing " << from << " to " << to << " cell eles " << endl;
+ cout << "rank: " << my_rank << " doing " << from << " to " << to << " cell eles " << endl << flush;
     if (real_start_col != 0)
     {
-        this_start = (real_start_row + 1)*N;
-        for (int q=from; q<this_start; q++)
+        whole_row_start = (real_start_row + 1)*N;
+        for (int q=from; q<whole_row_start; q++)
         {
            int pcol = q % N;
            first_partial +=  X[pcol] * M[real_start_row*N+pcol];
         }
         // Get partial sum from 'previous' process
+ cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
         MPI_Recv( &prev_partial, 1, MPI_DOUBLE, my_rank-1, from-1, MPI_COMM_WORLD, &recv_status);
-        out_Y[0] = prev_partial;
+        Y_chunk[0] = prev_partial;
 
     }
     else
     {
         // chunk starts on first column so no partial sum to recv
-        this_start = real_start_row * N;
+        whole_row_start = real_start_row * N;
         cnt=-1; // account for col==0
-        out_Y[0]=0.0;
+        Y_chunk[0]=0.0;
     }
 
     if (real_end_col == N-1)
     {
         // chunck ends on final column so no partial sum to send
-        this_end = real_end_row * N + 1;
+        whole_row_end = real_end_row * N;
     }
     else
     {
         // calculate partial sum for sending to 'next' process
-        this_end = (real_end_row-1) * N + 1;
-        for (int k = this_end; k < to; k++)
+        whole_row_end = (real_end_row-1) * N + 1;
+        for (int k = whole_row_end; k < to; k++)
         {
             int col = k % N;
             int row = k / N;
             final_partial += X[col] * M[row*N+col];
         } 
         if (my_rank != world_size-1)
+        {
             MPI_Send( &final_partial, 1, MPI_DOUBLE, my_rank+1, to, MPI_COMM_WORLD);
+ cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
+        }
     }
-       
-    for (int k = this_start; k < this_end; k++)
+      cout << "whole_row_start="<<whole_row_start<<" whole_row_end="<<whole_row_end<<endl << flush; 
+    for (int k = whole_row_start; k < whole_row_end; k++)
     {
         int col = k % N;
         int row = k / N;
         if (col == 0)
-           out_Y[++cnt]=0;
-        out_Y[cnt] += X[col] * M[row*N+col];
+           Y_chunk[++cnt]=0;
+        Y_chunk[cnt] += X[col] * M[row*N+col];
     } 
 
+cout <<"rank="<<my_rank<< "chunk=" << vector_chunk <<endl << flush;
+    MPI_Barrier(MPI_COMM_WORLD);
+cout << "Passed barrier"<<endl<<flush;
+    MPI_Gather(Y_chunk, vector_chunk, MPI_DOUBLE, out_Y, vector_chunk, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
 
-    MPI_Gather(&Y_chunk, vector_chunk, MPI_DOUBLE, &out_Y, vector_chunk, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
-
+cout <<"rank="<<my_rank<< " gather finished" << vector_chunk <<endl << flush;
     int last_start=vector_chunk * world_size;
     if (my_rank == 0 && last_start < N)
     {
@@ -118,7 +126,7 @@ void partial_matrix_multiply(const double * X, double * M, double * Y_chunk, dou
 void MatrixVectorMultiply(double* Y, const double* X)
 {
 
-    partial_matrix_multiply(X, M, Y_chunk, Y);
+    partial_matrix_multiply((double*)X, M_chunk, Y_chunk, Y);
 
 }
 
@@ -149,26 +157,29 @@ int main(int argc, char** argv)
 
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    // Allocate memory for the matrix
-    M = static_cast<double*>(malloc(N*N*sizeof(double)));
 
     Y_chunk = static_cast<double*>(malloc(vector_chunk*sizeof(double)));
+    M_chunk = static_cast<double*>(malloc(matrix_chunk*sizeof(double)));
 
     X = static_cast<double*>(malloc(N*sizeof(double)));
 
-    if (my_rank == root_process)
+//    if (my_rank == root_process)
        cout << "matrix_chunk = " << matrix_chunk << " where N=" << N << endl << flush;
 
     if (my_rank != 0)
     {
        // All not root processes wait until they get the copy of M
        // Only need it once, as it doesnt change
-       MPI_Bcast((void *)M, N*N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+       MPI_Scatter(M_chunk, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+
+      // MPI_Bcast((void *)M, N*N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
        while (thread_multiply_active)
-          partial_matrix_multiply(X, M, Y_chunk, NULL);
+          partial_matrix_multiply(X, M_chunk, Y_chunk, NULL);
        exit (0);
     }
 
+    // Allocate memory for the matrix
+    M = static_cast<double*>(malloc(N*N*sizeof(double)));
 
     // seed the random number generator to a known state
     randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
@@ -185,7 +196,10 @@ int main(int argc, char** argv)
           M[i*N + j] = M[j*N + i] = randutil::randn();
        }
     }
-    MPI_Bcast((void *)M, N*N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
+cout << my_rank << " finiisdhed init"<< endl << flush;
+    //MPI_Bcast((void *)M, N*N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
+    MPI_Scatter(M, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
+cout << my_rank << " finiisdhed Bcast"<< endl << flush;
     auto FinishInitialization = std::chrono::high_resolution_clock::now();
 
     // Call the eigensolver
@@ -211,4 +225,5 @@ int main(int argc, char** argv)
 
     // free memory
     free(M);
+    MPI_Finalize();
 }
