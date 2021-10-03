@@ -49,18 +49,20 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
     double final_partial = 0.0;
  cout << "rank: " << my_rank << " doing " << from << " to " << to << " cell eles " << endl << flush;
     if (real_start_col != 0)
-    {
+    { int tmp=0;
         whole_row_start = (real_start_row + 1)*N;
         for (int q=from; q<whole_row_start; q++)
         {
            int pcol = q % N;
-           first_partial +=  X[pcol] * M[q-from]; //M[real_start_row*N+pcol];
+           first_partial +=  X[pcol] * M_chunk[q-from]; //M[real_start_row*N+pcol];
+  tmp++;
         }
         // Get partial sum from 'previous' process
  cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
         MPI_Recv( &prev_partial, 1, MPI_DOUBLE, my_rank-1, from-1, MPI_COMM_WORLD, &recv_status);
-        Y_chunk[0] = prev_partial;
-   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]=0 (carryover partial)"<< endl<<flush;
+        Y_chunk[0] = prev_partial+first_partial;
+   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]="<< Y_chunk[0] << endl<<flush;
+        cnt=1;
 
     }
     else
@@ -82,11 +84,11 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
     {
         // calculate partial sum for sending to 'next' process
         whole_row_end = (real_end_row) * N;
-        for (int k = whole_row_end; k < to; k++)
+        for (int k = whole_row_end; k <= to; k++)
         {
             int col = k % N;
             int row = k / N;
-            final_partial += X[col] * M[matrix_chunk-to+k];
+            final_partial += X[col] * M_chunk[matrix_chunk-to+k-1];
         } 
         if (my_rank != world_size-1)
         {
@@ -95,6 +97,7 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         }
     }
       cout << "whole_row_start="<<whole_row_start<<" whole_row_end="<<whole_row_end<<endl << flush; 
+
     for (int k = whole_row_start; k < whole_row_end; k++)
     {
         int col = k % N;
@@ -103,8 +106,10 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         {
            Y_chunk[++cnt]=0;
         }
-   cout << "rank="<<my_rank<<" col=" << col<< " row=" << row << " Y_chunk["<<cnt<<"]="<< X[col]<<" * " << M[row*N+col] << endl<<flush;
-        Y_chunk[cnt] += X[col] * M[matrix_chunk-real_end_col-whole_row_end+k];//* M[row*N+col];
+//if (last_row != row)
+//   cout << "rank="<<my_rank<<" col=" << col<< " row=" << row << " Y_chunk["<<cnt<<"]="<< X[col]<<" * " << M[row*N+col] << endl<<flush;  last_row=row;
+        //Y_chunk[cnt] += X[col] * M_chunk[matrix_chunk-real_end_col-whole_row_end+k];//* M[row*N+col];
+        Y_chunk[cnt] += X[col] * M_chunk[real_start_col-whole_row_end+k];//* M[row*N+col];
     } 
 
 cout <<"rank="<<my_rank<< "chunk=" << vector_chunk <<endl << flush;
@@ -206,12 +211,14 @@ cout <<"Rank="<<my_rank<< "M_chunk["<<i/N<<","<<i%N<<"]="<<M_chunk[i-my_rank*mat
           M[i*N + j] = M[j*N + i] = randutil::randn();
        }
     }
-cout << my_rank << " finiisdhed init"<< endl << flush;
+
     //MPI_Bcast((void *)M, N*N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
     MPI_Scatter(M, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
   for (int i=my_rank*matrix_chunk;i<(my_rank+1)*matrix_chunk;i++) 
 cout <<"Rank="<<my_rank<< "M_chunk["<<i/N<<","<<i%N<<"]="<<M_chunk[i-my_rank*matrix_chunk]<<endl<<flush;
-cout << my_rank << " finiisdhed Bcast"<< endl << flush;
+
+  for (int i=0;i<N*N;i++) 
+cout <<"M["<<i/N<<","<<i%N<<"]="<<M[i]<<endl<<flush;
     auto FinishInitialization = std::chrono::high_resolution_clock::now();
 
     // Call the eigensolver
