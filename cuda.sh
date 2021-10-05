@@ -1,10 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=CudaNew
+#SBATCH --job-name=Cuda
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=1
+##SBATCH  --nodelist=smp-6-3
 #SBATCH --time=0-10:00
 #SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
 date
 module load cuda/10.1 gcc
 echo $HOSTNAME
