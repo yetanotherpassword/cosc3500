@@ -16,4 +16,3 @@ make
 cd ../..
 make
 sbatch ./goslurm.sh ann_mnist_digits
-
