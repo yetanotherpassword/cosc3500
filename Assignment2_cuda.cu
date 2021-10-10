@@ -17,9 +17,11 @@
 //  For goliath (getafix - not required)
 //  module load cuda/10.1 gcc
 
+using namespace std;
 // global variables to store the matrix
 
 double* M = nullptr;
+double* Q = nullptr;
 int N = 0;
 double* mDevice; // input matrix to multply to 
 double* xDevice; // this input vector, which gives
@@ -27,6 +29,7 @@ double* yDevice; // this resultant output vector for returning to cpu from gpu
 
 int Threads = 256;
 int Blocks;
+int Grids;
 
 
 void checkError(cudaError_t e)
@@ -37,30 +40,6 @@ void checkError(cudaError_t e)
         abort();
     }
 }
-/*
-__global__
-void add(int n, double* x, double const* y)
-{
-    // blockDim is the number of threads in a block
-    // gridDim is the number of blocks in the grid
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = blockDim.x * gridDim.x;
-    for (int i = index; i < n; i += stride)
-    {
-        x[i] = x[i] + y[i];
-    }
-
-    // ALT version in v3
-    // This version will fail if the number of blocks is insufficient to cover the whole array
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index < n)
-    {
-        for (int i = 0; i < N; i++)
-            sum += vec[i] * mat[(i * M) + tid];
-        out[tid] = sum;
-    }
-}
-*/
 
 __global__
 void CUDA_MatrixVectorMultiply(int n, double* M, double* Y, const double* X)
@@ -69,33 +48,20 @@ void CUDA_MatrixVectorMultiply(int n, double* M, double* Y, const double* X)
 
     // blockDim is the number of threads in a block
     // gridDim is the number of blocks in the grid
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    //int stride = blockDim.x * gridDim.x;
-    if (index < n)
+    int xindex = blockIdx.x * blockDim.x + threadIdx.x;
+    int yindex = blockIdx.y * blockDim.y + threadIdx.y;
+    int xstride = blockDim.x * gridDim.x;
+    int ystride = blockDim.y * gridDim.y;
+    for (int i = xindex; i < n; i+= xstride)
     {
-        Y[index] = 0;
-        if (index < n)
+        Y[i] = 0;
+        for (int j = yindex; j < n; j+= ystride)
         {
-            for (int j = 0; j < n; ++j)
-            {
-                Y[index] += M[index * n + j] * X[j];
-            }
+             Y[i] += M[i * n + j] * X[j];
         }
     }
 }
 
-/*
-    void kernel(float* vec, float* mat, float* out, const int N, const int M) {
-        int tid = threadIdx.x + blockIdx.x * blockDim.x;
-        float sum = 0;
-        if (tid < M) {
-            for (int i = 0; i < N; i++)
-                sum += vec[i] * mat[(i * M) + tid];
-            out[tid] = sum;
-        }
-    }
-    */
- 
 
 
 // implementation of the matrix-vector multiply function
@@ -106,9 +72,12 @@ void MatrixVectorMultiply(double* Y, const double* X)
  
     //checkError(cudaMemcpy(xDevice, X, N * sizeof(double), cudaMemcpyHostToDevice));
 
-    CUDA_MatrixVectorMultiply<<<Blocks, Threads >>> (N, mDevice, xDevice, yDevice);
+    checkError(cudaMemcpy(xDevice, X, N * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_MatrixVectorMultiply<<<Grids, Blocks>>> (N, mDevice, xDevice, yDevice);
     checkError(cudaDeviceSynchronize());
     checkError(cudaMemcpy(Y, yDevice, N * sizeof(double), cudaMemcpyDeviceToHost));
+    for (int i=0;i<N;i++)
+    cout <<"Y["<<i<<"]="<<Y[i]<<endl;
 
 
 }
@@ -126,10 +95,12 @@ int main(int argc, char** argv)
    }
    N = std::stoi(argv[1]);
    
-   Blocks = (N + Threads - 1) / Threads;
+   Blocks = 32;
+   Grids = (N + Blocks - 1) / Threads;
 
    // Allocate memory for the matrix
    M = static_cast<double*>(malloc(N*N*sizeof(double)));
+   Q = static_cast<double*>(malloc(N*N*sizeof(double)));
 
    // seed the random number generator to a known state
    randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
@@ -153,7 +124,15 @@ int main(int argc, char** argv)
    checkError(cudaMalloc(&yDevice, N * sizeof(double)));
 
    checkError(cudaMemcpy(mDevice, M, N * N * sizeof(double), cudaMemcpyHostToDevice));
-
+   checkError(cudaMemcpy(Q, mDevice, N * N * sizeof(double), cudaMemcpyDeviceToHost));
+   for (int i = 0; i < N; ++i)
+   {
+      for (int j = 0; j < N; ++j)
+      {
+         cout << "M=" << M[i*N + j] << " Q=" <<Q[i*N + j] << endl;
+      }
+   }
+exit(0);
    auto FinishInitialization = std::chrono::high_resolution_clock::now();
 
    // Call the eigensolver
@@ -177,4 +156,7 @@ int main(int argc, char** argv)
 
    // free memory
    free(M);
+   checkError(cudaFree(mDevice));
+   checkError(cudaFree(xDevice));
+   checkError(cudaFree(yDevice));
 }
