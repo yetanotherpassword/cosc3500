@@ -13,31 +13,39 @@
 
 #define ALIGN 64
 // global variables to store the matrix
-
+typedef double v4df __attribute__((vector_size(4 * sizeof(double))));
 double* M = nullptr;
+
+v4df load_4_doubles_intel(const double *p) { return _mm256_loadu_pd(p); }
+
+v4df avx_constant(const double *p) { return _mm256_setr_pd( p[0], p[1], p[2], p[3] ); }
+
 int N = 0;
-__m256d* quad_block;
-__m256d* quad_vec_in;
-__m256d* quad_vec_out;
+__m256d* quad_matrix;
 int quad_double_mat_size;
 int quad_double_vec_size;
 
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply(double* Y, const double* X)
 {
-   memcpy(quad_vec_in, X, N*sizeof(double));
+   __m256d localX;
    for (int i = 0; i < quad_double_vec_size; i++)
    {
-      //memset(&quad_y[i], 0, sizeof(__m256d));
-      quad_vec_out[i] = _mm256_setzero_pd();
-      for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
-      {
-         //Y[i] += M[i*N+j] * X[j];
-         quad_vec_out[i] = _mm256_fmadd_pd (quad_block[i*quad_double_vec_size+j], quad_vec_in[j], quad_vec_out[i]);
-      }
+       __m256d localY = _mm256_setzero_pd();
+       for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
+       {
+           localX =_mm256_loadu_pd (&X[j*4]);
+           
+           localY = _mm256_fmadd_pd (quad_matrix[i*quad_double_vec_size+j], localX, localY);
+       }
+       _mm256_storeu_pd (&Y[i*4], localY);
    }
-   memcpy(Y, quad_vec_out, N*sizeof(double));
+
 }
+
+        // _mm256_storeu_pd(X[i*quad_double_vec_size*4+j*4], 
+//__m256d _mm256_loadu_pd
+         //Y[i] += M[i*N+j] * X[j];
 
 int main(int argc, char** argv)
 {
@@ -59,14 +67,12 @@ int main(int argc, char** argv)
    quad_double_mat_size =  quad_double_vec_size *  quad_double_vec_size;
       
    // Allocate memory for the matrix
-   quad_block = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_mat_size));
-   quad_vec_in = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_vec_size));
-   quad_vec_out = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_vec_size));
-   memset(quad_block, 0, quad_double_mat_size);
-   memset(quad_vec_in, 0, quad_double_vec_size);
-   memset(quad_vec_out, 0, quad_double_vec_size);
-   //M = static_cast<double*>(quad_block);
-   M = (double*)(quad_block);
+   //M = static_cast<double*>(malloc(N*N*sizeof(double)));
+
+   quad_matrix = static_cast<__m256d*> (aligned_alloc(ALIGN, sizeof(__m256d) *  quad_double_mat_size));
+   M =  (double *) quad_matrix;
+   memset(M, 0,  sizeof(double)* 4 * quad_double_mat_size);
+  // quad_matrix = static_cast<__m256d*> (M);
 
    // seed the random number generator to a known state
    randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
