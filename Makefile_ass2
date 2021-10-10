@@ -24,7 +24,7 @@ LIBS_Assignment2_mpi    = -larpack
 LIBS_Assignment2_cuda   = -larpack
 
 CXXFLAGS_Assignment2_openmp = -fopenmp
-CXXFLAGS_Assignment2_avx = -mavx
+CXXFLAGS_Assignment2_avx = -mavx -mfma
 
 randutil.o : randutil.h randutil.ipp
 eigensolver.o : eigensolver.h
