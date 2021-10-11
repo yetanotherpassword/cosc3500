@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 ##SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=24
-##SBATCH --mem-per-cpu=1G
+#SBATCH --mem-per-cpu=4000M
 #SBATCH --time=0-10:00
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
@@ -19,86 +19,122 @@ echo $HOSTNAME
 lscpu
 date
 echo "-----------------------------------------------------------------------------"
-echo ./Assignment2_serial 10
-./Assignment2_serial 10
+echo ----------------------------------------- 
+echo ./Assignment2_serial 7500
+./Assignment2_serial 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_openmp 10
-./Assignment2_openmp 10
-echo ./Assignment2_openmp 10
-./Assignment2_openmp 10
-echo ./Assignment2_openmp 10
-./Assignment2_openmp 10
-echo ./Assignment2_openmp 10
-./Assignment2_openmp 10
-echo ./Assignment2_openmp 10
-./Assignment2_openmp 10
+echo ----------------------------------------- 
+echo ./Assignment2_openmp 7500
+./Assignment2_openmp 7500
+echo ----------------------------------------- 
+echo ./Assignment2_openmp 7500
+./Assignment2_openmp 7500
+echo ----------------------------------------- 
+echo ./Assignment2_openmp 7500
+./Assignment2_openmp 7500
+echo ----------------------------------------- 
+echo ./Assignment2_openmp 7500
+./Assignment2_openmp 7500
+echo ----------------------------------------- 
+echo ./Assignment2_openmp 7500
+./Assignment2_openmp 7500
 echo "-----------------------------------------------------------------------------"
+echo ----------------------------------------- 
 echo ./Assignment2_serial 100
 ./Assignment2_serial 100
 echo "+++++++++++++++++++"
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 100
 ./Assignment2_openmp 100
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 100
 ./Assignment2_openmp 100
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 100
 ./Assignment2_openmp 100
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 100
 ./Assignment2_openmp 100
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 100
 ./Assignment2_openmp 100
 echo "-----------------------------------------------------------------------------"
+echo ----------------------------------------- 
 echo ./Assignment2_serial 1000
 ./Assignment2_serial 1000
 echo "+++++++++++++++++++"
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 1000
 ./Assignment2_openmp 1000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 1000
 ./Assignment2_openmp 1000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 1000
 ./Assignment2_openmp 1000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 1000
 ./Assignment2_openmp 1000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 1000
 ./Assignment2_openmp 1000
 echo "-----------------------------------------------------------------------------"
+echo ----------------------------------------- 
 echo ./Assignment2_serial 10000
 ./Assignment2_serial 10000
 echo "+++++++++++++++++++"
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 10000
 ./Assignment2_openmp 10000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 10000
 ./Assignment2_openmp 10000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 10000
 ./Assignment2_openmp 10000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 10000
 ./Assignment2_openmp 10000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 10000
 ./Assignment2_openmp 10000
 echo "-----------------------------------------------------------------------------"
+echo ----------------------------------------- 
 echo ./Assignment2_serial 20000
 ./Assignment2_serial 20000
 echo "+++++++++++++++++++"
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 20000
 ./Assignment2_openmp 20000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 20000
 ./Assignment2_openmp 20000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 20000
 ./Assignment2_openmp 20000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 20000
 ./Assignment2_openmp 20000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 20000
 ./Assignment2_openmp 20000
 echo "-----------------------------------------------------------------------------"
+echo ----------------------------------------- 
 echo ./Assignment2_serial 30000
 ./Assignment2_serial 30000
 echo "+++++++++++++++++++"
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 30000
 ./Assignment2_openmp 30000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 30000
 ./Assignment2_openmp 30000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 30000
 ./Assignment2_openmp 30000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 30000
 ./Assignment2_openmp 30000
+echo ----------------------------------------- 
 echo ./Assignment2_openmp 30000
 ./Assignment2_openmp 30000
