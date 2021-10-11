@@ -3,44 +3,47 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --time=0-10:00
+#SBATCH --mem-per-cpu=4000M
 date
-#module load gnu/7.2.0 gnutools mpi/openmpi3_eth
-module load mpi/openmpi-x86_64
+module load gnu/7.2.0 gnutools mpi/openmpi3_eth
+#module load mpi/openmpi-x86_64
 echo $HOSTNAME
 lscpu
 echo "-----------------------------------------------------------------------------"
-echo ./Assignment2_serial 10
-./Assignment2_serial 10
+echo ./Assignment2_serial 7500
+./Assignment2_serial 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 16 ./Assignment2_mpi 10
-mpiexec -n 16 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+ls -l ./Assignment2_mpi
+pwd
+./Assignment2_mpi 7500
+echo mpiexec -n 16 ./Assignment2_mpi 7500
+mpiexec -n 16 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 16 ./Assignment2_mpi 10
-mpiexec -n 16 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 16 ./Assignment2_mpi 7500
+mpiexec -n 16 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 16 ./Assignment2_mpi 10
-mpiexec -n 16 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 16 ./Assignment2_mpi 7500
+mpiexec -n 16 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 16 ./Assignment2_mpi 10
-mpiexec -n 16 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 16 ./Assignment2_mpi 7500
+mpiexec -n 16 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 16 ./Assignment2_mpi 10
-mpiexec -n 16 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 16 ./Assignment2_mpi 7500
+mpiexec -n 16 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 16 ./Assignment2_mpi 10
-mpiexec -n 16 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 16 ./Assignment2_mpi 7500
+mpiexec -n 16 ./Assignment2_mpi 7500
 echo "-----------------------------------------------------------------------------"
 echo ./Assignment2_serial 100
 ./Assignment2_serial 100

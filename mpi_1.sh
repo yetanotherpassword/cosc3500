@@ -9,38 +9,38 @@ module load mpi/openmpi-x86_64
 echo $HOSTNAME
 lscpu
 echo "-----------------------------------------------------------------------------"
-echo ./Assignment2_serial 10
-./Assignment2_serial 10
+echo ./Assignment2_serial 7500
+./Assignment2_serial 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 1 ./Assignment2_mpi 10
-mpiexec -n 1 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 1 ./Assignment2_mpi 7500
+mpiexec -n 1 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 1 ./Assignment2_mpi 10
-mpiexec -n 1 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 1 ./Assignment2_mpi 7500
+mpiexec -n 1 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 1 ./Assignment2_mpi 10
-mpiexec -n 1 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 1 ./Assignment2_mpi 7500
+mpiexec -n 1 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 1 ./Assignment2_mpi 10
-mpiexec -n 1 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 1 ./Assignment2_mpi 7500
+mpiexec -n 1 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 1 ./Assignment2_mpi 10
-mpiexec -n 1 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 1 ./Assignment2_mpi 7500
+mpiexec -n 1 ./Assignment2_mpi 7500
 echo "+++++++++++++++++++"
-echo ./Assignment2_mpi 10
-./Assignment2_mpi 10
-echo mpiexec -n 1 ./Assignment2_mpi 10
-mpiexec -n 1 ./Assignment2_mpi 10
+echo ./Assignment2_mpi 7500
+./Assignment2_mpi 7500
+echo mpiexec -n 1 ./Assignment2_mpi 7500
+mpiexec -n 1 ./Assignment2_mpi 7500
 echo "-----------------------------------------------------------------------------"
 echo ./Assignment2_serial 100
 ./Assignment2_serial 100
