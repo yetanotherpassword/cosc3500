@@ -30,7 +30,6 @@ int quad_double_leftover;
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply(double* Y, const double* X)
 {
-cout << " Entering MatrixVectorMultiply" << endl;
    __m256d localX;
    __m256d localM;
 //   v4df accum=0;
@@ -41,10 +40,6 @@ cout << " Entering MatrixVectorMultiply" << endl;
        double leftover = 0.0;
        for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
        {
- cout << "row=" << i << " col=" << j*4 << " Multiplying " << M[i*N+j*4] << "," <<  " TO " << X[j*4]  << endl;
- cout << "row=" <<  i <<  " col=" << j*4+1 <<" Multiplying " << M[i*N+j*4+1] << "," << " TO " << X[j*4+1]  << endl;
- cout << "row=" << i <<  " col=" << j*4+2 <<" Multiplying " << M[i*N+j*4+2] << "," << " TO " << X[j*4+2]  << endl;
- cout << "row=" << i << " col=" << j*4+3 << " Multiplying " << M[i*N+j*4+3] << "," << " TO " << X[j*4+3]  << endl;
            localX =_mm256_loadu_pd (&X[j*4]);
            localM = _mm256_loadu_pd (&M[i*N+j*4]);
            localY = _mm256_fmadd_pd (localM, localX, localY);
@@ -52,17 +47,11 @@ cout << " Entering MatrixVectorMultiply" << endl;
        _mm256_storeu_pd (temp, localY);
        Y[i]=0;
        for (int k=0; k< 4;k ++)
-  {
-cout << "i=" << k << " temp"<<  temp[k] << endl;
            Y[i] += temp[k];
-  }
-cout << "i=" << i << " pre leftover rowsum=="<<  Y[i] << endl;
        for (int k=0; k<quad_double_leftover;k++)
        {
            Y[i] += M[i*N+quad_double_vec_size*4+k]*X[quad_double_vec_size*4+k];
-cout << "k=" << k << " leftover rowsum partial=="<<  Y[i] << endl;
        }
-cout << "i=" << i << " rowsum=="<<  Y[i] << endl;
    }
 
 }
@@ -92,29 +81,22 @@ int main(int argc, char** argv)
       quad_double_vec_alloc = quad_double_vec_size;
 
 
-cout << " quad_double_vec_size=" << quad_double_vec_size<< endl;
    quad_double_mat_size =  N *  quad_double_vec_alloc;
-cout << " quad_double_mat_size=" << quad_double_mat_size<< endl;
       
    // Allocate memory for the matrix
    //M = static_cast<double*>(malloc(N*N*sizeof(double)));
 
    M = static_cast<double *> (malloc( sizeof(double) *  quad_double_mat_size* 4));
    memset(M, 0,  sizeof(double) *  quad_double_mat_size* 4);
-cout << " Alloced Quad_matrix M="<<M << endl;
-cout << " Setting memory of m size="<< sizeof(double) <<"*" << 4 << "*" << quad_double_mat_size << endl;
-cout << " DOne with memory of m size="<< sizeof(double) <<"*" << 4 << "*" << quad_double_mat_size << endl;
   // quad_matrix = static_cast<__m256d*> (M);
 
    // seed the random number generator to a known state
    randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
-cout << "Seeded"<<endl;
 
    // Initialize the matrix.  This is a matrix from a Gaussian Orthogonal Ensemble.
    // The matrix is symmetric.
    // The diagonal entries are gaussian distributed with variance 2.
    // The off-diagonal entries are gaussian distributed with variance 1.
-cout << " settting up matrix" << endl;
    for (int i = 0; i < N; ++i)
    {
       M[i*N+i] = std::sqrt(2.0) * randutil::randn();
@@ -124,11 +106,9 @@ cout << " settting up matrix" << endl;
       }
    }
 
-cout << " getting clock reading" << endl;
    auto FinishInitialization = std::chrono::high_resolution_clock::now();
 
    // Call the eigensolver
-cout << " Calling eigenvalues_arpack" << endl;
    EigensolverInfo Info = eigenvalues_arpack(N, 100);
 
    auto FinishTime = std::chrono::high_resolution_clock::now();
