@@ -47,7 +47,7 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
     double prev_partial=0.0;
     double first_partial = 0.0;
     double final_partial = 0.0;
- cout << "rank: " << my_rank << " doing " << from << " to " << to << " cell eles " << endl << flush;
+// cout << "rank: " << my_rank << " doing " << from << " to " << to << " cell eles " << endl << flush;
     if (real_start_col != 0)
     { int tmp=0;
         whole_row_start = (real_start_row + 1)*N;
@@ -58,10 +58,10 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
   tmp++;
         }
         // Get partial sum from 'previous' process
- cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
+// cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
         MPI_Recv( &prev_partial, 1, MPI_DOUBLE, my_rank-1, from-1, MPI_COMM_WORLD, &recv_status);
         Y_chunk[0] = prev_partial+first_partial;
-   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]="<< Y_chunk[0] << endl<<flush;
+//   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]="<< Y_chunk[0] << endl<<flush;
         cnt=1;
 
     }
@@ -70,7 +70,7 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         // chunk starts on first column so no partial sum to recv
         whole_row_start = real_start_row * N;
         cnt=-1; // account for col==0
-   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]=0 (initialised accumulator)"<< endl<<flush;
+//   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]=0 (initialised accumulator)"<< endl<<flush;
         
         Y_chunk[0]=0.0;
     }
@@ -93,7 +93,7 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         if (my_rank != world_size-1)
         {
             MPI_Send( &final_partial, 1, MPI_DOUBLE, my_rank+1, to, MPI_COMM_WORLD);
- cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
+// cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
         }
     }
       cout << "whole_row_start="<<whole_row_start<<" whole_row_end="<<whole_row_end<<endl << flush; 
@@ -112,14 +112,14 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         Y_chunk[cnt] += X[col] * M_chunk[real_start_col-whole_row_end+k];//* M[row*N+col];
     } 
 
-cout <<"rank="<<my_rank<< "chunk=" << vector_chunk <<endl << flush;
+//cout <<"rank="<<my_rank<< "chunk=" << vector_chunk <<endl << flush;
     //MPI_Barrier(MPI_COMM_WORLD);
-for (int y=0;y<vector_chunk;y++)
-   cout << "rank="<<my_rank<<" Y_chunk["<<y<<"]="<< Y_chunk[y] << endl<<flush;
-cout << "Passed barrier"<<endl<<flush;
+//for (int y=0;y<vector_chunk;y++)
+//   cout << "rank="<<my_rank<<" Y_chunk["<<y<<"]="<< Y_chunk[y] << endl<<flush;
+//cout << "Passed barrier"<<endl<<flush;
     MPI_Gather(Y_chunk, vector_chunk-1, MPI_DOUBLE, out_Y, vector_chunk-1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-cout <<"rank="<<my_rank<< " gather finished" << vector_chunk <<endl << flush;
+//cout <<"rank="<<my_rank<< " gather finished" << vector_chunk <<endl << flush;
     int last_start=vector_chunk * world_size;
     if (my_rank == 0 && last_start < N)
     {
@@ -184,8 +184,8 @@ int main(int argc, char** argv)
        // All not root processes wait until they get the copy of M
        // Only need it once, as it doesnt change
        MPI_Scatter(M_chunk, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  for (int i=my_rank*matrix_chunk;i<(my_rank+1)*matrix_chunk;i++) 
-cout <<"Rank="<<my_rank<< "M_chunk["<<i/N<<","<<i%N<<"]="<<M_chunk[i-my_rank*matrix_chunk]<<endl<<flush;
+//  for (int i=my_rank*matrix_chunk;i<(my_rank+1)*matrix_chunk;i++) 
+//cout <<"Rank="<<my_rank<< "M_chunk["<<i/N<<","<<i%N<<"]="<<M_chunk[i-my_rank*matrix_chunk]<<endl<<flush;
 
       // MPI_Bcast((void *)M, N*N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
        while (thread_multiply_active)
