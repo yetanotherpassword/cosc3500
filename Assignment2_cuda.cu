@@ -21,15 +21,14 @@ using namespace std;
 // global variables to store the matrix
 
 double* M = nullptr;
-double* Q = nullptr;
 int N = 0;
 double* mDevice; // input matrix to multply to 
 double* xDevice; // this input vector, which gives
 double* yDevice; // this resultant output vector for returning to cpu from gpu
 
 int Threads = 256;
-int Blocks;
-int Grids;
+int threadsPerBlock;
+int blocksPerGrid;
 
 
 void checkError(cudaError_t e)
@@ -73,11 +72,11 @@ void MatrixVectorMultiply(double* Y, const double* X)
     //checkError(cudaMemcpy(xDevice, X, N * sizeof(double), cudaMemcpyHostToDevice));
 
     checkError(cudaMemcpy(xDevice, X, N * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_MatrixVectorMultiply<<<Grids, Blocks>>> (N, mDevice, xDevice, yDevice);
+    CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (N, mDevice, yDevice, xDevice);
     checkError(cudaDeviceSynchronize());
     checkError(cudaMemcpy(Y, yDevice, N * sizeof(double), cudaMemcpyDeviceToHost));
-    for (int i=0;i<N;i++)
-    cout <<"Y["<<i<<"]="<<Y[i]<<endl;
+    //for (int i=0;i<N;i++)
+    //cout <<"Y["<<i<<"]="<<Y[i]<<endl;
 
 
 }
@@ -95,12 +94,11 @@ int main(int argc, char** argv)
    }
    N = std::stoi(argv[1]);
    
-   Blocks = 32;
-   Grids = (N + Blocks - 1) / Threads;
+   threadsPerBlock = 256;
+   blocksPerGrid = (N + threadsPerBlock- 1) / threadsPerBlock;
 
    // Allocate memory for the matrix
    M = static_cast<double*>(malloc(N*N*sizeof(double)));
-   Q = static_cast<double*>(malloc(N*N*sizeof(double)));
 
    // seed the random number generator to a known state
    randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
@@ -118,21 +116,35 @@ int main(int argc, char** argv)
       }
    }
    // allocate memory on the device
+#if 0
+// Host code
+int width = 64, height = 64;
+float* devPtr;
+size_t pitch;
+cudaMallocPitch(&devPtr, &pitch,
+                N * sizeof(double), N);
+MyKernel<<<100, 512>>>(devPtr, pitch, width, height);
+
+// Device code
+__global__ void MyKernel(float* devPtr,
+                         size_t pitch, int width, int height)
+{
+    for (int r = 0; r < height; ++r) {
+        float* row = (float*)((char*)devPtr + r * pitch);
+        for (int c = 0; c < width; ++c) {
+            float element = row[c];
+        }
+    }
+}
+#endif
+
 
    checkError(cudaMalloc(&mDevice, N * N * sizeof(double)));
    checkError(cudaMalloc(&xDevice, N * sizeof(double)));
    checkError(cudaMalloc(&yDevice, N * sizeof(double)));
 
    checkError(cudaMemcpy(mDevice, M, N * N * sizeof(double), cudaMemcpyHostToDevice));
-   checkError(cudaMemcpy(Q, mDevice, N * N * sizeof(double), cudaMemcpyDeviceToHost));
-   for (int i = 0; i < N; ++i)
-   {
-      for (int j = 0; j < N; ++j)
-      {
-         cout << "M=" << M[i*N + j] << " Q=" <<Q[i*N + j] << endl;
-      }
-   }
-exit(0);
+
    auto FinishInitialization = std::chrono::high_resolution_clock::now();
 
    // Call the eigensolver
