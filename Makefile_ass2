@@ -4,7 +4,8 @@ CXX?=g++
 CXXFLAGS?=-std=c++11  -O2
 NVCC?=nvcc
 NVFLAGS?=-O2 --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets
-
+SHELL:=/usr/bin/bash
+HOST=$(shell hostname)
 # all targets
 TARGETS = Assignment2_serial Assignment2_openmp Assignment2_mpi Assignment2_cuda Assignment2_avx
 
@@ -31,12 +32,27 @@ eigensolver.o : eigensolver.h
 
 # wildcard rules
 %_mpi.o : %_mpi.cpp
+ifeq ($(HOSTNAME),fac-login-0.local) 
+	module load gnu/7.2.0 gnutools mpi/openmpi3_eth 
+else 
+	module load mpi/openmpi-x86_64 
+endif
 	$(MPICXX) $(CXXFLAGS) $(CFLAGS_$(basename $<)) -c $< -o $@
 
 %_mpi : %_mpi.cpp
+ifeq ($(HOSTNAME),fac-login-0.local) 
+	module load gnu/7.2.0 gnutools mpi/openmpi3_eth 
+else 
+	module load mpi/openmpi-x86_64 
+endif
 	$(MPICXX) $(CXXFLAGS) $(CXXFLAGS_$@) $(filter %.o %.cpp, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
 
 %.o : %.cu
+ifeq ($(HOSTNAME),fac-login-0.local) 
+	module load cuda
+else 
+	module load cuda/10.1 gcc
+endif
 	$(NVCC) $(NVFLAGS) $(NVFLAGS_$(basename $<)) -c $< -o $@
 
 % : %.cu
