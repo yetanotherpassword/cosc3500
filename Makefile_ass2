@@ -33,19 +33,21 @@ eigensolver.o : eigensolver.h
 # wildcard rules
 %_mpi.o : %_mpi.cpp
 ifeq ($(HOSTNAME),fac-login-0.local) 
-	module load gnu/7.2.0 gnutools mpi/openmpi3_eth 
-else 
-	module load mpi/openmpi-x86_64 
-endif
+	module load gnu/7.2.0 gnutools mpi/openmpi3_eth; \
 	$(MPICXX) $(CXXFLAGS) $(CFLAGS_$(basename $<)) -c $< -o $@
+else 
+	module load mpi/openmpi-x86_64;  \
+	$(MPICXX) $(CXXFLAGS) $(CFLAGS_$(basename $<)) -c $< -o $@
+endif 
 
 %_mpi : %_mpi.cpp
 ifeq ($(HOSTNAME),fac-login-0.local) 
-	module load gnu/7.2.0 gnutools mpi/openmpi3_eth 
-else 
-	module load mpi/openmpi-x86_64 
-endif
+	module load gnu/7.2.0 gnutools mpi/openmpi3_eth;  \
 	$(MPICXX) $(CXXFLAGS) $(CXXFLAGS_$@) $(filter %.o %.cpp, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
+else 
+	module load mpi/openmpi-x86_64; \
+	$(MPICXX) $(CXXFLAGS) $(CXXFLAGS_$@) $(filter %.o %.cpp, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
+endif
 
 %.o : %.cu
 ifeq ($(HOSTNAME),fac-login-0.local) 
@@ -56,6 +58,11 @@ endif
 	$(NVCC) $(NVFLAGS) $(NVFLAGS_$(basename $<)) -c $< -o $@
 
 % : %.cu
+ifeq ($(HOSTNAME),fac-login-0.local) 
+	module load cuda
+else 
+	module load cuda/10.1 gcc
+endif
 	$(NVCC) $(NVFLAGS) $(NVFLAGS_$@) $(filter %.o %.cu, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
 
 %.o : %.cpp
