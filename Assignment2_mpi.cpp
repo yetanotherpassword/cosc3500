@@ -10,7 +10,9 @@
 #include <mpi.h>
 #include <unistd.h>
 
-//  module load gnu/7.2.0 gnutools mpi/openmpi3_eth
+//  module load gnu/7.2.0 gnutools mpi/openmpi3_eth #getafix
+//   module load mpi/openmpi-x86_64 #goliath
+//
 
 // global variables to store the matrix
 //
@@ -241,6 +243,31 @@ cout <<"M["<<i/N<<","<<i%N<<"]="<<M[i]<<endl<<flush;
     std::cout << "Total serial (initialization + solver): " << std::setw(12) << (TotalTime - Info.TimeInMultiply).count() << " us\n";
     std::cout << "Number of matrix-vector multiplies:     " << std::setw(12) << Info.NumMultiplies << '\n';
     std::cout << "Time per matrix-vector multiplication:  " << std::setw(12) << (Info.TimeInMultiply / Info.NumMultiplies).count() << " us\n";
+
+
+
+   std::cout << "Running, Obtained eigenvalues.,";
+   std::cout << "The largest eigenvalue is:, ";
+   std::cout << "Total time:,";
+   std::cout << "Time spent in initialization:,";
+   std::cout << "Time spent in eigensolver:,";
+   std::cout << "   Of which the multiply function used:, ";
+   std::cout << "   And the eigensolver library used:,   ";
+   std::cout << "Total serial (initialization + solver):,";
+   std::cout << "Number of matrix-vector multiplies:,    ";
+   std::cout << "Time per matrix-vector multiplication:, " << std::endl;
+
+
+   std::cout << "Running:" <<  argv[0]<< " "<< argv[1] << "," << Info.Eigenvalues.size() << "," << std::setw(16) << std::setprecision(12) << Info.Eigenvalues.back() << ',';
+   std::cout << std::setw(12) << TotalTime.count() << ",";
+   std::cout << std::setw(12) << InitializationTime.count() << ",";
+   std::cout << std::setw(12) << Info.TimeInEigensolver.count() << " ,";
+   std::cout << std::setw(12) << Info.TimeInMultiply.count() << ",";
+   std::cout << std::setw(12) << (Info.TimeInEigensolver - Info.TimeInMultiply).count() << ",";
+   std::cout << std::setw(12) << (TotalTime - Info.TimeInMultiply).count() << ",";
+   std::cout << std::setw(12) << Info.NumMultiplies << ',';
+   std::cout << std::setw(12) << (Info.TimeInMultiply / Info.NumMultiplies).count() << "," << std::endl;
+
 
     // free memory
     free(M);
