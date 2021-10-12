@@ -14,8 +14,8 @@
 #include <iostream>
 #include <iomanip>
 
-//  For goliath (getafix - not required)
-//  module load cuda/10.1 gcc
+//  module load cuda/10.1 gcc #goliath
+//  module load cuda #getafix
 
 using namespace std;
 // global variables to store the matrix
