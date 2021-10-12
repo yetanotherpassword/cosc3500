@@ -93,8 +93,9 @@ int main(int argc, char** argv)
    }
    N = std::stoi(argv[1]);
    
-   threadsPerBlock = 64;
+   threadsPerBlock =16;
    blocksPerGrid = (N + threadsPerBlock- 1) / threadsPerBlock;
+   cout << "CUDA version, using " << threadsPerBlock << " threadsPerBlock and blocksPerGrid = " << blocksPerGrid <<endl;
 
    // Allocate memory for the matrix
    M = static_cast<double*>(malloc(N*N*sizeof(double)));
