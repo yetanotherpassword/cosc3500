@@ -60,7 +60,7 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
   tmp++;
         }
         // Get partial sum from 'previous' process
-// cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
+ cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
         MPI_Recv( &prev_partial, 1, MPI_DOUBLE, my_rank-1, from-1, MPI_COMM_WORLD, &recv_status);
         Y_chunk[0] = prev_partial+first_partial;
 //   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]="<< Y_chunk[0] << endl<<flush;
@@ -72,7 +72,7 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         // chunk starts on first column so no partial sum to recv
         whole_row_start = real_start_row * N;
         cnt=-1; // account for col==0
-//   cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]=0 (initialised accumulator)"<< endl<<flush;
+//cout << "rank="<<my_rank<<" Y_chunk["<<real_start_row<<"]=0 (initialised accumulator)"<< endl<<flush;
         
         Y_chunk[0]=0.0;
     }
@@ -94,11 +94,11 @@ void partial_matrix_multiply(double * X, double * M, double * Y_chunk, double * 
         } 
         if (my_rank != world_size-1)
         {
+cout << "rank: " << my_rank << " Sending to src "<< my_rank+1 << " on tag " << to << endl << flush;
             MPI_Send( &final_partial, 1, MPI_DOUBLE, my_rank+1, to, MPI_COMM_WORLD);
-// cout << "rank: " << my_rank << " doing Recv for src "<< my_rank-1 << " on tag " << from-1 << endl << flush;
         }
     }
-      cout << "whole_row_start="<<whole_row_start<<" whole_row_end="<<whole_row_end<<endl << flush; 
+//cout << "whole_row_start="<<whole_row_start<<" whole_row_end="<<whole_row_end<<endl << flush; 
 
     for (int k = whole_row_start; k < whole_row_end; k++)
     {
@@ -181,13 +181,34 @@ int main(int argc, char** argv)
 //    if (my_rank == root_process)
        cout << "matrix_chunk = " << M_chunk << " where N=" << N << endl << flush;
 
+    if (my_rank == 0)
+    {
+       // Allocate memory for the matrix
+       M = static_cast<double*>(malloc(N*N*sizeof(double)));
+
+       // seed the random number generator to a known state
+       randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
+
+       // Initialize the matrix.  This is a matrix from a Gaussian Orthogonal Ensemble.
+       // The matrix is symmetric.
+       // The diagonal entries are gaussian distributed with variance 2.
+       // The off-diagonal entries are gaussian distributed with variance 1.
+       for (int i = 0; i < N; ++i)
+       {
+          M[i*N+i] = std::sqrt(2.0) * randutil::randn();
+          for (int j = i+1; j < N; ++j)
+          {
+             M[i*N + j] = M[j*N + i] = randutil::randn();
+          }
+       }
+    }
+    //MPI_Bcast((void *)M, N*N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
+    MPI_Scatter(M, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
     if (my_rank != 0)
     {
        // All not root processes wait until they get the copy of M
        // Only need it once, as it doesnt change
-       MPI_Scatter(M_chunk, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-//  for (int i=my_rank*matrix_chunk;i<(my_rank+1)*matrix_chunk;i++) 
-//cout <<"Rank="<<my_rank<< "M_chunk["<<i/N<<","<<i%N<<"]="<<M_chunk[i-my_rank*matrix_chunk]<<endl<<flush;
 
       // MPI_Bcast((void *)M, N*N, MPI_DOUBLE, my_rank, MPI_COMM_WORLD);
        while (thread_multiply_active)
@@ -195,32 +216,6 @@ int main(int argc, char** argv)
        exit (0);
     }
 
-    // Allocate memory for the matrix
-    M = static_cast<double*>(malloc(N*N*sizeof(double)));
-
-    // seed the random number generator to a known state
-    randutil::seed(4);  // The standard random number.  https://xkcd.com/221/
-
-    // Initialize the matrix.  This is a matrix from a Gaussian Orthogonal Ensemble.
-    // The matrix is symmetric.
-    // The diagonal entries are gaussian distributed with variance 2.
-    // The off-diagonal entries are gaussian distributed with variance 1.
-    for (int i = 0; i < N; ++i)
-    {
-       M[i*N+i] = std::sqrt(2.0) * randutil::randn();
-       for (int j = i+1; j < N; ++j)
-       {
-          M[i*N + j] = M[j*N + i] = randutil::randn();
-       }
-    }
-
-    //MPI_Bcast((void *)M, N*N, MPI_DOUBLE, root_process, MPI_COMM_WORLD);
-    MPI_Scatter(M, matrix_chunk, MPI_DOUBLE, M_chunk, matrix_chunk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  for (int i=my_rank*matrix_chunk;i<(my_rank+1)*matrix_chunk;i++) 
-cout <<"Rank="<<my_rank<< "M_chunk["<<i/N<<","<<i%N<<"]="<<M_chunk[i-my_rank*matrix_chunk]<<endl<<flush;
-
-  for (int i=0;i<N*N;i++) 
-cout <<"M["<<i/N<<","<<i%N<<"]="<<M[i]<<endl<<flush;
     auto FinishInitialization = std::chrono::high_resolution_clock::now();
 
     // Call the eigensolver
