@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --time=0-10:00
 #SBATCH --constraint=R640
-#SBATCH --mem-per-cpu=4000M
+#SBATCH --mem-per-cpu=8000M
 ##SBATCH --constraint=R640|R740|FC430
 ##SBATCH --cpus-per-task=24
 ##SBATCH --ntasks-per-node=1
