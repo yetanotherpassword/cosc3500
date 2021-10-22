@@ -1,0 +1,1000 @@
+   53  ls -l
+   54  more slurm-10434286.out
+   55  vi goslurm.sh 
+   56  sbatch ./goslurm.sh armo
+   57  cat slurm-10434287.out 
+   58  vi goslurm.sh 0.5 784 30 10
+   59  sbatch ./goslurm.sh armo
+   60  sqme
+   61  ls -lt
+   62  cat slurm-10434288.out
+   63  ls
+   64  time ./armo
+   65  pwd
+   66  ls
+   67  unzip mnist.zip 
+   68  vi from_scratch.sh 
+   69  sbatch ./goslurm.sh armo
+   70  sqme
+   71  ls -lt
+   72  sqme
+   73  ls -lt
+   74  tail -f slurm-10434289.out
+   75  sbatch ./goslurm.sh armo
+   76  sqme
+   77  ls -lt
+   78  cat slurm-10434290.out
+   79  sqme
+   80  sbatch ./goslurm.sh armo
+   81  git add goslurm.sh
+   82  ls
+   83  git commit goslurm.sh
+   84  ls
+   85  git add from_scratch.sh
+   86  cp armo.cpp ann_mnist_digits.cpp
+   87  git add ann_mnist_digits.cpp
+   88  vi Makefile 
+   89  make
+   90  sbatch ./goslurm.sh ann_mnist_digits
+   91  vi from_scratch.sh 
+   92  ls -lt
+   93  hsitory | grep "git add"
+   94  history | grep "git add"
+   95  git commit from_scratch.sh Makefile ann_mnist_digits.cpp goslurm.sh
+   96  git push
+   97  ls
+   98  sqme
+   99  ls -l slurm-10434*
+  100  ls -l slurm-10434* -t
+  101  tail -50 slurm-10434446.out
+  102  ls -l slurm-10434* -t
+  103  tail -50 slurm-10434445.out
+  104  vi ann_mnist_digits.cpp 
+  105  make
+  106  vi ann_mnist_digits.cpp 
+  107  make
+  108  sbatch ./goslurm.sh ann_mnist_digits
+  109  sqme
+  110  ls -lt
+  111  tail -50 slurm-10434555.out
+  112  vi ann_mnist_digits.cpp 
+  113  make
+  114  sbatch ./goslurm.sh ann_mnist_digits
+  115  ls -lt
+  116  tail -f slurm-10434556.out
+  117  sqme
+  118  vi ann_mnist_digits.cpp
+  119  sqme
+  120  ls -lt
+  121  tail -50 slurm-10434556.out
+  122  vi ann_mnist_digits.cpp
+  123  make
+  124  sbatch ./goslurm.sh ann_mnist_digits
+  125  sqme
+  126  ls -lt
+  127  tail -50 slurm-10434557.out
+  128  vi ann_mnist_digits.cpp
+  129  make
+  130  sbatch ./goslurm.sh ann_mnist_digits
+  131  sqme
+  132  ls -lt
+  133  tail -50 slurm-10434558.out
+  134  vi ann_mnist_digits.cpp 
+  135  tail -50 slurm-10434558.out
+  136  vi ann_mnist_digits.cpp 
+  137  make
+  138  sbatch ./goslurm.sh ann_mnist_digits
+  139  ls -lt
+  140  tail -50 slurm-10434559.out
+  141  sqme
+  142  tail -50 slurm-10434559.out
+  143  vi ann_mnist_digits.cpp 
+  144  make
+  145  sbatch ./goslurm.sh ann_mnist_digits
+  146  ls -lt
+  147  tail -50 slurm-10434560.out
+  148  vi ann_mnist_digits.cpp
+  149  make
+  150  tail -50 slurm-10434560.out
+  151  vi ann_mnist_digits.cpp
+  152  make
+  153  sbatch ./goslurm.sh ann_mnist_digits
+  154  ls -lt
+  155  tail -50 slurm-10434561.out
+  156  tail -50 slurm-10434560.out
+  157  tail -50 slurm-10434561.out
+  158  tail -50 slurm-10434560.out
+  159  tail -50 slurm-10434561.out
+  160  ls -lt
+  161  vi ann_mnist_digits.cpp
+  162  tail -50 slurm-10434561.out
+  163  vi ann_mnist_digits.cpp
+  164  make
+  165  sbatch ./goslurm.sh ann_mnist_digits
+  166  ls -lt
+  167  tail -50 slurm-10434563.out 
+  168  vi ann_mnist_digits.cpp
+  169  make
+  170  sbatch ./goslurm.sh ann_mnist_digits
+  171  sqme
+  172  ls -lt
+  173  cat slurm-10434566.out
+  174  vi ann_mnist_digits.cpp
+  175  make
+  176  sbatch ./goslurm.sh ann_mnist_digits
+  177  sqme
+  178  ls -lt
+  179  tail -50 slurm-10434567.out
+  180  vi ann_mnist_digits.cpp
+  181  make
+  182  sbatch ./goslurm.sh ann_mnist_digits
+  183  ls -lt
+  184  tail -50 slurm-10434568.out 
+  185  vi ann_mnist_digits.cpp
+  186  make
+  187  sbatch ./goslurm.sh ann_mnist_digits
+  188  ls -lt
+  189  tail -50 slurm-10434569.out
+  190  vi ann_mnist_digits.cpp
+  191  make
+  192  vi ann_mnist_digits.cpp
+  193  ake
+  194  vi ann_mnist_digits.cpp
+  195  make
+  196  sbatch ./goslurm.sh ann_mnist_digits
+  197  ls -lt
+  198  tail -50 slurm-10434586.out
+  199  sqme
+  200  tail -50 slurm-10434586.out
+  201  vi ann_mnist_digits.cpp
+  202  make
+  203  sbatch ./goslurm.sh ann_mnist_digits
+  204  ls -lt
+  205  tail -50 slurm-10434586.out
+  206  ls -lt
+  207  tail -50 slurm-10434589.out
+  208  vi ann_mnist_digits.cpp
+  209  make
+  210  sbatch ./goslurm.sh ann_mnist_digits
+  211  ls -lt
+  212  tail -f slurm-10434590.out
+  213  tail -50 slurm-10434589.out
+  214  tail -f slurm-10434590.out
+  215  tail -50 slurm-10434589.out
+  216  ls -lt
+  217  tail -50 slurm-10434590.out
+  218  git commit ann_mnist_digits.cpp
+  219  cat from_scratch.sh 
+  220  vi ann_mnist_digits.cpp
+  221  git commit ann_mnist_digits.cpp
+  222  git push
+  223  git commit 
+  224  it pull
+  225  git pull
+  226  vi readme.txt
+  227  ls'
+  228  ls
+  229  cat ann_mnist_digits.cpp 
+  230  head ann_mnist_digits.cpp
+  231  more ann_mnist_digits.cpp
+  232  zip milestone1_campton.zip armadillo-10.6.2.tar.xz mnist.zip ./goslurm.sh ann_mnist_digits.cpp readme.txt 
+  233  ls -l
+  234  pwd
+  235  git pull
+  236  ls
+  237  cd cosc3500/
+  238  ls -lt
+  239  ls -lt | head
+  240  tail slurm-10434590.out
+  241  vi ann_mnist_digits.cpp 
+  242  git tag -a "Milestone1"
+  243  git commit
+  244  git push
+  245  pwd
+  246  ls -l
+  247  ls -lt
+  248  cp slurm-10434590.out slurm-10434590.out-milestone1
+  249  git add slurm-10434590.out-milestone1
+  250  git commit slurm-10434590.out-milestone1
+  251  git push
+  252  vi readme.txt
+  253  git commit readme.txt
+  254  git add readme.txt
+  255  git commit
+  256  history | grep sbatch
+  257  more readme.txt 
+  258  more ann_mnist_digits.cpp 
+  259  git tag -a "Milestone1" readme.txt
+  260  git push
+  261  git tag -a "Milestone1" readme.txt
+  262  git tag -a "Milestone1"
+  263  git tag -d "Milestone1"
+  264  git tag -a "Milestone1"
+  265  git commit
+  266  vi ann_mnist_digits.cpp 
+  267  make
+  268  sbatch ./goslurm.sh ann_mnist_digits 3.0 784 500 500 30 10
+  269  sqme
+  270  ls -lt
+  271  tail -f slurm-10438910.out
+  272  more slurm-10438910.out
+  273  vi ann_mnist_digits.cpp 
+  274  make
+  275  sqme
+  276  alias
+  277  skillall
+  278  sqme
+  279  sbatch ./goslurm.sh ann_mnist_digits 3.0 784 500 500 30 10
+  280  ls -lt | head
+  281  tail -f slurm-10438911.out
+  282  more slurm-10438911.out
+  283  skillall
+  284  sbatch ./goslurm.sh ann_mnist_digits 0.6 784 500 500 30 10
+  285  ls -lt | head
+  286  more slurm-10438912.out
+  287  skillall
+  288  more slurm-10438910.out
+  289  skillall
+  290  vi ann_mnist_digits.cpp 
+  291  make
+  292  vi ann_mnist_digits.cpp 
+  293  make
+  294  sbatch ./goslurm.sh ann_mnist_digits 0.6 784 500 500 30 10
+  295  sbatch ./goslurm.sh ann_mnist_digits 0.3 784 30 10
+  296  ls -lt | head
+  297  more slurm-10438913.out
+  298  ls -lt | head
+  299  more slurm-10438914.out
+  300  sbatch ./goslurm.sh ann_mnist_digits 0.3 5 30 10
+  301  more slurm-10438915.out 
+  302  vi ann_mnist_digits.cpp 
+  303  make
+  304  sbatch ./goslurm.sh ann_mnist_digits 
+  305  more slurm-10438916.out 
+  306  vi ann_mnist_digits.cpp 
+  307  make
+  308  sbatch ./goslurm.sh ann_mnist_digits 
+  309  ls -lt | head
+  310  more slurm-10438917.out 
+  311  cd cosc3500/
+  312  ls
+  313  vi ann_mnist_digits.cpp
+  314  make
+  315  sbatch ./goslurm.sh ann_mnist_digits 
+  316  sqme
+  317  ls -lt | head
+  318  more slurm-10439256.out
+  319  sqkillall
+  320  ls -lt | head
+  321  vi ann_mnist_digits.cpp
+  322  grep ",a " slurm-10439256.out
+  323  pwd
+  324  ls
+  325  ./ann_mnist_digits 
+  326  ./ann_mnist_digits > s.s
+  327  more s.s
+  328  vi ann_mnist_digits.cpp
+  329  make
+  330  ./ann_mnist_digits > s.s
+  331  more s.s
+  332  vi ann_mnist_digits.cpp
+  333  make
+  334  vi ann_mnist_digits.cpp
+  335  make
+  336  alias
+  337  sqme
+  338  skillall
+  339  sbatch ./goslurm.sh ann_mnist_digits 
+  340  sqme
+  341  grep ",a " slurm-10439257.out 
+  342  vi slurm-10439257.out
+  343  q!
+  344  vi ann_mnist_digits.cpp
+  345  make
+  346  vi ann_mnist_digits.cpp
+  347  make
+  348  vi ann_mnist_digits.cpp
+  349  make
+  350  sbatch ./goslurm.sh ann_mnist_digits 
+  351  sqme
+  352  ls -lt | head
+  353  vi slurm-10439258.out
+  354  vi ann_mnist_digits.cpp
+  355  make
+  356  sbatch ./goslurm.sh ann_mnist_digits 
+  357  sqme
+  358  ls -lt
+  359  vi slurm-10439259.out
+  360  gdb ann_mnist_digits
+  361  vi ann_mnist_digits.cpp
+  362  make
+  363  sbatch ./goslurm.sh ann_mnist_digits 
+  364  sqme
+  365  ls -lt
+  366  vi slurm-10439260.out
+  367  vi ann_mnist_digits.cpp
+  368  make
+  369  sbatch ./goslurm.sh ann_mnist_digits 
+  370  ls -lt | head
+  371  vi slurm-10439261.out
+  372  vi ann_mnist_digits.cpp
+  373  sbatch ./goslurm.sh ann_mnist_digits 
+  374  make
+  375  sbatch ./goslurm.sh ann_mnist_digits 
+  376  ls -lt | head
+  377  vi slurm-10439263.out
+  378  vi ann_mnist_digits.cpp
+  379  vi slurm-10439263.out
+  380  vi ann_mnist_digits.cpp
+  381  make
+  382  vi ann_mnist_digits.cpp
+  383  make
+  384  sbatch ./goslurm.sh ann_mnist_digits 
+  385  ls -lt
+  386  vi slurm-10439264.out
+  387  vi i
+  388  cat i | awk '{for (i=1;i<=NF;i++) print $i}'
+  389  cat i | awk '{for (i=1;i<=NF;i++) print $i}' | wc -l
+  390  cat i | awk '{for (i=1;i<=NF;i++) { a+=$i}} END {print a}' | wc -l
+  391  cat i | awk '{for (i=1;i<=NF;i++) { a+=$i}} END {print a}' 
+  392  vi ann_mnist_digits.cpp
+  393  grep layers ann_mnist_digits.cpp
+  394  make
+  395  vi ann_mnist_digits.cpp
+  396  make
+  397  sbatch ./goslurm.sh ann_mnist_digits 
+  398  sqme
+  399  ls -lt | head
+  400  tail head
+  401  tail slurm-10439266.out
+  402  tail -60 slurm-10439266.out
+  403  head -60 slurm-10439266.out
+  404  more slurm-10439266.out
+  405  vi ann_mnist_digits.cpp
+  406  make
+  407  sbatch ./goslurm.sh ann_mnist_digits 
+  408  sqme
+  409  ls -lt
+  410  vi slurm-10439281.out
+  411  vi ann_mnist_digits.cpp
+  412  make
+  413  sbatch ./goslurm.sh ann_mnist_digits 
+  414  sqme
+  415  vi ann_mnist_digits.cpp
+  416  make
+  417  sqme
+  418  sbatch ./goslurm.sh ann_mnist_digits 
+  419  sqme
+  420  ls -lt
+  421  more slurm-10439284.out
+  422  vi ann_mnist_digits.cpp
+  423  make
+  424  vi ann_mnist_digits.cpp
+  425  make
+  426  sbatch ./goslurm.sh ann_mnist_digits 
+  427  sqme
+  428  ls -lt
+  429  more slurm-10439289.out
+  430  vi slurm-10439289.out
+  431  vi ann_mnist_digits.cpp
+  432  make
+  433  sbatch ./goslurm.sh ann_mnist_digits 
+  434  sqme
+  435  ls -lt
+  436  vi slurm-10439290.out
+  437  vi ann_mnist_digits.cpp
+  438  vi trainging_nn.cpp
+  439  g++ trainging_nn.cpp
+  440  ./a.out
+  441  vi trainging_nn.cpp
+  442  ls mnist
+  443  g++ trainging_nn.cpp
+  444  ./a.out
+  445  vi trainging_nn.cpp
+  446  ls *idx*
+  447  vi trainging_nn.cpp
+  448  g++ trainging_nn.cpp
+  449  ./a.out
+  450  mv trainging_nn.cpp training_nn.cpp
+  451  g++ training_nn.cpp -o training_nn
+  452  g++ t[2~[2~[2~[2~[2~[2~[2~
+  453  vi testing_nn.cpp
+  454  g++ testing_nn.cpp -o testing_nn
+  455  sbatch ./goslurm.sh ann_mnist_digits 
+  456  sbatch ./goslurm.sh training_nn
+  457  sqme
+  458  df
+  459  quota
+  460  df .
+  461  ls -lt
+  462  vi slurm-10439294.out
+  463  sqme
+  464  vi ann_mnist_digits.cpp
+  465  sqme
+  466  cp training_nn.cpp training_nn2.cpp
+  467  vi ann_mnist_digits.cpp
+  468  make
+  469  vi ann_mnist_digits.cpp
+  470  make
+  471  ./ann_mnist_digits 
+  472  ./ann_mnist_digits > layer.weights
+  473  vi ann_mnist_digits.cpp
+  474  make
+  475  vi ann_mnist_digits.cpp
+  476  make
+  477  ./ann_mnist_digits > layer.weights
+  478  g++ training_nn.cpp 
+  479  vi training_nn.cpp 
+  480  g++ training_nn.cpp 
+  481  g++ training_nn.cpp  -std=c++11 
+  482  ./a.out
+  483  more layer.weights 
+  484  vi ann_mnist_digits.cpp
+  485  make
+  486  ./ann_mnist_digits > layer.weights
+  487  ./a.out
+  488  sbatch ./goslurm.sh training_nn
+  489  sbatch ./goslurm.sh a.out
+  490  sqme
+  491  ls -lt
+  492  vi slurm-10439290.out
+  493  vi training_nn.cpp 
+  494  git commit ann_mnist_digits.cpp
+  495  git push
+  496  sqme
+  497  ls -l
+  498  ls -lt
+  499  more slurm-10439413.out
+  500  df .
+  501  skillall
+  502  git pull
+  503  vi ann_mnist_digits.cpp
+  504  more slurm-10439413.out
+  505  vi ann_mnist_digits.cpp
+  506  vi training_nn.cpp
+  507  g++ training_nn.cpp  -std=c++11 
+  508  ./a.out > tmp
+  509  vi tmp 
+  510  vi training_nn.cpp
+  511  vi t.cpp
+  512  vi training_nn.cpp
+  513  vi t.cpp
+  514  g++ t.cpp
+  515  vi training_nn.cpp
+  516  vi t.cpp
+  517  g++ t.cpp
+  518  ./a.out
+  519  vi t.cpp
+  520  g++ t.cpp
+  521  ./a.out
+  522  vi t.cpp
+  523  vi training_nn.cpp
+  524  vi t.cpp
+  525  g++ t.cpp
+  526  ./a.out
+  527  vi t.cpp
+  528  vi training_nn.cpp
+  529  make
+  530  g++ t.cpp
+  531  ./a.out
+  532  vi training_nn.cpp
+  533  g++ t.cpp
+  534  ./a.out
+  535  g++ -g training_nn.cpp 
+  536  g++ -g training_nn.cpp -std=c++11
+  537  history | grep training | grep -v vi
+  538   g++ -g training_nn.cpp -std=c++11
+  539  vi training_nn.cpp
+  540  g++ -g training_nn.cpp -std=c++11
+  541  vi training_nn.cpp
+  542  g++ -g training_nn.cpp -std=c++11
+  543  vi training_nn.cpp
+  544  g++ -g training_nn.cpp -std=c++11
+  545  vi training_nn.cpp
+  546  g++ -g training_nn.cpp -std=c++11
+  547  ./a.out > q.q
+  548  vi q.q
+  549  vi training_nn.cpp
+  550  g++ -g training_nn.cpp -std=c++11
+  551  ./a.out > q.q
+  552  vi q.q
+  553  vi training_nn.cpp
+  554  g++ -g training_nn.cpp -std=c++11
+  555  ./a.out > q.q
+  556  vi q.q
+  557  vi training_nn.cpp
+  558  g++ -g training_nn.cpp -std=c++11
+  559  ./a.out > q.q
+  560  vi q.q
+  561  vi training_nn.cpp
+  562  g++ -g training_nn.cpp -std=c++11
+  563  ./a.out > q.q
+  564  vi q.q
+  565  vi training_nn.cpp
+  566  g++ -g training_nn.cpp -std=c++11
+  567  ./a.out > q.q
+  568  vi q.q
+  569  vi training_nn.cpp
+  570  vi q.q
+  571  vi training_nn.cpp
+  572  vi q.q
+  573  vi training_nn.cpp
+  574  g++ -g training_nn.cpp -std=c++11
+  575  ./a.out > q.q
+  576  vi q.q
+  577  vi training_nn.cpp
+  578  g++ -g training_nn.cpp -std=c++11
+  579  ./a.out > q.q
+  580  vi q.q
+  581  vi training_nn.cpp
+  582  g++ -g training_nn.cpp -std=c++11
+  583  ./a.out > q.q
+  584  vi q.q
+  585  vi training_nn.cpp
+  586  vi q.q
+  587  ./a.out > q.q
+  588  vi q.q
+  589  vi training_nn.cpp
+  590  make
+  591  vi training_nn.cpp
+  592  g++ -g training_nn.cpp -std=c++11
+  593  ./a.out > q.q
+  594  vi q.q
+  595  vi training_nn.cpp
+  596  g++ -g training_nn.cpp -std=c++11
+  597  ./a.out > q.q
+  598  vi q.q
+  599  vi training_nn.cpp
+  600  g++ -g training_nn.cpp -std=c++11
+  601  ./a.out > q.q
+  602  vi q.q
+  603  vi training_nn.cpp
+  604  g++ -g training_nn.cpp -std=c++11
+  605  vi training_nn.cpp
+  606  make
+  607  g++ -g training_nn.cpp -std=c++11
+  608  vi training_nn.cpp
+  609  g++ -g training_nn.cpp -std=c++11
+  610  ./a.out > q.q
+  611  vi q.q
+  612  ./a.out > q.q
+  613  vi q.q
+  614  vi training_nn.cpp
+  615  g++ -g training_nn.cpp -std=c++11
+  616  ./aout
+  617  ./a.out
+  618  vi q.q
+  619  vi training_nn.cpp
+  620  g++ -g training_nn.cpp -std=c++11
+  621  ./a.out
+  622  ./a.out > q.q
+  623  vi q.q
+  624  vi training_nn.cpp
+  625  g++ -g training_nn.cpp -std=c++11
+  626  ./a.out > q.q
+  627  vi q.q
+  628  vi training_nn.cpp
+  629  cp training_nn.cpp training_nn.cpp.comp
+  630  vi training_nn.cpp
+  631  g++ -g training_nn.cpp -std=c++11
+  632  ./a.out > q.q
+  633  vi q.q
+  634  vi training_nn.cpp
+  635  g++ -g training_nn.cpp -std=c++11
+  636  ./a.out > q.q
+  637  ./a.out 
+  638  vi q.q
+  639  ./a.out > w.w
+  640  vi w.w
+  641  vi training_nn.cpp
+  642  g++ -g training_nn.cpp -std=c++11
+  643  ./a.out > w.w
+  644  vi w.w
+  645  vi training_nn.cpp
+  646  vi w.w
+  647  g++ -g training_nn.cpp -std=c++11
+  648  vi training_nn.cpp
+  649  g++ -g training_nn.cpp -std=c++11
+  650  ./a.out > w.w
+  651  vi w.w
+  652  ./a.out > w.w
+  653  vi w.w
+  654  vi training_nn.cpp
+  655  g++ -g training_nn.cpp -std=c++11
+  656  ./a.out > w.w
+  657  vi w.w
+  658  vi training_nn.cpp
+  659  vi w.w
+  660  vi training_nn.cpp
+  661  g++ -g training_nn.cpp -std=c++11
+  662  ./a.out > w.w
+  663  vi w.w
+  664  df
+  665  sqme
+  666  ls -lt | head
+  667  cd cosc3500/
+  668  ls -lt | head
+  669  rm slurm-*.out
+  670  ls -lt | head
+  671  echo "58.2666/785"|bc -l
+  672  ls
+  673  ls -lt
+  674  vi ann_mnist_digits.cpp
+  675  git pull
+  676  vi ann_mnist_digits.cpp
+  677  make
+  678  vi ann_mnist_digits.cpp
+  679  make
+  680  vi ann_mnist_digits.cpp
+  681  make
+  682  ./ann_mnist_digits > q.q
+  683  more q.q
+  684  vi ann_mnist_digits.cpp
+  685  make
+  686  ./ann_mnist_digits > q.q
+  687  vi q.q
+  688  vi ann_mnist_digits.cpp
+  689  make
+  690  ./ann_mnist_digits > q.q
+  691  ./ann_mnist_digits 
+  692  vi ann_mnist_digits.cpp
+  693  make
+  694  vi ann_mnist_digits.cpp
+  695  make
+  696  ./ann_mnist_digits > q.q
+  697  vi q.q
+  698  vi training_nn.cpp 
+  699  ./ann_mnist_digits > q.q2
+  700  vi q.q2
+  701  grep "c=152  " q.q2
+  702  vi q.q2
+  703  vi ann_mnist_digits.cpp
+  704  make
+  705  ./ann_mnist_digits > q.q
+  706  vi ann_mnist_digits.cpp
+  707  vi q.q2
+  708  vi ann_mnist_digits.cpp
+  709  grep "c=152  " q.q2
+  710  make
+  711  vi ann_mnist_digits.cpp
+  712  make
+  713  ./ann_mnist_digits > q.q
+  714  gdb ann_mnist_digits
+  715  vi ann_mnist_digits.cpp
+  716  make
+  717  ./ann_mnist_digits > q.q
+  718  vi q.q
+  719  ./ann_mnist_digits > q.q2
+  720  vi q.q2
+  721  vi ann_mnist_digits.cpp
+  722  make
+  723  vi ann_mnist_digits.cpp
+  724  make
+  725  vi ann_mnist_digits.cpp
+  726  make
+  727  ./ann_mnist_digits > q.q2
+  728  vi q.q2
+  729  vi ann_mnist_digits.cpp
+  730  make
+  731  vi ann_mnist_digits.cpp
+  732  make
+  733  ./ann_mnist_digits > q.q2
+  734  vi q.q2
+  735  vi ann_mnist_digits.cpp
+  736  make
+  737  ./ann_mnist_digits > q.q2
+  738  vi q.q2
+  739  vi ann_mnist_digits.cpp
+  740  ./ann_mnist_digits 
+  741  vi ann_mnist_digits.cpp
+  742  make
+  743  ./ann_mnist_digits 
+  744  ./ann_mnist_digits  >  ww.w
+  745  vi ww.w
+  746  vi ann_mnist_digits.cpp
+  747  make
+  748  ./ann_mnist_digits  >  ww.w
+  749  vi ww.w
+  750  vi ann_mnist_digits.cpp
+  751  make
+  752  ./ann_mnist_digits  >  ww.w
+  753  vi ww.w
+  754  vi ann_mnist_digits.cpp
+  755  make
+  756  ./ann_mnist_digits  >  ww.w
+  757  vi ann_mnist_digits.cpp
+  758  vi ww.w
+  759  vi ann_mnist_digits.cpp
+  760  make
+  761  ./ann_mnist_digits  >  ww.w
+  762  gdb ./ann_mnist_digits
+  763  vi ann_mnist_digits.cpp
+  764  make
+  765  ./ann_mnist_digits  >  ww.w
+  766  vi ann_mnist_digits.cpp
+  767  make
+  768  ./ann_mnist_digits  >  ww.w
+  769  gdb ./ann_mnist_digits
+  770  vi ann_mnist_digits.cpp
+  771  make
+  772  gdb ./ann_mnist_digits
+  773  vi ann_mnist_digits.cpp
+  774  make
+  775  gdb ./ann_mnist_digits
+  776  ./ann_mnist_digits  >  ww.w
+  777  vi ww.w
+  778  ls
+  779  cp layer.weights layer.weights.old
+  780  vi ann_mnist_digits.cpp
+  781  make
+  782  ./ann_mnist_digits  
+  783  ./ann_mnist_digits  > layer.weights
+  784  vi ann_mnist_digits.cpp
+  785  make
+  786  vi ann_mnist_digits.cpp
+  787  make
+  788  vi ann_mnist_digits.cpp
+  789  make
+  790   ./ann_mnist_digits  > layer.weights
+  791  cat layer.weights
+  792  vi ann_mnist_digits.cpp
+  793  make
+  794   ./ann_mnist_digits  > layer.weights
+  795  cat layer.weights
+  796  vi ann_mnist_digits.cpp
+  797  make
+  798  ./ann_mnist_digits  >  ww.w
+  799  vi ww.w
+  800  vi ann_mnist_digits.cpp
+  801  make
+  802  ./ann_mnist_digits  >  ww.w
+  803  vi ww.w
+  804  vi w.w
+  805  cd cosc3500/
+  806  vi w.w
+  807  vi training_nn.cpp
+  808  gdb ./ann_mnist_digits
+  809  g++ -g training_nn.cpp -std=c++11
+  810  ./a.out > w.w
+  811  vi w.w
+  812  vi training_nn.cpp
+  813  g++ -g training_nn.cpp -std=c++11
+  814  ./a.out > w.w
+  815  vi w.w
+  816  vi training_nn.cpp
+  817  g++ -g training_nn.cpp -std=c++11
+  818  vi ann_mnist_digits.cpp
+  819  vi training_nn.cpp
+  820  g++ -g training_nn.cpp -std=c++11
+  821  ./a.out > w.w
+  822  vi w.w
+  823  gdb a.out
+  824  vi training_nn.cpp
+  825  gdb a.out
+  826  vi training_nn.cpp
+  827  cd cosc3500/
+  828  ls
+  829  ls -lt |more
+  830  cd ..
+  831  ls
+  832  git clone git://github.com/yetanotherpassword/phys7021
+  833  git clone https://github.com/yetanotherpassword/phys7021
+  834  git clone git@github.com:yetanotherpassword/phys7021.git
+  835  cd phys7021/
+  836  cp ~/cosc3500/training_nn.cpp .
+  837  git add training_nn.cpp
+  838  git commit training_nn.cpp
+  839  git push 
+  840  cd ../cosc3500/
+  841  git commit  ann_mnist_digits.cpp
+  842  git list
+  843  git rev-list
+  844  git rev-list -all
+  845  git rev-list -all ann_mnist_digits.cpp
+  846  git rev-list -all ann_mnist_digits.cpp --tags
+  847  git rev-list --tags ann_mnist_digits.cpp 
+  848  history | grep tag
+  849  pwd
+  850  mkdir uuu
+  851  cd uuu
+  852  git checkout -tag "Milestone1"
+  853   git fetch --all --tags
+  854  cd ..
+  855   git fetch --all --tags
+  856  pwd
+  857  cd uuu/
+  858   git fetch --all --tags
+  859  git checkout tags/Milestone1 
+  860  ls
+  861  pwd
+  862  cd ..
+  863  cd..
+  864  mkfit tmp
+  865  mkdir tmp
+  866  mkdir tmp1
+  867  cd tmp1
+  868  git checkout tags/Milestone1 
+  869  cd ..
+  870  git commit ann_mnist_digits.cpp
+  871  git push
+  872  cd ../tmp1
+  873  cd tmp1
+  874  ls
+  875  cd ../..
+  876  ls
+  877  mkdir tmp1
+  878  cd tmp1
+  879  git checkout tags/Milestone1 
+  880  git checkout tags/Milestone1 cosc3500
+  881   git fetch --all --tags
+  882   git fetch --all --tags cosc3500
+  883  cd ..
+  884  cd cosc3500/
+  885   git fetch --all --tags cosc3500
+  886   git fetch --all --tags 
+  887   git log --oneline --graph
+  888  uit
+  889   tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+  890  echo $tag
+  891  cd ..
+  892  cd tmp1
+  893   git checkout $tag -b latest
+  894   git checkout $tag -b latest cosc3500
+  895  cd ..
+  896  cd cosc3500/
+  897  history| grep vi
+  898  vi ww.w
+  899  vi ann_mnist_digits.cpp
+  900  make
+  901  sbatch ./goslurm.sh a.out
+  902  sbatch ./goslurm.sh ann_mnist_digits > mnist.out
+  903  skillall
+  904  ls -lt | head
+  905  more slurm-10439590.out
+  906                                   gdb ann_mnist_digits
+  907  vi ann_mnist_digits.cpp
+  908  make
+  909  ./ann_mnist_digits > ww.w
+  910  vi ww.w
+  911  gdb ann_mnist_digits
+  912  vi ann_mnist_digits.cpp
+  913  git comm ann_mnist_digits.cpp
+  914  git commit ann_mnist_digits.cpp
+  915  git push
+  916  vi ann_mnist_digits.cpp
+  917  make
+  918  vi ann_mnist_digits.cpp
+  919  make
+  920  ./ann_mnist_digits 
+  921  gdb ./ann_mnist_digits
+  922  vi ann_mnist_digits.cpp
+  923  make
+  924  gdb
+  925  gdb ann_mnist_digits
+  926  vi ann_mnist_digits.cpp
+  927  make
+  928  gdb ann_mnist_digits
+  929  vi ann_mnist_digits.cpp
+  930  make
+  931  gdb ann_mnist_digits
+  932  vi ann_mnist_digits.cpp
+  933  make
+  934  ./ann_mnist_digits 
+  935  gdb ann_mnist_digits
+  936  vi ann_mnist_digits.cpp
+  937  make
+  938  vi ann_mnist_digits.cpp
+  939  make
+  940  vi ann_mnist_digits.cpp
+  941  make
+  942  vi ann_mnist_digits.cpp
+  943  make
+  944  ./ann_mnist_digits 
+  945  gdb ann_mnist_digits
+  946  vi ann_mnist_digits.cpp
+  947  make
+  948  gdb ann_mnist_digits
+  949  vi ann_mnist_digits.cpp
+  950  make
+  951  gdb ann_mnist_digits
+  952  vi ann_mnist_digits.cpp
+  953  make
+  954  ./ann_mnist_digits 
+  955  gdb ./ann_mnist_digits
+  956  vi ann_mnist_digits.cpp
+  957  make
+  958  ./ann
+  959  ./ann_mnist_digits 
+  960  gdb ./ann_mnist_digits
+  961  vi ann_mnist_digits.cpp
+  962  make
+  963  gdb ./ann_mnist_digits
+  964  vi ann_mnist_digits.cpp
+  965  make
+  966  ./ann_mnist_digits 
+  967  gdb ann_mnist_digits
+  968  vi ann_mnist_digits.cpp
+  969  make
+  970  ./ann_mnist_digits 
+  971  gdb ann_mnist_digits
+  972  vi ann_mnist_digits.cpp
+  973  make
+  974  gdb ann_mnist_digits
+  975  make
+  976  vi ann_mnist_digits.cpp
+  977  make
+  978  gdb ann_mnist_digits
+  979  vi ann_mnist_digits.cpp
+  980  make
+  981  gdb ./ann_mnist_digits
+  982  vi ann_mnist_digits.cpp
+  983  make
+  984  vi ann_mnist_digits.cpp
+  985  make
+  986  gdb ./ann_mnist_digits
+  987  vi ann_mnist_digits.cpp
+  988  make
+  989  ./ann
+  990  ./ann_mnist_digits 
+  991  git commit  ann_mnist_digits.cpp
+  992  git push
+  993  vi ann_mnist_digits
+  994  vi ann_mnist_digits.cpp 
+  995  make
+  996  ./ann_mnist_digits 
+  997  ./ann_mnist_digits  > e.e
+  998  vi e.e
+  999  gdb ./ann_mnist_digits
+ 1000  wget https://learn.uq.edu.au/bbcswebdav/pid-7035179-dt-content-rid-39579517_1/xid-39579517_1
+ 1001  wget https://learn.uq.edu.au/bbcswebdav/pid-7035179-dt-content-rid-39579517_1/courses/COSC3500S_7160_61657/OpenMPMatrixSumExample.zip
+ 1002  mkdir openMP
+ 1003  mv OpenMPMatrixSumExample.zip  openMP/
+ 1004  cd openMP/
+ 1005  unzip OpenMPMatrixSumExample.zip 
+ 1006  ls
+ 1007  cd OpenMPMatrixSumExample/
+ 1008  ls
+ 1009  make
+ 1010  ls
+ 1011  sbatch goslurm.sh 
+ 1012  sqme
+ 1013  ls -l
+ 1014  more slurm-10544430.out 
+ 1015  more TimeResults.txt 
+ 1016  cd 
+ 1017  ls
+ 1018  d cosc3500/
+ 1019  ls
+ 1020  cd cosc3500/
+ 1021  ls
+ 1022  sbatch goslurm.sh 
+ 1023  sbatch goslurm.sh ann_mnist_digits
+ 1024  sqme
+ 1025  cd ..
+ 1026  mkdir rr
+ 1027  cd rr
+ 1028  history | grep clone
+ 1029   git clone git@github.com:yetanotherpassword/cosc3500 -tag Milestone1
+ 1030   git checkout git@github.com:yetanotherpassword/cosc3500 -tag Milestone1
+ 1031   git checkout git@github.com:yetanotherpassword/cosc3500 --tag Milestone1
+ 1032   git checkout cosc3500 --tag Milestone1
+ 1033   git clone git@github.com:yetanotherpassword/cosc3500 --tag Milestone1
+ 1034   git clone git@github.com:yetanotherpassword/cosc3500 
+ 1035  ls
+ 1036   git checkout cosc3500 --tag Milestone1
+ 1037  cd cosc3500/
+ 1038   git checkout --tag Milestone1
+ 1039  git fetch --all --tags --prune
+ 1040  cd ..
+ 1041  git fetch --all --tags --prune
+ 1042  cd cosc3500/
+ 1043  git checkout Milestone1
+ 1044  history | grep tag
+ 1045  git checkout tags/Milestone1
+ 1046  git tag
+ 1047  git tag --list
+ 1048  cd ..
+ 1049  rm -rf cosc3500/
+ 1050   git clone git@github.com:yetanotherpassword/cosc3500 --branch=Milestone1
+ 1051   git clone git@github.com:yetanotherpassword/cosc3500 --branch="Milestone1"
+ 1052  history > t.his
