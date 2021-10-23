@@ -400,7 +400,10 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                 rowsum[i] +=  chosen_wrongly[i][j];
                 colsum[j] +=  chosen_wrongly[i][j];
-                cout  << std::setw(7) << chosen_wrongly[i][j] <<  "      " << flush;
+                if (i != j)
+                   cout  << std::setw(7) << chosen_wrongly[i][j] <<  "      " << flush;
+                else
+                   cout  << std::setw(7) << "X" <<  "      " << flush;
             }
             float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
             cout << "| " <<  setw(7)  <<rowsum[i]  << flush;
