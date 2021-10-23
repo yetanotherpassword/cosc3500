@@ -26,7 +26,8 @@
 #define EPOCHS 512
 #undef STOP_AT_EPSILON
 
-#define USE_BIASES
+//#define USE_BIASES
+#undef USE_BIASES
 #define EXTRA_MESSAGE ""
 
 
@@ -304,10 +305,12 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
        // Testing, so do only once and get results
        epochs = 1;
     }
+    cout << "-----STARTING FORWARD FEED OF "<< samples << " SAMPLES" << endl;
     for (int y=0;y<samples;y++)
     {
         fin_this_epoch = false;
-        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << " for "<<epochs << " epochs"<< endl << flush;
+        if ((y+1)%100==0)
+          cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << " / " << samples << " for "<<epochs << " epochs"<< endl << flush;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.index_max();
         for (int z = 0; z < epochs && !fin_this_epoch; z++)
@@ -620,9 +623,18 @@ int main (int argc, char *argv[])
     auto EndTestTime = std::chrono::high_resolution_clock::now();
     cout << "Testing complete" << endl;
 
-    cout << "Total Time       : " <<    std::setw(12) << (EndTestTime-StartTime).count() <<" us"<< endl;
-    cout << "Total Train Time : " << std::setw(12) <<    (EndTrainTime-StartTrainTime).count() <<" us"<< endl;
-    cout << "Total Test Time  : " <<  std::setw(12) <<   (EndTestTime-StartTestTime).count() <<" us"<< endl;
+
+
+   auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
+   auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
+   auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
+
+
+
+
+    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
+    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
+    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
 
  
 //        delete[] traindata;
