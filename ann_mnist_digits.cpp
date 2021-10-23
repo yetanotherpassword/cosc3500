@@ -2,33 +2,26 @@
 #include <iomanip>
 #include <cmath>
 #include <armadillo>
-#include <boost/algorithm/string.hpp>
-#include <chrono>
 
-//#include <stdlib.h>
-//#include <stdio.h>
 #include <ctime>
  
-#undef EXTRA_OUTPUT
+
 #define ARMA_64BIT_WORD
 
 #define INPUT_LINES 784
 #define DEFAULT_HIDDEN 30
 #define OUTPUT_LINES 10
 
+
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 
-#define ETA_DEFAULT -1e-3
+#define ETA_DEFAULT 1e-3
 #define MOMENTUM 0.9f
 #define EPSILON 1e-3
-#define EPOCHS 512
-#undef STOP_AT_EPSILON
 
-//#define USE_BIASES
 #undef USE_BIASES
-#define EXTRA_MESSAGE ""
 
 
 /*
@@ -37,24 +30,24 @@
  *
  * To perform a full build and run from scratch, do the following
  *
-      git clone git@github.com:yetanotherpassword/cosc3500 --branch="Milestone1"
-      cd ~/cosc3500/
-      unzip mnist.zip
-      unxz armadillo-10.6.2.tar.xz
-      tar xvf armadillo-10.6.2.tar
-      cd armadillo-10.6.2/
-      	#Made lib static and issue with MKL on Centos
-      	#Below changes done in my git, but may need to do if download from
-      	#http://sourceforge.net/projects/arma/files/armadillo-10.6.2.tar.xz
-      	#sed -i "s/add_library( armadillo/add_library( armadillo STATIC/" CMakeLists.txt
-      	#sed -i "s/include(ARMA_FindMKL)/#include(ARMA_FindMKL)/" CMakeLists.txt
-      mkdir build
-      cd build
-      cmake ..
-      make
-      cd ../..
-      make
-      sbatch ./goslurm.sh ann_mnist_digits
+ *    git clone git@github.com:yetanotherpassword/cosc3500 --branch="Milestone1"
+ *    cd ~/cosc3500/
+ *    unzip mnist.zip
+ *    unxz armadillo-10.6.2.tar.xz
+ *    tar xvf armadillo-10.6.2.tar
+ *    cd armadillo-10.6.2/
+ *    	#Made lib static and issue with MKL on Centos
+ *    	#Below changes done in my git, but may need to do if download from
+ *    	#http://sourceforge.net/projects/arma/files/armadillo-10.6.2.tar.xz
+ *    	#sed -i "s/add_library( armadillo/add_library( armadillo STATIC/" CMakeLists.txt
+ *    	#sed -i "s/include(ARMA_FindMKL)/#include(ARMA_FindMKL)/" CMakeLists.txt
+ *    mkdir build
+ *    cd build
+ *    cmake ..
+ *    make
+ *    cd ../..
+ *    make
+ *    sbatch ./goslurm.sh ann_mnist_digits
  */
 // g++ armo.cpp -g -o armo -std=c++11 -O2 -larmadillo
 
@@ -81,11 +74,8 @@ vector<mat> layer_weights;
 vector<mat> weight_updates;
 vector<mat> new_layer_weights;
 rowvec input; 
-
-std::time_t result = std::time(nullptr);
-string fid = to_string(result);
-
-//rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
+stringstream confusion_matrix;
+rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
@@ -98,14 +88,14 @@ rowvec sigmoid( rowvec  & net)
 //
 void print_an_image(unsigned char * c, int i)
 {
-     cout << "This is a : " << i << endl << flush;
+     cout << "This is a : " << i << endl;
      for (int i=0;i<INPUT_LINES;i++)
      {
        if (i%MATRIX_SIDE==0)
-         cout << endl << flush;
-       cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " " << flush;
+         cout << endl;
+       cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " ";
      }
-     cout << setfill(' ') << endl << flush;
+     cout << setfill(' ') << endl;
 }
    
 
@@ -114,57 +104,58 @@ void print_images(unsigned char * c,  int size)
     for (int i=IMAGE_OFFSET;i<size;i++)
     {
        if (((i-IMAGE_OFFSET)%MATRIX_SIDE)==0)
-           cout << endl << flush;
+           cout << endl;
        if (((i-IMAGE_OFFSET)%INPUT_LINES)==0)
-           cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl << flush;
-       cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " " << flush;
+           cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl;
+       cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " ";
     }
-    cout << setfill(' ') << flush;
+    cout << setfill(' ');
 }
 
 void outp(mat m, string s)
 {
-   cout << "matrix:" << s << " rows=" << m.n_rows <<   " cols=" << m.n_cols << endl << flush;
+   cout << "matrix:" << s << " rows=" << m.n_rows <<   " cols=" << m.n_cols << endl;
 
 }
 
 void outp(rowvec v, string s)
 {
-   cout << "vector:" << s << " rows=" << v.n_rows <<   " cols=" << v.n_cols << endl << flush;
+   cout << "vector:" << s << " rows=" << v.n_rows <<   " cols=" << v.n_cols << endl;
 
 }
 //
 //
 /////////////////////////////////////////////
 
-void load_file(string filename, string labels, unsigned char * * labs, unsigned char * * data)
+unsigned char * load_file(string filename, string labels, unsigned char * * labs)
 {
+    unsigned char * memblock;
     ifstream inFile;
     streampos size;
 
-    cout << "Using file '" << filename << "'" << endl << flush;
+    cout << "Using file '" << filename << "'" << endl;
 //
 // Load MNIST DIGIT IMAGES
 //
     inFile.open(filename, ios::in|ios::binary|ios::ate);
     if (!inFile) {
-        cout << "Unable to open file '" << filename << "'" << endl << flush;
+        cout << "Unable to open file '" << filename << "'" << endl;
         exit(1); // terminate with error
     }
     else
     {
-       cout << "OK opened '" << filename << "' Successfully" << endl << flush;
+       cout << "OK opened '" << filename << "' Successfully" << endl;
     }
 
     if (inFile.is_open())
     {
         size = inFile.tellg();
-        *data = new unsigned char [size];
+        memblock = new unsigned char [size];
         inFile.seekg (0, ios::beg);
-        inFile.read ((char *)*data , size);
+        inFile.read ((char *)memblock, size);
         inFile.close();
 
-        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl << flush;
+        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl;
          //print_images(memblock, size);
  
     }
@@ -174,12 +165,12 @@ void load_file(string filename, string labels, unsigned char * * labs, unsigned 
 //
     inFile.open(labels, ios::in|ios::binary|ios::ate);
     if (!inFile) {
-        cout << "Unable to open file '" << labels << "'" << endl << flush;
+        cout << "Unable to open file '" << labels << "'" << endl;
         exit(1); // terminate with error
     }
     else
     {
-       cout << "OK opened '" << labels << "' Successfully" << endl << flush;
+       cout << "OK opened '" << labels << "' Successfully" << endl;
     }
 
     if (inFile.is_open())
@@ -190,11 +181,12 @@ void load_file(string filename, string labels, unsigned char * * labs, unsigned 
         inFile.read ((char *) *labs, size);
         inFile.close();
 
-        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl << flush;
+        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl;
         // print_images(memblock, size);
  
     }
     inFile.close();
+    return memblock;
 
 }
 
@@ -215,13 +207,11 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
            img(i)=1.0;
      */ 
     }
-     //   cout << img << endl << "an image ************************" << endl << flush;
+     //   cout << img << endl << "an image ************************" << endl;
 
     int img_is_digit=(int) lp[8+seq];
 
-#ifdef EXTRA_OUTPUT 
     print_an_image(&mptr[start], img_is_digit);
-#endif
 
 //    t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
 //    t(t.n_cols-1)=1;                 // set bias signal (redundant for target, but keeps vectors same size)
@@ -231,20 +221,17 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
 }
 
-int backprop(rowvec tgt, int s, int e)
+int backprop(rowvec tgt)
 {
         double err = accu((tgt - actuation[OLayer]) %  (tgt - actuation[OLayer]))*0.5;
-#ifdef STOP_AT_EPSILON
         if (err < epsilon)
         {
              int val=tgt.index_max();
-             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon (" << epsilon <<"), for tgt '"<< val <<"' so error is acceptable (for epoch "<< e << " of sample " << s << "), returning" << endl << flush;
+             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
+             err_summary(val) = err;
              return 1;
         }
-#endif
-#ifdef EXTRA_OUTPUT 
-        cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl << flush;
-#endif
+        cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl;
      
         ftick[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]);  //element wise multiply
 
@@ -289,38 +276,25 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
-    bool fin_this_epoch = false;
-    string intype;
-    int epochs;
+    int epochs=1;
+    string intype="TEST    ";
 
     if (train)
     {
-       intype = "TRAINING";
-       // Training ANN so process and backpropagate "epoch" times
-       epochs = EPOCHS;
+       intype="TRAINING";
+       epochs=512;
     }
-    else
-    {
-       intype="TEST    ";
-       // Testing, so do only once and get results
-       epochs = 1;
-    }
-    cout << "-----STARTING FORWARD FEED OF "<< samples << " SAMPLES" << endl;
     for (int y=0;y<samples;y++)
     {
-        fin_this_epoch = false;
-        if ((y+1)%100==0)
-          cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << " / " << samples << " for "<<epochs << " epochs"<< endl << flush;
+        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.index_max();
-        for (int z = 0; z < epochs && !fin_this_epoch; z++)
+        for (int z=0;z<epochs;z++)
         {
-#ifdef  EXTRA_OUTPUT
-            cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl << flush;
-#endif
+            cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
             for (int i=0;i<OLayer;i++)  // only n-1 transitions between n layers
             {
-               // cout << "------------------------------------ All inputs into L" << i << endl << flush;
+               // cout << "------------------------------------ All inputs into L" << i << endl;
                 // sum layer 1 weighted input
                          //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
 #ifdef USE_BIASES
@@ -328,33 +302,31 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 #else
                 netin[i] =  (actuation[i] * layer_weights[i]);
 #endif
-                //cout << "------------------------------------ Net weighted sum into L" << i << endl << flush;
-                //cout << "------------------------------------ Activation out of L" << i << endl << flush;
+                //cout << "------------------------------------ Net weighted sum into L" << i << endl;
+                //cout << "------------------------------------ Activation out of L" << i << endl;
                 actuation[i+1] = sigmoid(netin[i]);
             }
             if (train)
             {
                 // printout intermediate result
                 int outval = actuation[OLayer].index_max();
-#ifdef EXTRA_OUTPUT
-                std::cout << "Train output : " << endl << actuation[OLayer] << std::endl << flush;
+                std::cout << "Train output : " << endl << actuation[OLayer] << std::endl;
                 int minval= tgtval<outval?tgtval:outval;
                 int maxval= tgtval>outval?tgtval:outval;
                 string minc= tgtval == minval ? to_string(minval)+string("A"):to_string(minval)+string("O");
                 string maxc= tgtval == maxval ? to_string(maxval)+"A":to_string(maxval)+"O";
                 if (minval==maxval)
                    minc="*"+to_string(minval); // correct
-                for (int x = 0; x < minval; x++)
-                    cout << "         " << flush;
-                cout << "       " << minc << flush;  
-                for (int x = 0; x < maxval - minval-1; x++)
-                    cout << "         " << flush;
+                for (int z = 0; z < minval; z++)
+                    cout << "         ";
+                cout << "       " << minc;  
+                for (int z = 0; z < maxval - minval-1; z++)
+                    cout << "         ";
                 if (minval != maxval)
-                    cout << "       " << maxc << flush;  // expected
-                cout << endl << flush;
-#endif
-                if (backprop(tgt,y,z)==1)
-                         fin_this_epoch=true;
+                    cout << "       " << maxc;  // expected
+                cout << endl;
+                if (backprop(tgt))
+                         break;
             }
         }
         if (!train)
@@ -375,71 +347,68 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
-#ifdef EXTRA_OUTPUT
-        std::cout << "Final output : " << endl << actuation[OLayer] << std::endl << flush;
-        for (int t=0;t<actuation[OLayer].index_max();t++)
-             cout << "         " << flush;
-        cout << "       ^" << endl << flush;
-        std::cout << "Expec output : " << endl << tgt << std::endl << flush;
-#endif 
+        std::cout << "Final output : " << endl << actuation[OLayer] << std::endl;
+        for (int z=0;z<actuation[OLayer].index_max();z++)
+             cout << "         ";
+        cout << "       ^" << endl;
+        std::cout << "Expec output : " << endl << tgt << std::endl;
+        
                 //////////////////////////// forward feed end
     }
     if (!train)
     {
-         cout << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl << flush;
-         cout << "Tested " << num_tested << " samples"<<endl << flush;
+         confusion_matrix << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl;
+         confusion_matrix << "Tested " << num_tested << " samples"<<endl;
          for (int i=0;i<10;i++)
-             cout  <<  "      "<< dec << std::setw(7) << i  << flush;
-         cout << "      Guessed"  << flush;
+             confusion_matrix  <<  "      "<< dec << std::setw(7) << i ;
+         confusion_matrix << "      Guessed" ;
          double colsum[10]={0,0,0,0,0,0,0,0,0,0};
          double rowsum[10]={0,0,0,0,0,0,0,0,0,0};
          for (int i=0;i<10;i++)
          {
-            cout << endl  << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << i << " |  " << flush;
+            confusion_matrix << endl  << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << i << " |  ";
             for (int j=0;j<10;j++)
             {
                 rowsum[i] +=  chosen_wrongly[i][j];
                 colsum[j] +=  chosen_wrongly[i][j];
-                if (i != j)
-                   cout  << std::setw(7) << chosen_wrongly[i][j] <<  "      " << flush;
-                else
-                   cout  << std::setw(7) << "X" <<  "      " << flush;
+                confusion_matrix  << std::setw(7) << chosen_wrongly[i][j] <<  "      ";
             }
             float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
-            cout << "| " <<  setw(7)  <<rowsum[i]  << flush;
-            cout <<  setw(7)   <<"         " << pctg  <<  resetiosflags( ios::fixed  |ios::showpoint )<< "%" << flush;
+            confusion_matrix << "| " <<  setw(7)  <<rowsum[i] ;
+            confusion_matrix <<  setw(7)   <<"         " << pctg  <<  resetiosflags( ios::fixed  |ios::showpoint )<< "%";
 
          }
-         cout << endl << flush;
-         cout << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << "     " << flush;
+         confusion_matrix << endl;
+         confusion_matrix << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << "     ";
          for (int i=0;i<10;i++)
-             cout  << dec << std::setw(7) << colsum[i] << "      " << flush;
-         cout << endl << "     " << flush;
+             confusion_matrix  << dec << std::setw(7) << colsum[i] << "      ";
+         confusion_matrix << endl << "     ";
          for (int i=0;i<10;i++)
          {
              float pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
-            cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     " << flush;
+            confusion_matrix << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     ";
          }
-         cout << endl << flush;
+         confusion_matrix << endl;
          float totpctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         cout << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie ~" << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl << flush;
+         confusion_matrix << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie " << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl;
          for (int i=0;i<10;i++)
-             cout  << dec << std::setw(7) << i << "      " << flush;
-         cout << endl << flush;
-         for (int i=0;i<10;i++)
-         {
-                cout  << std::setw(7) << num_correct[i] <<  "      " << flush;
-         }
-         cout << endl << endl << "Incorrect selections:" << endl << flush;
-         for (int i=0;i<10;i++)
-             cout  << dec << std::setw(7) << i << "      " << flush;
-         cout << endl << flush;
+             confusion_matrix  << dec << std::setw(7) << i << "      ";
+         confusion_matrix << endl;
          for (int i=0;i<10;i++)
          {
-                cout  << std::setw(7) << num_wrong[i] <<  "      " << flush;
+                confusion_matrix  << std::setw(7) << num_correct[i] <<  "      ";
          }
-         cout << endl << endl << flush; 
-         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl << flush;
+         confusion_matrix << endl << endl << "Incorrect selections:" << endl;
+         for (int i=0;i<10;i++)
+             confusion_matrix  << dec << std::setw(7) << i << "      ";
+         confusion_matrix << endl;
+         for (int i=0;i<10;i++)
+         {
+                confusion_matrix  << std::setw(7) << num_wrong[i] <<  "      ";
+         }
+         confusion_matrix << endl << endl; 
+         confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
+         cout << confusion_matrix;
     }
                 
 }
@@ -447,52 +416,35 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 void save_weights(string hdr)
 {
     ofstream oFile;
-    string fname = hdr+string("_weights_") + fid +string(".txt");
-    cout << "Saving weights to file : " << fname << endl << flush;
+    std::time_t result = std::time(nullptr);
+    string fname = hdr+string("_weights_") + to_string(result)+string(".txt");
+    cout << "Saving weights to file : " << fname << endl;
     oFile.open(fname, ios::out);
-    oFile << "NumberOfLayers=" << NumberOfLayers << endl << flush;
+    if (hdr.substr(1,4)=="post")
+       oFile << confusion_matrix;      
+    oFile << "NumberOfLayers=" << NumberOfLayers << endl;
     for (int i=0; i< OLayer; i++)
     {
         
-        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl << flush;
-        oFile << layer_weights[i] << endl << flush;
-        oFile <<  "LayerBiases"<<i<< endl << flush;
+        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
+        oFile << layer_weights[i] << endl;
+        oFile <<  "LayerBiases"<<i<< endl;
 #ifdef USE_BIASES
-        oFile << layer_biases[i] << endl << flush;
+        oFile << layer_biases[i] << endl;
 #else
-        oFile << "No layer biases are used" << endl << flush;
+        oFile << "No layer biases are used" << endl;
 #endif
     }
-//    oFile << "Error Summary" << endl << flush;
-//    oFile << err_summary << endl << flush;
-    oFile << "EndFile" << endl << flush;
+    oFile << "Error Summary" << endl;
+    oFile << err_summary << endl;
+    oFile << "EndFile" << endl;
     oFile.close();
 
 }
 
 int main (int argc, char *argv[])
 {
-
-
-    extern char **environ;
-
-    vector<string> strs;
-
-#ifdef EXTRA_MESSAGE
-    cout << EXTRA_MESSAGE << endl;
-#endif
-    // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
-    for(char **current = environ; *current; current++) {
-        string tmp = *current;
-        boost::split(strs, tmp, boost::is_any_of("="));
-        if ((strs[0] == "SLURM_JOBID") || (strs[0] == "SLURM_JOB_ID"))
-           if (strs[1].length() > 0)
-           {
-             fid = strs[1];
-             break;
-           }
-    }
-
+    
         if (argc < 2)
         {
             NumberOfLayers=3;
@@ -501,19 +453,19 @@ int main (int argc, char *argv[])
             nodes[1]=DEFAULT_HIDDEN;
             nodes[2]=OUTPUT_LINES;
             eta = ETA_DEFAULT;
-            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl << flush;
-            cout << "And ETA=" << eta << endl << flush;;
+            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl;
+            cout << "And ETA=" << eta << endl;;
         }
         else if (argc < 5)
         {
-             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl << flush;
-             cout << "       Where ETA is the learning factor, &" << endl << flush;
-             cout << "       Where number of parameters after ETA is the number of layers" << endl << flush;
-             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl << flush;
-             cout << "       And the parameters themselves are numbers, "<< endl << flush;
-             cout << "       indicating the number of nodes in that layer." << endl << flush;
-             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl << flush;
-             cout << "       and is the default, if no params supplied." << endl << flush;
+             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl;
+             cout << "       Where ETA is the learning factor, &" << endl;
+             cout << "       Where number of parameters after ETA is the number of layers" << endl;
+             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl;
+             cout << "       And the parameters themselves are numbers, "<< endl;
+             cout << "       indicating the number of nodes in that layer." << endl;
+             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl;
+             cout << "       and is the default, if no params supplied." << endl;
              exit (1);
         }
         else
@@ -523,23 +475,9 @@ int main (int argc, char *argv[])
              eta = stod(string(argv[1]));
              if (eta <= 0)
              {
-                   cout << "Error: ETA must be positive, usually less than 1" << endl << flush;
+                   cout << "Error: ETA must be positive, usually less than 1" << endl;
                    exit(1);
              }
-             cout << "And ETA=" << eta << endl << flush;;
-             nodes[0] = stoi(string(argv[2]));
-             if (nodes[0] != 784)
-             {
-                  cout << "Error: For this application, number of input nodes MUST be 784 (as flattening a 28x28 pixel image)" << endl;
-                  exit(1);
-             }
-             nodes[argc-3] = stoi(string(argv[argc-1]));
-             if (nodes[argc-3] != 10)
-             {
-                  cout << "Error: For this application, number of output nodes MUST be 10 (as categorising this many classes)" << endl;
-                  exit(1);
-             }
-             string optns="";
              for (int i=2;i<argc;i++)
              {
                 int p = stoi(string(argv[i]));
@@ -549,32 +487,16 @@ int main (int argc, char *argv[])
                 }
                 else
                 {
-                   cout << "Error in parameter " << i << " - must be positive" << endl << flush;
+                   cout << "Error in parameter " << i << " - must be positive" << endl;
                    exit (1);
                 }
-                optns = optns + " " + string(argv[i]);
              }
-             cout << "Using 1 input and " << NumberOfLayers-2 << " hiddenlayers and 1 outputlayer" << endl;
-             cout << "That contain number of nodes " << optns << " respectively" << endl;
         }
         OLayer = NumberOfLayers - 1;
-        
     unsigned char * trainlabels; 
     unsigned char * testlabels; 
-    unsigned char * traindata;
-    unsigned char * testdata;
-    auto StartTime = std::chrono::high_resolution_clock::now();
-
-
-
-    load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels, &traindata);
-    load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels, &testdata);
-    cout << "Training epochs per test data is : " << EPOCHS << endl << flush;
-#ifdef USE_BIASES
-    cout << "Bias weighting is used " << endl << flush;
-#else
-    cout << "Bias weighting is NOT used " << endl << flush;
-#endif
+    unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
+    unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
 
 ///////////////////////////////////////////////
 //
@@ -610,87 +532,16 @@ int main (int argc, char *argv[])
 //
 // TRAIN THE DATA
 //
-    cout << "Training on data started...." << endl;
-    auto StartTrainTime = std::chrono::high_resolution_clock::now();
     forward_feed(traindata, trainlabels, true, 60000);
-    auto EndTrainTime = std::chrono::high_resolution_clock::now();
     save_weights("post_training_weights");   
-    cout << "Training complete" << endl;
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
 //
-    cout << "Testing of data started...." << endl;
-    auto StartTestTime = std::chrono::high_resolution_clock::now();
     forward_feed(testdata, testlabels, false, 10000);
-    auto EndTestTime = std::chrono::high_resolution_clock::now();
-    cout << "Testing complete" << endl;
-
-
-
-   auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
-   auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
-   auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
-
-
-
-
-    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
-    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
-    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
-
- 
-//        delete[] traindata;
-//        delete[] trainlabels;
-//        delete[] testdata;
-//        delete[] testlabels;
+    
+        delete[] traindata;
+        delete[] trainlabels;
+        delete[] testdata;
+        delete[] testlabels;
 }
-
-
-
-
-
-/*
-below is based on final result from post_training_weights_weights_1631975398.txt
-CONFUSION MATRIX
-****************
-Tested 10000 samples
-            0            1            2            3            4            5            6            7            8            9      Guessed
----------------------------------------------------------------------------------------------------------------------------------------
-0 |        0            0            0            1            0            1            1            0            8            1      |      12         1.60643%
----------------------------------------------------------------------------------------------------------------------------------------
-1 |        0            0            1            7            0            0            1            1           13            0      |      23         3.07898%
----------------------------------------------------------------------------------------------------------------------------------------
-2 |       12            2            0           33            5            0           11            6           21            3      |      93         12.4498%
----------------------------------------------------------------------------------------------------------------------------------------
-3 |        5            2            5            0            1            8            1            4           12            7      |      45         6.0241%
----------------------------------------------------------------------------------------------------------------------------------------
-4 |        4            1            4            1            0            1           11            1            2           66      |      91         12.1821%
----------------------------------------------------------------------------------------------------------------------------------------
-5 |       13            4            0           40           12            0           12            3           48           22      |     154         20.6158%
----------------------------------------------------------------------------------------------------------------------------------------
-6 |       16            3            2            1            9            6            0            1           12            0      |      50         6.69344%
----------------------------------------------------------------------------------------------------------------------------------------
-7 |       11           18           19           19            8            1            0            0            3           39      |     118         15.7965%
----------------------------------------------------------------------------------------------------------------------------------------
-8 |        8            5            6           31            9            3            6            4            0           38      |     110         14.7256%
----------------------------------------------------------------------------------------------------------------------------------------
-9 |        7            6            2            6           12            2            2            6            8            0      |      51         6.82731%
----------------------------------------------------------------------------------------------------------------------------------------
-          76           41           39          139           56           22           45           26          127          176      
-       10.17%        5.49%        5.22%       18.61%        7.50%        2.95%        6.02%        3.48%       17.00%       23.56%     
-Target 
-Above percentages are of number total wrong (747) out of total 10000 (ie 7.5% of total tests)
-
-
-
-Correct selections:
-      0            1            2            3            4            5            6            7            8            9      
-    968         1112          939          965          891          738          908          910          864          958      
-
-Incorrect selections:
-      0            1            2            3            4            5            6            7            8            9      
-     12           23           93           45           91          154           50          118          110           51      
-
-Total Correct :   92.53%     
-*/
