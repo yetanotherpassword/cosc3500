@@ -3,6 +3,7 @@
 #include <cmath>
 #include <armadillo>
 #include <boost/algorithm/string.hpp>
+#include <chrono>
 
 //#include <stdlib.h>
 //#include <stdio.h>
@@ -67,7 +68,6 @@ unsigned int NumberOfLayers;
 unsigned int * nodes;
 unsigned int OLayer;         // Output Layer as index to NumberOfLayers
 double eta;               // Learning factor
-int epochs;
 vector<rowvec> netin;
 #ifdef USE_BIASES
 vector<rowvec> layer_biases;
@@ -289,21 +289,25 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
     bool fin_this_epoch = false;
-    string intype="TEST    ";
+    string intype;
+    int epochs;
 
     if (train)
     {
        intype = "TRAINING";
-       epochs = 512;
+       // Training ANN so process and backpropagate "epoch" times
+       epochs = EPOCHS;
     }
     else
+    {
+       intype="TEST    ";
+       // Testing, so do only once and get results
        epochs = 1;
+    }
     for (int y=0;y<samples;y++)
     {
         fin_this_epoch = false;
-#ifdef EXTRA_OUTPUT 
-        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl << flush;
-#endif
+        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << " for "<<epochs << " epochs"<< endl << flush;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.index_max();
         for (int z = 0; z < epochs && !fin_this_epoch; z++)
@@ -553,6 +557,8 @@ int main (int argc, char *argv[])
     unsigned char * testlabels; 
     unsigned char * traindata;
     unsigned char * testdata;
+    auto StartTime = std::chrono::high_resolution_clock::now();
+
 
 
     load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels, &traindata);
@@ -598,14 +604,27 @@ int main (int argc, char *argv[])
 //
 // TRAIN THE DATA
 //
+    cout << "Training on data started...." << endl;
+    auto StartTrainTime = std::chrono::high_resolution_clock::now();
     forward_feed(traindata, trainlabels, true, 60000);
+    auto EndTrainTime = std::chrono::high_resolution_clock::now();
     save_weights("post_training_weights");   
+    cout << "Training complete" << endl;
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
 //
+    cout << "Testing of data started...." << endl;
+    auto StartTestTime = std::chrono::high_resolution_clock::now();
     forward_feed(testdata, testlabels, false, 10000);
-    
+    auto EndTestTime = std::chrono::high_resolution_clock::now();
+    cout << "Testing complete" << endl;
+
+    cout << "Total Time       : " <<    std::setw(12) << (EndTestTime-StartTime).count() <<" us"<< endl;
+    cout << "Total Train Time : " << std::setw(12) <<    (EndTrainTime-StartTrainTime).count() <<" us"<< endl;
+    cout << "Total Test Time  : " <<  std::setw(12) <<   (EndTestTime-StartTestTime).count() <<" us"<< endl;
+
+ 
 //        delete[] traindata;
 //        delete[] trainlabels;
 //        delete[] testdata;
