@@ -23,7 +23,7 @@
 #define ETA_DEFAULT -1e-3
 #define MOMENTUM 0.9f
 #define EPSILON 1e-3
-#define EPOCHS 512
+#define EPOCHS 128
 #undef STOP_AT_EPSILON
 
 //#define USE_BIASES
@@ -609,7 +609,7 @@ int main (int argc, char *argv[])
 //
     cout << "Training on data started...." << endl;
     auto StartTrainTime = std::chrono::high_resolution_clock::now();
-    forward_feed(traindata, trainlabels, true, 60000);
+    forward_feed(traindata, trainlabels, true, 10000);
     auto EndTrainTime = std::chrono::high_resolution_clock::now();
     save_weights("post_training_weights");   
     cout << "Training complete" << endl;
