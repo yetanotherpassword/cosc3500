@@ -3,25 +3,17 @@
 #include <cmath>
 #include <armadillo>
 
-#include <ctime>
-#include <chrono> 
+#undef DEBUGON
 
 #define ARMA_64BIT_WORD
-
 #define INPUT_LINES 784
-#define DEFAULT_HIDDEN 30
 #define OUTPUT_LINES 10
-
-
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
+#define DEFAULT_HIDDEN 30
+#define ETA_DEFAULT 0.5f
 
-#define ETA_DEFAULT 1e-3
-#define MOMENTUM 0.9f
-#define EPSILON 1e-3
-
-#undef USE_BIASES
 
 
 /*
@@ -30,7 +22,7 @@
  *
  * To perform a full build and run from scratch, do the following
  *
- *    git clone git@github.com:yetanotherpassword/cosc3500 --branch="Milestone1"
+ *    git clone git://github.com/yetanotherpassword/cosc3500
  *    cd ~/cosc3500/
  *    unzip mnist.zip
  *    unxz armadillo-10.6.2.tar.xz
@@ -57,28 +49,28 @@
 using namespace arma;
 using namespace std;
 
-const double epsilon = 1e-3;
-unsigned int NumberOfLayers;
-unsigned int * nodes;
-unsigned int OLayer;         // Output Layer as index to NumberOfLayers
-double eta;               // Learning factor
-vector<rowvec> netin;
-#ifdef USE_BIASES
-vector<rowvec> layer_biases;
-#endif
-vector<rowvec> actuation;
-vector<rowvec> deltafn;
-vector<rowvec> theta;
-vector<rowvec> ftick;
-vector<mat> layer_weights;
-vector<mat> weight_updates;
-vector<mat> new_layer_weights;
-rowvec input; 
-stringstream confusion_matrix;
-rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
+
+    unsigned int NumberOfLayers;
+    unsigned int OutputLayer;
+    unsigned int * nodes;
+    double eta;               // Learning factor
+    vector<rowvec> netin;
+    vector<rowvec> actuation;
+    vector<rowvec> deltafn;
+    vector<rowvec> ftick;
+    vector<mat> layer_weights;
+    vector<mat> weight_updates;
+    vector<mat> new_layer_weights;
+    rowvec tmpbias; 
+    mat tmpwgt; 
+    colvec vbias;
+    ios init(NULL);
+
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
+   out.insert_cols(out.n_cols, 1); // add bias signal (1) column
+   out(out.n_cols-1)=1.0;          // add bias signal value
    return out;
 }
 
@@ -95,7 +87,7 @@ void print_an_image(unsigned char * c, int i)
          cout << endl;
        cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " ";
      }
-     cout << setfill(' ') << endl;
+     cout << endl;
 }
    
 
@@ -109,7 +101,6 @@ void print_images(unsigned char * c,  int size)
            cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl;
        cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " ";
     }
-    cout << setfill(' ');
 }
 
 void outp(mat m, string s)
@@ -194,66 +185,49 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 {
     int start=(INPUT_LINES*seq)+IMAGE_OFFSET;
     double greyval=MAX_PIXEL_VAL;
-    //img.set_size(INPUT_LINES+1);
-    //img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
-    img.set_size(INPUT_LINES);
+    img.set_size(INPUT_LINES+1);
     for (int i=0;i<INPUT_LINES;i++)
     {
         img(i) = ((double ) mptr[start+i])/greyval;
-      /* 
-        if (mptr[start+i] == 0)
-           img(i)=0.0;
-        else
-           img(i)=1.0;
-     */ 
     }
      //   cout << img << endl << "an image ************************" << endl;
+    img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
 
-    print_an_image(&mptr[start], img_is_digit);
+//    print_an_image(&mptr[start], img_is_digit);
 
-//    t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
-//    t(t.n_cols-1)=1;                 // set bias signal (redundant for target, but keeps vectors same size)
-
-    t=zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
+    t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
     t(img_is_digit)=1;               // set the target 'bit'
+    t(t.n_cols-1)=1;                 // set bias signal (redundant for target, but keeps vectors same size)
 
 }
 
-int backprop(rowvec tgt)
+void backprop(rowvec tgt)
 {
-        double err = accu((tgt - actuation[OLayer]) %  (tgt - actuation[OLayer]))*0.5;
-        if (err < epsilon)
+        cout << "------------------------------------ BACK PROPAGATION" << endl;
+        
+        ftick[OutputLayer] = -actuation[OutputLayer] + 1;
+        ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);  //element wise multiply
+        deltafn[OutputLayer]  =  (tgt - actuation[OutputLayer])%(ftick[OutputLayer]);
+        deltafn[OutputLayer].shed_col(deltafn[OutputLayer].n_cols-1);
+        for (int i=OutputLayer-1;i>=0;i--)
         {
-             int val=tgt.index_max();
-             cout << "---------------------------------- BACK PROPAGATION  err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
-             err_summary(val) = err;
-             return 1;
-        }
-        cout << "------------------------------------ BACK PROPAGATION  err=" << err << endl;
-     
-        ftick[OLayer] = (-actuation[OLayer] + 1) % (actuation[OLayer]);  //element wise multiply
-
-        deltafn[OLayer]  =  (tgt - actuation[OLayer])%(ftick[OLayer]);
-
-        for (int i = OLayer - 1; i >= 0; i--)
-        {
-            weight_updates[i] = actuation[i].t() * deltafn[i+1];
+cout << " For " << i+1 << " layer deltafn=("<< deltafn[i+1].n_cols<<","<< deltafn[i+1].n_rows<<") * actuation("<<actuation[i].n_rows<<","<<actuation[i].n_cols<<")"<< endl;
+            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
+cout << " For " << i << " to " << i+1<< " layer weights=("<< new_layer_weights[i].n_rows<<","<< deltafn[i+1].n_cols<<") "<<endl;
              
-            ftick[i] = (-actuation[i] + 1) % actuation[i];
-
-            deltafn[i] = ( layer_weights[i] * deltafn[i+1].t() ).t() % ftick[i];
+            ftick[i] = -actuation[i] + 1;
+            ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
+            deltafn[i] = deltafn[i+1]*layer_weights[i];
+            deltafn[i] = deltafn[i] % ftick[i];
+            deltafn[i].shed_col(deltafn[i].n_cols-1);
         }
-        for (int i=0;i<OLayer;i++)
+        for (int i=0;i<OutputLayer+1;i++)
         {
            layer_weights[i] =  new_layer_weights[i];
-#ifdef USE_BIASES
-           layer_biases[i] += deltafn[i+1];
-#endif
         }
-        return 0;
 }
 
 void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
@@ -263,9 +237,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     int tot_wrong=0;
     int correct_num=-1;
     int best_guess=-1;
-    int num_correct[10]={0,0,0,0,0,0,0,0,0,0};
-    int num_wrong[10]={0,0,0,0,0,0,0,0,0,0};
-    int chosen_wrongly[10][10]={{ 0,0,0,0,0,0,0,0,0,0},
+    int num_correct[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
+    int num_wrong[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
+    int chosen_wrongly[OUTPUT_LINES][OUTPUT_LINES]={{ 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0},
@@ -276,63 +250,73 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                                 { 0,0,0,0,0,0,0,0,0,0},
                                 { 0,0,0,0,0,0,0,0,0,0}} ;
     int num_tested = 0;
-    int epochs=1;
-    string intype="TEST    ";
-
+    int epochs;
+    string intype;
     if (train)
     {
        intype="TRAINING";
-       epochs=512;
+       epochs=50;
+    }
+    else
+    {
+       epochs=1;
+       intype="TEST    ";
     }
     for (int y=0;y<samples;y++)
     {
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
-        int tgtval = tgt.index_max();
-        for (int z=0;z<epochs;z++)
+        int tgtval = tgt.subvec(0,9).index_max();
+if (tgtval>9)
+  exit (3);
+        for (int e=0;e<epochs;e++)
         {
-            cout << "----------- Epoch # " << z+1 << " on Sample # " << y+1 << endl;
-            for (int i=0;i<OLayer;i++)  // only n-1 transitions between n layers
+            for (int i=0;i<OutputLayer;i++)  // only n-1 transitions between n layers
             {
                // cout << "------------------------------------ All inputs into L" << i << endl;
                 // sum layer 1 weighted input
-                         //netin[i] =  (actuation[i] * layer_weights[i])/((double) actuation[i].n_cols);
-#ifdef USE_BIASES
-                netin[i] =  (actuation[i] * layer_weights[i]) + (layer_biases[i]);
-#else
-                netin[i] =  (actuation[i] * layer_weights[i]);
-#endif
+                netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
                 //cout << "------------------------------------ Net weighted sum into L" << i << endl;
                 //cout << "------------------------------------ Activation out of L" << i << endl;
+    
                 actuation[i+1] = sigmoid(netin[i]);
             }
+            std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint <<std::setprecision(2) << actuation[OutputLayer].subvec(0,9) << std::endl;
+            std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) << tgt.subvec(0,9) << std::endl;
+            
+                    //////////////////////////// forward feed end
             if (train)
             {
-                // printout intermediate result
-                int outval = actuation[OLayer].index_max();
-                std::cout << "Train output : " << endl << actuation[OLayer] << std::endl;
-                int minval= tgtval<outval?tgtval:outval;
-                int maxval= tgtval>outval?tgtval:outval;
-                string minc= tgtval == minval ? to_string(minval)+string("A"):to_string(minval)+string("O");
-                string maxc= tgtval == maxval ? to_string(maxval)+"A":to_string(maxval)+"O";
-                if (minval==maxval)
-                   minc="*"+to_string(minval); // correct
-                for (int z = 0; z < minval; z++)
-                    cout << "         ";
-                cout << "       " << minc;  
-                for (int z = 0; z < maxval - minval-1; z++)
-                    cout << "         ";
-                if (minval != maxval)
-                    cout << "       " << maxc;  // expected
-                cout << endl;
-                if (backprop(tgt))
-                         break;
+                 // printout intermediate result
+                  int outval = actuation[OutputLayer].subvec(0,9).index_max();
+                  std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) << actuation[OutputLayer].subvec(0,9) << std::endl;
+                  // Below just figures out the order in which to print the "A"ctal result and "O"bjective result
+                  // (or "*" if correct) in the output line.
+                  // So tgtval is correct if lastval==firstval(they are indicies, and will be equal if tgtval==outval)
+                  int firstval= tgtval<outval?tgtval:outval;
+                  int lastval= tgtval>outval?tgtval:outval;
+                  string firststr= tgtval == firstval ? to_string(firstval)+string("T"):to_string(firstval)+string("O");
+                  string laststr= tgtval == lastval? to_string(lastval)+"T":to_string(lastval)+"O";
+                  if (firstval==lastval)
+                     firststr="*"+to_string(firstval); // correct
+                  for (int z1 = 0; z1 < firstval; z1++)
+                      cout << "         "; 
+                  cout << "       " << firststr;   
+                  for (int z1 = 0; z1 < lastval- firstval-1; z1++)  
+                      cout << "         "; 
+                  if (firstval!= lastval)
+                      cout << "       " << laststr;  // expected   
+                  cout << endl;      
+                backprop(tgt);
             }
         }
+
+
+
         if (!train)
         {
-            correct_num = tgt.index_max();
-            best_guess = actuation[OLayer].index_max();
+            correct_num = tgt.subvec(0,9).index_max();
+            best_guess = actuation[OutputLayer].subvec(0,9).index_max();
 
             if (best_guess == correct_num)
             {
@@ -347,104 +331,83 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
-        std::cout << "Final output : " << endl << actuation[OLayer] << std::endl;
-        for (int z=0;z<actuation[OLayer].index_max();z++)
+        std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint <<std::setprecision(2)<< actuation[OutputLayer].subvec(0,9) << std::endl;
+        for (int z1=0;z1<actuation[OutputLayer].subvec(0,9).index_max();z1++)
              cout << "         ";
         cout << "       ^" << endl;
-        std::cout << "Expec output : " << endl << tgt << std::endl;
-        
-                //////////////////////////// forward feed end
+        std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) << tgt.subvec(0,9) << std::endl;
+
     }
     if (!train)
     {
-         confusion_matrix << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl;
-         confusion_matrix << "Tested " << num_tested << " samples"<<endl;
-         for (int i=0;i<10;i++)
-             confusion_matrix  <<  "      "<< dec << std::setw(7) << i ;
-         confusion_matrix << "      Guessed" ;
-         double colsum[10]={0,0,0,0,0,0,0,0,0,0};
-         double rowsum[10]={0,0,0,0,0,0,0,0,0,0};
-         for (int i=0;i<10;i++)
+         cout << "Tested         " << num_tested << " samples"<<endl;
+         cout << "Tested Correct " << tot_correct << " samples"<<endl;
+         cout << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl;
+         for (int i=0;i<OUTPUT_LINES;i++)
+             cout  <<  "      "<< dec << std::setw(7) << i ;
+         cout << " <-- ANN chose" << endl;;
+         cout << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
+         double colsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
+         double rowsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
+         string blanks="                    ";
+         for (int i=0;i<OUTPUT_LINES;i++)
          {
-            confusion_matrix << endl  << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << i << " |  ";
-            for (int j=0;j<10;j++)
+            string correct_size=to_string(num_correct[i]);
+            cout << endl <<  setw(4)   << i << "  |";
+            for (int j=0;j<OUTPUT_LINES;j++)
             {
                 rowsum[i] +=  chosen_wrongly[i][j];
                 colsum[j] +=  chosen_wrongly[i][j];
-                confusion_matrix  << std::setw(7) << chosen_wrongly[i][j] <<  "      ";
+                if (i==j)
+                   cout  << std::setw(6) << "[" <<  num_correct[i] <<  "]" << blanks.substr(0, 5-correct_size.length()) << "|";
+                else
+                   cout  << std::setw(7) << chosen_wrongly[i][j] <<  "     |";
             }
             float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
-            confusion_matrix << "| " <<  setw(7)  <<rowsum[i] ;
-            confusion_matrix <<  setw(7)   <<"         " << pctg  <<  resetiosflags( ios::fixed  |ios::showpoint )<< "%";
+            cout << "  " <<  setw(7)  << std::setw(7) ;
+            cout.copyfmt(init);
+            cout <<rowsum[i] ;
+            cout <<  setw(7)   <<"     " <<  fixed << showpoint <<std::setprecision(2) <<pctg  <<   "%"<<endl;
+            cout.copyfmt(init);
+            cout << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
 
          }
-         confusion_matrix << endl;
-         confusion_matrix << "---------------------------------------------------------------------------------------------------------------------------------------" << endl << "     ";
-         for (int i=0;i<10;i++)
-             confusion_matrix  << dec << std::setw(7) << colsum[i] << "      ";
-         confusion_matrix << endl << "     ";
-         for (int i=0;i<10;i++)
+         cout << endl << "   ^   " ;
+         for (int i=0;i<OUTPUT_LINES;i++)
+             cout  << dec << std::setw(7) << colsum[i] << "      ";
+         cout << endl << "Target   ";
+         for (int i=0;i<OUTPUT_LINES;i++)
          {
              float pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
-            confusion_matrix << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << resetiosflags( ios::fixed | ios::showpoint )<< "%     ";
+            cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << "%     ";
+             cout.copyfmt(init);
          }
-         confusion_matrix << endl;
-         float totpctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         confusion_matrix << "Target " << endl << "Above percentages are of number total wrong (" << tot_wrong << ") out of total " << tot_correct+tot_wrong << " (ie " << 100- totpctg << "% of total tests)" << endl << endl << endl << endl << "Correct selections:" << endl;
-         for (int i=0;i<10;i++)
-             confusion_matrix  << dec << std::setw(7) << i << "      ";
-         confusion_matrix << endl;
-         for (int i=0;i<10;i++)
+         cout << endl << endl << endl << endl << endl << "Correct selections:" << endl;
+         for (int i=0;i<OUTPUT_LINES;i++)
+             cout  << dec << std::setw(7) << i << "      ";
+         cout << endl;
+         for (int i=0;i<OUTPUT_LINES;i++)
          {
-                confusion_matrix  << std::setw(7) << num_correct[i] <<  "      ";
+                cout  << std::setw(7) << num_correct[i] <<  "      ";
          }
-         confusion_matrix << endl << endl << "Incorrect selections:" << endl;
-         for (int i=0;i<10;i++)
-             confusion_matrix  << dec << std::setw(7) << i << "      ";
-         confusion_matrix << endl;
-         for (int i=0;i<10;i++)
+         cout << endl << endl << "Incorrect selections:" << endl;
+         for (int i=0;i<OUTPUT_LINES;i++)
+             cout  << dec << std::setw(7) << i << "      ";
+         cout << endl;
+         for (int i=0;i<OUTPUT_LINES;i++)
          {
-                confusion_matrix  << std::setw(7) << num_wrong[i] <<  "      ";
+                cout  << std::setw(7) << num_wrong[i] <<  "      ";
          }
-         confusion_matrix << endl << endl; 
-         confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
-         cout << confusion_matrix;
+         cout << endl << endl; 
+         float pctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
+         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<pctg << "%     " << endl << endl;
+         cout.copyfmt(init);
     }
                 
 }
-
-void save_weights(string hdr)
-{
-    ofstream oFile;
-    std::time_t result = std::time(nullptr);
-    string fname = hdr+string("_weights_") + to_string(result)+string(".txt");
-    cout << "Saving weights to file : " << fname << endl;
-    oFile.open(fname, ios::out);
-    if (hdr.substr(0,4)=="post")
-       oFile << confusion_matrix;
-    oFile << "NumberOfLayers=" << NumberOfLayers << endl;
-    for (int i=0; i< OLayer; i++)
-    {
-        
-        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
-        oFile << layer_weights[i] << endl;
-        oFile <<  "LayerBiases"<<i<< endl;
-#ifdef USE_BIASES
-        oFile << layer_biases[i] << endl;
-#else
-        oFile << "No layer biases are used" << endl;
-#endif
-    }
-    oFile << "Error Summary" << endl;
-    oFile << err_summary << endl;
-    oFile << "EndFile" << endl;
-    oFile.close();
-
-}
-
 int main (int argc, char *argv[])
 {
-    
+        init.copyfmt(cout);
         if (argc < 2)
         {
             NumberOfLayers=3;
@@ -492,96 +455,44 @@ int main (int argc, char *argv[])
                 }
              }
         }
-        OLayer = NumberOfLayers - 1;
+    OutputLayer = NumberOfLayers -1;
     unsigned char * trainlabels; 
     unsigned char * testlabels; 
     unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
     unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
-    auto StartTime = std::chrono::high_resolution_clock::now();
 
 ///////////////////////////////////////////////
 //
 //  CREATE ARRAY OF MATRICES AND VECTORS
 //  AND SET WEIGHTS TO RANDOM (0 < w < 1)
 //
-    input =  zeros< rowvec > ( nodes[0] );
-    actuation.push_back( input );
-    deltafn.push_back( input );
-    ftick.push_back( input );
-    for (int i = 0; i < OLayer; i++)
+    for (int i=0;i <= OutputLayer; i++)
     {
-         rowvec t =  ones< rowvec >( nodes[i+1] ); // network weights for each node + 1 node bias weight
-         rowvec r =  randu< rowvec >( nodes[i+1] ); // network weights for each node + 1 node bias weight
-          // initialise weights randomly between -0.5 and 0.5
-         mat tmpwgt1 = (2 * randu< mat >( nodes[i], nodes[i+1] ) - 1)/2; // network weights for each node + 1 node bias weight
-         mat zzzwgt2 =  zeros< mat >( nodes[i], nodes[i+1] ); // network weights for each node + 1 node bias weight
-         netin.push_back( t );   // size=nodes[i],1
-#ifdef USE_BIASES
-         layer_biases.push_back( r );   // size=nodes[i],1
-#endif
-         actuation.push_back( t ); // size= nodes[i],1
-         deltafn.push_back( t );
-//         theta.push_back( tmpwgt1  );
-         ftick.push_back( t );
-
-         layer_weights.push_back( tmpwgt1 );
-         new_layer_weights.push_back( zzzwgt2 );
-         weight_updates.push_back( zzzwgt2 );
+         netin.push_back({});   // size=nodes[i],1
+         actuation.push_back({}); // size= nodes[i],1
+         deltafn.push_back({});
+         ftick.push_back({});
+          if (i<OutputLayer)
+            tmpwgt = randu<mat>(nodes[i+1],nodes[i]+1); // network weights for each node + 1 node bias weight
+         layer_weights.push_back( tmpwgt );
+         new_layer_weights.push_back({});
+         weight_updates.push_back({});
     }
-   save_weights("initial_random_values"); 
+   
 /////////////////////////////////////////////// 
 //
 // TRAIN THE DATA
 //
-    cout << "Training on data started...." << endl;
-    auto StartTrainTime = std::chrono::high_resolution_clock::now();
     forward_feed(traindata, trainlabels, true, 60000);
-    auto EndTrainTime = std::chrono::high_resolution_clock::now();
-    save_weights("post_training_weights");
-    cout << "Training complete" << endl;
+   
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
 //
-    cout << "Testing of data started...." << endl;
-    auto StartTestTime = std::chrono::high_resolution_clock::now();
     forward_feed(testdata, testlabels, false, 10000);
-    auto EndTestTime = std::chrono::high_resolution_clock::now();
-    cout << "Testing complete" << endl;
-
-
-
-   auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
-   auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
-   auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
-
-
-
-
-    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
-    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
-    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
-
     
         delete[] traindata;
         delete[] trainlabels;
         delete[] testdata;
         delete[] testlabels;
-
-
-
-
-
-
-
-
-
-///////////////////////////////////////////////
-//
-// TRAIN THE DATA
-//
-///////////////////////////////////////////////
-//
-// TEST THE DATA
-//
 }
