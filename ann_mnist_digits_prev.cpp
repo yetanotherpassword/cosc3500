@@ -15,8 +15,9 @@
 #define DEFAULT_HIDDEN 30
 #define ETA_DEFAULT 0.5f
 
-
-
+#define SAMPLEFREQ 1000
+#define EPOCHS 512
+#define EPSILON 1E-04
 /*
  * ALLAN CAMPTON
  * COSC3500 Milestone 1 Serial Version
@@ -69,6 +70,7 @@ string fid = to_string(result);
     colvec vbias;
     ios init(NULL);
 stringstream confusion_matrix;
+rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 
 rowvec sigmoid( rowvec  & net)
 {
@@ -215,8 +217,11 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
-
-    print_an_image(&mptr[start], img_is_digit);
+    if ((seq+1) % SAMPLEFREQ ==0)
+    {
+       cout << "For sample :" << seq+1 << endl;
+       print_an_image(&mptr[start], img_is_digit);
+    }
 
     t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
     t(img_is_digit)=1;               // set the target 'bit'
@@ -224,9 +229,20 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
 }
 
-void backprop(rowvec tgt)
+int backprop(rowvec tgt, int y0)
 {
-    //    cout << "------------------------------------ BACK PROPAGATION" << endl;
+        double err = accu((tgt - actuation[OutputLayer]) %  (tgt - actuation[OutputLayer]))*0.5;
+        if (err < EPSILON)
+        {
+             int val=tgt.index_max();
+             if ( (y0+1) % SAMPLEFREQ == 0) 
+                cout << "---------------------------------- BACK PROPAGATION  sample=" << y0+1 <<" err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
+             err_summary(val) = err;
+             return 1;
+        }
+
+        if ( (y0+1) % SAMPLEFREQ == 0) 
+          cout << "------------------------------------ BACK PROPAGATION sample="<< y0+1 << endl;
         
         ftick[OutputLayer] = -actuation[OutputLayer] + 1;
         ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);  //element wise multiply
@@ -249,6 +265,7 @@ void backprop(rowvec tgt)
         {
            layer_weights[i] =  new_layer_weights[i];
         }
+        return 0;
 }
 
 void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
@@ -276,7 +293,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     if (train)
     {
        intype="TRAINING";
-       epochs=512;
+       epochs=EPOCHS;
     }
     else
     {
@@ -285,7 +302,8 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     }
     for (int y=0;y<samples;y++)
     {
-        cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
+        if ( (y+1) % SAMPLEFREQ == 0)
+           cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.subvec(0,9).index_max();
 
@@ -301,33 +319,40 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     
                 actuation[i+1] = sigmoid(netin[i]);
             }
-            std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << std::endl;
-            std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << std::endl;
+            if ( (y+1) % SAMPLEFREQ == 0)
+            {
+               std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl;
+               std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl;
+            }
             
                     //////////////////////////// forward feed end
             if (train)
             {
                  // printout intermediate result
                   int outval = actuation[OutputLayer].subvec(0,9).index_max();
-                  std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint  << actuation[OutputLayer].subvec(0,9) << std::endl;
+                  if ( (y+1) % SAMPLEFREQ == 0)
+                  {
+                      std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint  << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 << std::endl;
                   // Below just figures out the order in which to print the "A"ctal result and "O"bjective result
                   // (or "*" if correct) in the output line.
                   // So tgtval is correct if lastval==firstval(they are indicies, and will be equal if tgtval==outval)
-                  int firstval= tgtval<outval?tgtval:outval;
-                  int lastval= tgtval>outval?tgtval:outval;
-                  string firststr= tgtval == firstval ? to_string(firstval)+string("T"):to_string(firstval)+string("O");
-                  string laststr= tgtval == lastval? to_string(lastval)+"T":to_string(lastval)+"O";
-                  if (firstval==lastval)
-                     firststr="*"+to_string(firstval); // correct
-                  for (int z1 = 0; z1 < firstval; z1++)
-                      cout << "         "; 
-                  cout << "       " << firststr;   
-                  for (int z1 = 0; z1 < lastval- firstval-1; z1++)  
-                      cout << "         "; 
-                  if (firstval!= lastval)
-                      cout << "       " << laststr;  // expected   
-                  cout << endl;      
-                backprop(tgt);
+                     int firstval= tgtval<outval?tgtval:outval;
+                     int lastval= tgtval>outval?tgtval:outval;
+                     string firststr= tgtval == firstval ? to_string(firstval)+string("T"):to_string(firstval)+string("O");
+                     string laststr= tgtval == lastval? to_string(lastval)+"T":to_string(lastval)+"O";
+                     if (firstval==lastval)
+                        firststr="*"+to_string(firstval); // correct
+                     for (int z1 = 0; z1 < firstval; z1++)
+                         cout << "         "; 
+                     cout << "       " << firststr;   
+                     for (int z1 = 0; z1 < lastval- firstval-1; z1++)  
+                         cout << "         "; 
+                     if (firstval!= lastval)
+                         cout << "       " << laststr;  // expected   
+                     cout << endl;      
+                  }
+                  if (backprop(tgt, y) == 1)
+                     break;  // exit i/epoch loop and goto next sample (as error function is within limits for this tgt)
             }
         }
 
@@ -351,11 +376,14 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
-        std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << std::endl;
-        for (int z1=0;z1<actuation[OutputLayer].subvec(0,9).index_max();z1++)
+        if (!train ||  (y+1) % SAMPLEFREQ == 0)
+        {
+          std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl;
+          for (int z1=0;z1<actuation[OutputLayer].subvec(0,9).index_max();z1++)
              cout << "         ";
-        cout << "       ^" << endl;
-        std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << std::endl;
+          cout << "       ^" << endl;
+          std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl;
+        }
 
     }
     if (!train)
@@ -383,7 +411,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 else
                    confusion_matrix  << std::setw(7) << chosen_wrongly[i][j] <<  "     |";
             }
-            float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
+             float pctg=0;
+             if (tot_wrong!=0)
+                  pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
             confusion_matrix << "  " <<  setw(7)  << std::setw(7) ;
             confusion_matrix.copyfmt(init);
             confusion_matrix <<rowsum[i] ;
@@ -398,7 +428,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          confusion_matrix << endl << "Target   ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
-             float pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
+             float pctg=0;
+             if (tot_wrong!=0)
+                pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
             confusion_matrix << dec <<  setw(7) << fixed << showpoint <<  pctg  << "%     ";
              confusion_matrix.copyfmt(init);
          }
@@ -448,6 +480,10 @@ void save_weights(string hdr)
         oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
         oFile << layer_weights[i] << endl;
     }
+    oFile << "Error Summary" << endl;
+
+    oFile << err_summary << endl;
+
     oFile << "EndFile" << endl;
     oFile.close();
 
@@ -542,41 +578,6 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
     auto StartTime = std::chrono::high_resolution_clock::now();
 
- ///////////////////////////////////////////////
- // //
- // @@ -607,87 +534,16 @@ int main (int argc, char *argv[])
- //  //
- //   // TRAIN THE DATA
- //    //
- //    -    cout << "Training on data started...." << endl;
- //    -    auto StartTrainTime = std::chrono::high_resolution_clock::now();
- //         forward_feed(traindata, trainlabels, true, 60000);
- //         -    auto EndTrainTime = std::chrono::high_resolution_clock::now();
- //              save_weights("post_training_weights");
- //              -    cout << "Training complete" << endl;
- //               ///////////////////////////////////////////////
- //                //
- //                 // TEST THE DATA
- //                  //
- //                  -    cout << "Testing of data started...." << endl;
- //                  -    auto StartTestTime = std::chrono::high_resolution_clock::now();
- //                       forward_feed(testdata, testlabels, false, 10000);
- //                       -    auto EndTestTime = std::chrono::high_resolution_clock::now();
- //                       -    cout << "Testing complete" << endl;
- //                       -
- //                       -
- //                       -
- //                       -   auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
- //                       -   auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
- //                       -   auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
- //                       -
- //                       -
- //                       -
- //                       -
- //                       -    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
- //                       -    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
- //                       -    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
- //
 ///////////////////////////////////////////////
 //
 //  CREATE ARRAY OF MATRICES AND VECTORS
@@ -603,7 +604,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     auto StartTrainTime = std::chrono::high_resolution_clock::now();
     cout << "Training on data started...." << endl;
 
-    forward_feed(traindata, trainlabels, true, 60000);
+    forward_feed(traindata, trainlabels, true, 60);
     auto EndTrainTime = std::chrono::high_resolution_clock::now();
 
     cout << "Training complete" << endl;
@@ -614,7 +615,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     cout << "Testing of data started...." << endl;
     auto StartTestTime = std::chrono::high_resolution_clock::now();
 
-    forward_feed(testdata, testlabels, false, 10000);
+    forward_feed(testdata, testlabels, false, 10);
 
      auto EndTestTime = std::chrono::high_resolution_clock::now();
 
