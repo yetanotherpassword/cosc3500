@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <cmath>
 #include <armadillo>
+#include <boost/algorithm/string.hpp>
 
 #undef DEBUGON
 
@@ -50,6 +51,8 @@ using namespace arma;
 using namespace std;
 
 
+std::time_t result = std::time(nullptr);
+string fid = to_string(result);
     unsigned int NumberOfLayers;
     unsigned int OutputLayer;
     unsigned int * nodes;
@@ -65,6 +68,7 @@ using namespace std;
     mat tmpwgt; 
     colvec vbias;
     ios init(NULL);
+stringstream confusion_matrix;
 
 rowvec sigmoid( rowvec  & net)
 {
@@ -222,7 +226,7 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
 void backprop(rowvec tgt)
 {
-        cout << "------------------------------------ BACK PROPAGATION" << endl;
+    //    cout << "------------------------------------ BACK PROPAGATION" << endl;
         
         ftick[OutputLayer] = -actuation[OutputLayer] + 1;
         ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);  //element wise multiply
@@ -272,7 +276,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     if (train)
     {
        intype="TRAINING";
-       epochs=50;
+       epochs=512;
     }
     else
     {
@@ -284,8 +288,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.subvec(0,9).index_max();
-if (tgtval>9)
-  exit (3);
+
         for (int e=0;e<epochs;e++)
         {
             for (int i=0;i<OutputLayer;i++)  // only n-1 transitions between n layers
@@ -298,15 +301,15 @@ if (tgtval>9)
     
                 actuation[i+1] = sigmoid(netin[i]);
             }
-            std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint <<std::setprecision(2) << actuation[OutputLayer].subvec(0,9) << std::endl;
-            std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) << tgt.subvec(0,9) << std::endl;
+            std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << std::endl;
+            std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << std::endl;
             
                     //////////////////////////// forward feed end
             if (train)
             {
                  // printout intermediate result
                   int outval = actuation[OutputLayer].subvec(0,9).index_max();
-                  std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) << actuation[OutputLayer].subvec(0,9) << std::endl;
+                  std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint  << actuation[OutputLayer].subvec(0,9) << std::endl;
                   // Below just figures out the order in which to print the "A"ctal result and "O"bjective result
                   // (or "*" if correct) in the output line.
                   // So tgtval is correct if lastval==firstval(they are indicies, and will be equal if tgtval==outval)
@@ -348,85 +351,118 @@ if (tgtval>9)
             }
             num_tested++;
         }
-        std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint <<std::setprecision(2)<< actuation[OutputLayer].subvec(0,9) << std::endl;
+        std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << std::endl;
         for (int z1=0;z1<actuation[OutputLayer].subvec(0,9).index_max();z1++)
              cout << "         ";
         cout << "       ^" << endl;
-        std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) << tgt.subvec(0,9) << std::endl;
+        std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << std::endl;
 
     }
     if (!train)
     {
-         cout << "Tested         " << num_tested << " samples"<<endl;
-         cout << "Tested Correct " << tot_correct << " samples"<<endl;
-         cout << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl << "  ";
+         confusion_matrix << "Tested         " << num_tested << " samples"<<endl;
+         confusion_matrix << "Tested Correct " << tot_correct << " samples"<<endl;
+         confusion_matrix << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl << "  ";
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  <<  "     "<< dec << std::setw(6) << "'" <<i << "'";
-         cout << " <-- ANN chose" << endl;;
-         cout << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
+             confusion_matrix  <<  "     "<< dec << std::setw(6) << "'" <<i << "'";
+         confusion_matrix << " <-- ANN chose" << endl;;
+         confusion_matrix << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
          double colsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
          double rowsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
          string blanks="                    ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
             string correct_size=to_string(num_correct[i]);
-            cout << endl <<  setw(4)   << i << "  |";
+            confusion_matrix << endl <<  setw(4)   << i << "  |";
             for (int j=0;j<OUTPUT_LINES;j++)
             {
                 rowsum[i] +=  chosen_wrongly[i][j];
                 colsum[j] +=  chosen_wrongly[i][j];
                 if (i==j)
-                   cout  << std::setw(6) << "[" <<  num_correct[i] <<  "]" << blanks.substr(0, 5-correct_size.length()) << "|";
+                   confusion_matrix  << std::setw(6) << "[" <<  num_correct[i] <<  "]" << blanks.substr(0, 5-correct_size.length()) << "|";
                 else
-                   cout  << std::setw(7) << chosen_wrongly[i][j] <<  "     |";
+                   confusion_matrix  << std::setw(7) << chosen_wrongly[i][j] <<  "     |";
             }
             float pctg=(float)(rowsum[i])/ (float) (tot_wrong) * 100.0f;
-            cout << "  " <<  setw(7)  << std::setw(7) ;
-            cout.copyfmt(init);
-            cout <<rowsum[i] ;
-            cout <<  setw(7)   <<"     " <<  fixed << showpoint <<std::setprecision(2) <<pctg  <<   "%"<<endl;
-            cout.copyfmt(init);
-            cout << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
+            confusion_matrix << "  " <<  setw(7)  << std::setw(7) ;
+            confusion_matrix.copyfmt(init);
+            confusion_matrix <<rowsum[i] ;
+            confusion_matrix <<  setw(7)   <<"     " <<  fixed << showpoint <<pctg  <<   "%"<<endl;
+            confusion_matrix.copyfmt(init);
+            confusion_matrix << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
 
          }
-         cout << endl << "   ^   " ;
+         confusion_matrix << endl << "   ^   " ;
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  << dec << std::setw(7) << colsum[i] << "      ";
-         cout << endl << "Target   ";
+             confusion_matrix  << dec << std::setw(7) << colsum[i] << "      ";
+         confusion_matrix << endl << "Target   ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
              float pctg=(float)(colsum[i])/ (float) (tot_wrong) * 100.0f;
-            cout << dec <<  setw(7) << fixed << showpoint << setprecision(2) << pctg  << "%     ";
-             cout.copyfmt(init);
+            confusion_matrix << dec <<  setw(7) << fixed << showpoint <<  pctg  << "%     ";
+             confusion_matrix.copyfmt(init);
          }
-         cout << endl << endl << endl << endl << endl << "Correct selections:" << endl;
-         cout << "       ";
+         confusion_matrix << endl << endl << endl << endl << endl << "Correct selections:" << endl;
+         confusion_matrix << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  << dec << std::setw(6) << "'" << i << "'     ";
-         cout << endl << "       ";
+             confusion_matrix  << dec << std::setw(6) << "'" << i << "'     ";
+         confusion_matrix << endl << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
-                cout  << std::setw(7) << num_correct[i] <<  "      ";
+                confusion_matrix  << std::setw(7) << num_correct[i] <<  "      ";
          }
-         cout << endl << endl << "Incorrect selections:" << endl;
-         cout << "       ";
+         confusion_matrix << endl << endl << "Incorrect selections:" << endl;
+         confusion_matrix << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  << dec << std::setw(6) << "'" << i << "'     ";
-         cout << endl << "       ";
+             confusion_matrix  << dec << std::setw(6) << "'" << i << "'     ";
+         confusion_matrix << endl << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
-                cout  << std::setw(7) << num_wrong[i] <<  "      ";
+                confusion_matrix  << std::setw(7) << num_wrong[i] <<  "      ";
          }
-         cout << endl << endl; 
+         confusion_matrix << endl << endl; 
          float pctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         cout << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<pctg << "%     " << endl << endl;
+         confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint  <<pctg << "%     " << endl << endl;
+         cout << confusion_matrix.str();
+         confusion_matrix.copyfmt(init);
          cout.copyfmt(init);
     }
                 
 }
+
+
+
+
+void save_weights(string hdr)
+{
+    ofstream oFile;
+    string fname = hdr+string("_weights_") + fid +string(".txt");
+    cout << "Saving weights to file : " << fname << endl;
+    oFile.open(fname, ios::out);
+    if (hdr.substr(0,4)=="post")
+       oFile << confusion_matrix.str();
+    oFile << "NumberOfLayers=" << NumberOfLayers << endl;
+    for (int i=0; i< OutputLayer; i++)
+    {
+
+        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
+        oFile << layer_weights[i] << endl;
+    }
+    oFile << "EndFile" << endl;
+    oFile.close();
+
+}
+
+
+
 int main (int argc, char *argv[])
 {
-cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  Build done on " << string(__DATE__) << " at time " << string(__TIME__) << endl;
+   extern char **environ;
+   string hname="";
+
+    vector<string> strs;
+    string bldver = string(__DATE__) + " at time " + string(__TIME__);
+cout << "--------------------------------  Build done on " << bldver << endl;
         init.copyfmt(cout);
         if (argc < 2)
         {
@@ -475,12 +511,72 @@ cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  Build done on " << string(__DATE__) <
                 }
              }
         }
+
+    // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
+    for(char **current = environ; *current; current++) {
+        string tmp = *current;
+        boost::split(strs, tmp, boost::is_any_of("="));
+        if ((strs[0] == "SLURM_JOBID") || (strs[0] == "SLURM_JOB_ID"))
+        {
+           if (strs[1].length() > 0)
+           {
+             fid = strs[1];
+           }
+        }
+        else if (strs[0] == "HOSTNAME")
+        {
+           if (strs[1].length() > 0)
+           {
+             hname = strs[1];
+           }
+        }
+    }
+
+
+
+
     OutputLayer = NumberOfLayers -1;
     unsigned char * trainlabels; 
     unsigned char * testlabels; 
     unsigned char * traindata = load_file("train-images-idx3-ubyte", "train-labels-idx1-ubyte", &trainlabels);
     unsigned char * testdata = load_file("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte", &testlabels);
+    auto StartTime = std::chrono::high_resolution_clock::now();
 
+ ///////////////////////////////////////////////
+ // //
+ // @@ -607,87 +534,16 @@ int main (int argc, char *argv[])
+ //  //
+ //   // TRAIN THE DATA
+ //    //
+ //    -    cout << "Training on data started...." << endl;
+ //    -    auto StartTrainTime = std::chrono::high_resolution_clock::now();
+ //         forward_feed(traindata, trainlabels, true, 60000);
+ //         -    auto EndTrainTime = std::chrono::high_resolution_clock::now();
+ //              save_weights("post_training_weights");
+ //              -    cout << "Training complete" << endl;
+ //               ///////////////////////////////////////////////
+ //                //
+ //                 // TEST THE DATA
+ //                  //
+ //                  -    cout << "Testing of data started...." << endl;
+ //                  -    auto StartTestTime = std::chrono::high_resolution_clock::now();
+ //                       forward_feed(testdata, testlabels, false, 10000);
+ //                       -    auto EndTestTime = std::chrono::high_resolution_clock::now();
+ //                       -    cout << "Testing complete" << endl;
+ //                       -
+ //                       -
+ //                       -
+ //                       -   auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
+ //                       -   auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
+ //                       -   auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
+ //                       -
+ //                       -
+ //                       -
+ //                       -
+ //                       -    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
+ //                       -    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
+ //                       -    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
+ //
 ///////////////////////////////////////////////
 //
 //  CREATE ARRAY OF MATRICES AND VECTORS
@@ -498,19 +594,46 @@ cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  Build done on " << string(__DATE__) <
          new_layer_weights.push_back({});
          weight_updates.push_back({});
     }
+    save_weights("initial_random_values");
    
 /////////////////////////////////////////////// 
 //
 // TRAIN THE DATA
 //
+    auto StartTrainTime = std::chrono::high_resolution_clock::now();
+    cout << "Training on data started...." << endl;
+
     forward_feed(traindata, trainlabels, true, 60000);
-   
+    auto EndTrainTime = std::chrono::high_resolution_clock::now();
+
+    cout << "Training complete" << endl;
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
 //
+    cout << "Testing of data started...." << endl;
+    auto StartTestTime = std::chrono::high_resolution_clock::now();
+
     forward_feed(testdata, testlabels, false, 10000);
-    
+
+     auto EndTestTime = std::chrono::high_resolution_clock::now();
+
+    cout << "Testing complete" << endl;
+
+   auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
+   auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
+   auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
+ 
+    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
+    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
+    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
+
+    confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl; 
+    confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
+    confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
+    confusion_matrix << "Run on node : " << hname << endl;
+    confusion_matrix << "Build ver: " << bldver<<endl;
+    save_weights("post_training_weights");
         delete[] traindata;
         delete[] trainlabels;
         delete[] testdata;
