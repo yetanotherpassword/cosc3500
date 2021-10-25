@@ -234,7 +234,7 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 int backprop(rowvec tgt, int y0)
 {
         double err = accu((tgt - actuation[OutputLayer]) %  (tgt - actuation[OutputLayer]))*0.5;
-        if (err < EPSILON)
+        if (abs(err) < EPSILON)
         {
              int val=tgt.index_max();
              if ( (y0+1) % SAMPLEFREQ == 0) 
@@ -637,7 +637,8 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl; 
     confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
     confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
-    confusion_matrix << "Run on node : " << hname << endl;
+    confusion_matrix << "Epsilon  : " << EPSILON << endl;
+    confusion_matrix << "Eta      : " << eta << endl;
     confusion_matrix << "Build ver: " << bldver<<endl;
     save_weights("post_training_weights");
         delete[] traindata;
