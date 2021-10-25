@@ -602,9 +602,9 @@ cout << "--------------------------------  Build done on " << bldver << endl;
 // TRAIN THE DATA
 //
     auto StartTrainTime = std::chrono::high_resolution_clock::now();
-    cout << "Training on data started...." << endl;
+    cout << "Training on data started (epochs=" << EPOCHS << ")...." << endl;
 
-    forward_feed(traindata, trainlabels, true, 60);
+    forward_feed(traindata, trainlabels, true, 60000);
     auto EndTrainTime = std::chrono::high_resolution_clock::now();
 
     cout << "Training complete" << endl;
@@ -615,7 +615,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     cout << "Testing of data started...." << endl;
     auto StartTestTime = std::chrono::high_resolution_clock::now();
 
-    forward_feed(testdata, testlabels, false, 10);
+    forward_feed(testdata, testlabels, false, 10000);
 
      auto EndTestTime = std::chrono::high_resolution_clock::now();
 
