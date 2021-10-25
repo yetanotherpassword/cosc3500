@@ -78,7 +78,7 @@ rowvec sigmoid( rowvec  & net)
 //
 // DEBUGGING ROUTINES
 //
-void print_an_image(unsigned char * c, int i)
+void print_an_image_vals(unsigned char * c, int i)
 {
      cout << "This is a : " << i << endl;
      for (int i=0;i<INPUT_LINES;i++)
@@ -86,6 +86,23 @@ void print_an_image(unsigned char * c, int i)
        if (i%MATRIX_SIDE==0)
          cout << endl;
        cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " ";
+     }
+     cout << endl;
+}
+   
+void print_an_image(unsigned char * c, int i)
+{
+     cout << "This is a : " << i << endl;
+     for (int i=0;i<INPUT_LINES;i++)
+     {
+       if (i%MATRIX_SIDE==0)
+         cout << endl;
+       if (c[i]==0)
+          cout  << "  ";
+       else if (c[i]<128)
+          cout << "xx";
+       else
+          cout << "XX";
      }
      cout << endl;
 }
@@ -195,7 +212,7 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
     int img_is_digit=(int) lp[8+seq];
 
-//    print_an_image(&mptr[start], img_is_digit);
+    print_an_image(&mptr[start], img_is_digit);
 
     t=zeros<rowvec>(OUTPUT_LINES+1); // create the target vector (plus one for 'bias' bit)
     t(img_is_digit)=1;               // set the target 'bit'
@@ -213,10 +230,10 @@ void backprop(rowvec tgt)
         deltafn[OutputLayer].shed_col(deltafn[OutputLayer].n_cols-1);
         for (int i=OutputLayer-1;i>=0;i--)
         {
-cout << " For " << i+1 << " layer deltafn=("<< deltafn[i+1].n_cols<<","<< deltafn[i+1].n_rows<<") * actuation("<<actuation[i].n_rows<<","<<actuation[i].n_cols<<")"<< endl;
+//cout << " For " << i+1 << " layer deltafn=("<< deltafn[i+1].n_cols<<","<< deltafn[i+1].n_rows<<") * actuation("<<actuation[i].n_rows<<","<<actuation[i].n_cols<<")"<< endl;
             weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
-cout << " For " << i << " to " << i+1<< " layer weights=("<< new_layer_weights[i].n_rows<<","<< deltafn[i+1].n_cols<<") "<<endl;
+//cout << " For " << i << " to " << i+1<< " layer weights=("<< new_layer_weights[i].n_rows<<","<< deltafn[i+1].n_cols<<") "<<endl;
              
             ftick[i] = -actuation[i] + 1;
             ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
@@ -342,9 +359,9 @@ if (tgtval>9)
     {
          cout << "Tested         " << num_tested << " samples"<<endl;
          cout << "Tested Correct " << tot_correct << " samples"<<endl;
-         cout << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl;
+         cout << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl << "  ";
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  <<  "      "<< dec << std::setw(7) << i ;
+             cout  <<  "     "<< dec << std::setw(6) << "'" <<i << "'";
          cout << " <-- ANN chose" << endl;;
          cout << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
          double colsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
@@ -383,17 +400,19 @@ if (tgtval>9)
              cout.copyfmt(init);
          }
          cout << endl << endl << endl << endl << endl << "Correct selections:" << endl;
+         cout << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  << dec << std::setw(7) << i << "      ";
-         cout << endl;
+             cout  << dec << std::setw(6) << "'" << i << "'     ";
+         cout << endl << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
                 cout  << std::setw(7) << num_correct[i] <<  "      ";
          }
          cout << endl << endl << "Incorrect selections:" << endl;
+         cout << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
-             cout  << dec << std::setw(7) << i << "      ";
-         cout << endl;
+             cout  << dec << std::setw(6) << "'" << i << "'     ";
+         cout << endl << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
          {
                 cout  << std::setw(7) << num_wrong[i] <<  "      ";
