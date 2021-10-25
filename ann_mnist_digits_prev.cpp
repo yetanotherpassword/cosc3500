@@ -426,6 +426,7 @@ if (tgtval>9)
 }
 int main (int argc, char *argv[])
 {
+cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  Build done on " << string(__DATE__) << " at time " << string(__TIME__) << endl;
         init.copyfmt(cout);
         if (argc < 2)
         {
