@@ -18,6 +18,8 @@
 #define SAMPLEFREQ 1000
 #define EPOCHS 512
 #define EPSILON 1E-04
+#define TRAININGSAMPLES 60000
+#define TESTINGSAMPLES 10000
 /*
  * ALLAN CAMPTON
  * COSC3500 Milestone 1 Serial Version
@@ -604,7 +606,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     auto StartTrainTime = std::chrono::high_resolution_clock::now();
     cout << "Training on data started (epochs=" << EPOCHS << ")...." << endl;
 
-    forward_feed(traindata, trainlabels, true, 60000);
+    forward_feed(traindata, trainlabels, true, TRAININGSAMPLES);
     auto EndTrainTime = std::chrono::high_resolution_clock::now();
 
     cout << "Training complete" << endl;
@@ -615,7 +617,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     cout << "Testing of data started...." << endl;
     auto StartTestTime = std::chrono::high_resolution_clock::now();
 
-    forward_feed(testdata, testlabels, false, 10000);
+    forward_feed(testdata, testlabels, false, TESTINGSAMPLES);
 
      auto EndTestTime = std::chrono::high_resolution_clock::now();
 
@@ -629,6 +631,9 @@ cout << "--------------------------------  Build done on " << bldver << endl;
     cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
     cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
 
+    confusion_matrix << "Epochs in Training : " << EPOCHS << endl;
+    confusion_matrix << "Training Samples   : " << TRAININGSAMPLES << endl;
+    confusion_matrix << "Testing Samples    : " << TESTINGSAMPLES << endl;
     confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl; 
     confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
     confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
