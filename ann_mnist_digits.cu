@@ -96,23 +96,23 @@ rowvec sigmoid( rowvec  & net)
 //
 void print_an_image_vals(unsigned char * c, int i)
 {
-     cout << "This is a : " << i << endl;
+     cout << "This is a : " << i << endl << flush;
      for (int i=0;i<INPUT_LINES;i++)
      {
        if (i%MATRIX_SIDE==0)
-         cout << endl;
+         cout << endl << flush;
        cout  << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << dec << " ";
      }
-     cout << endl;
+     cout << endl << flush;
 }
    
 void print_an_image(unsigned char * c, int i)
 {
-     cout << "This is a : " << i << endl;
+     cout << "This is a : " << i << endl << flush;
      for (int i=0;i<INPUT_LINES;i++)
      {
        if (i%MATRIX_SIDE==0)
-         cout << endl;
+         cout << endl << flush;
        if (c[i]==0)
           cout  << "  ";
        else if (c[i]<128)
@@ -120,7 +120,7 @@ void print_an_image(unsigned char * c, int i)
        else
           cout << "XX";
      }
-     cout << endl;
+     cout << endl << flush;
 }
    
 
@@ -129,22 +129,22 @@ void print_images(unsigned char * c,  int size)
     for (int i=IMAGE_OFFSET;i<size;i++)
     {
        if (((i-IMAGE_OFFSET)%MATRIX_SIDE)==0)
-           cout << endl;
+           cout << endl << flush;
        if (((i-IMAGE_OFFSET)%INPUT_LINES)==0)
-           cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl;
+           cout << endl << "Image : " << dec << ((i-IMAGE_OFFSET)/INPUT_LINES)+1 << endl << flush;
        cout << hex << std::setfill('0') << std::setw(2) << (unsigned int)c[i] << " ";
     }
 }
 
 void outp(mat m, string s)
 {
-   cout << "matrix:" << s << " rows=" << m.n_rows <<   " cols=" << m.n_cols << endl;
+   cout << "matrix:" << s << " rows=" << m.n_rows <<   " cols=" << m.n_cols << endl << flush;
 
 }
 
 void outp(rowvec v, string s)
 {
-   cout << "vector:" << s << " rows=" << v.n_rows <<   " cols=" << v.n_cols << endl;
+   cout << "vector:" << s << " rows=" << v.n_rows <<   " cols=" << v.n_cols << endl << flush;
 
 }
 //
@@ -157,18 +157,18 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
     ifstream inFile;
     streampos size;
 
-    cout << "Using file '" << filename << "'" << endl;
+    cout << "Using file '" << filename << "'" << endl << flush;
 //
 // Load MNIST DIGIT IMAGES
 //
     inFile.open(filename, ios::in|ios::binary|ios::ate);
     if (!inFile) {
-        cout << "Unable to open file '" << filename << "'" << endl;
+        cout << "Unable to open file '" << filename << "'" << endl << flush;
         exit(1); // terminate with error
     }
     else
     {
-       cout << "OK opened '" << filename << "' Successfully" << endl;
+       cout << "OK opened '" << filename << "' Successfully" << endl << flush;
     }
 
     if (inFile.is_open())
@@ -179,7 +179,7 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
         inFile.read ((char *)memblock, size);
         inFile.close();
 
-        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl;
+        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl << flush;
          //print_images(memblock, size);
  
     }
@@ -189,12 +189,12 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
 //
     inFile.open(labels, ios::in|ios::binary|ios::ate);
     if (!inFile) {
-        cout << "Unable to open file '" << labels << "'" << endl;
+        cout << "Unable to open file '" << labels << "'" << endl << flush;
         exit(1); // terminate with error
     }
     else
     {
-       cout << "OK opened '" << labels << "' Successfully" << endl;
+       cout << "OK opened '" << labels << "' Successfully" << endl << flush;
     }
 
     if (inFile.is_open())
@@ -205,7 +205,7 @@ unsigned char * load_file(string filename, string labels, unsigned char * * labs
         inFile.read ((char *) *labs, size);
         inFile.close();
 
-        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl;
+        cout << "the entire file content is in memory, all " << size << " bytes of it" << endl << flush;
         // print_images(memblock, size);
  
     }
@@ -223,13 +223,13 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     {
         img(i) = ((double ) mptr[start+i])/greyval;
     }
-     //   cout << img << endl << "an image ************************" << endl;
+     //   cout << img << endl << "an image ************************" << endl << flush;
     img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
     if ((seq+1) % SAMPLEFREQ ==0)
     {
-       cout << "For sample :" << seq+1 << endl;
+       cout << "For sample :" << seq+1 << endl << flush;
        print_an_image(&mptr[start], img_is_digit);
     }
 
@@ -246,13 +246,13 @@ int backprop(rowvec tgt, int y0)
         {
              int val=tgt.index_max();
              if ( (y0+1) % SAMPLEFREQ == 0) 
-                cout << "---------------------------------- BACK PROPAGATION  sample=" << y0+1 <<" err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl;
+                cout << "---------------------------------- BACK PROPAGATION  sample=" << y0+1 <<" err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl << flush;
              err_summary(val) = err;
              return 1;
         }
 
         if ( (y0+1) % SAMPLEFREQ == 0) 
-          cout << "------------------------------------ BACK PROPAGATION sample="<< y0+1 << endl;
+          cout << "------------------------------------ BACK PROPAGATION sample="<< y0+1 << endl << flush;
         
         ftick[OutputLayer] = -actuation[OutputLayer] + 1;
         ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);  //element wise multiply
@@ -260,10 +260,10 @@ int backprop(rowvec tgt, int y0)
         deltafn[OutputLayer].shed_col(deltafn[OutputLayer].n_cols-1);
         for (int i=OutputLayer-1;i>=0;i--)
         {
-//cout << " For " << i+1 << " layer deltafn=("<< deltafn[i+1].n_cols<<","<< deltafn[i+1].n_rows<<") * actuation("<<actuation[i].n_rows<<","<<actuation[i].n_cols<<")"<< endl;
+//cout << " For " << i+1 << " layer deltafn=("<< deltafn[i+1].n_cols<<","<< deltafn[i+1].n_rows<<") * actuation("<<actuation[i].n_rows<<","<<actuation[i].n_cols<<")"<< endl << flush;
             weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
-//cout << " For " << i << " to " << i+1<< " layer weights=("<< new_layer_weights[i].n_rows<<","<< deltafn[i+1].n_cols<<") "<<endl;
+//cout << " For " << i << " to " << i+1<< " layer weights=("<< new_layer_weights[i].n_rows<<","<< deltafn[i+1].n_cols<<") "<<endl << flush;
              
             ftick[i] = -actuation[i] + 1;
             ftick[i] = ftick[i] % (actuation[i]);  //element wise multiply
@@ -287,7 +287,7 @@ void matrix_mult (double  * m2, double * vin2, double * vout2, int idx)
    int ml=me-ms;
    double tmp =0;
 
-cout << "Mult M (" << nodes[idx+1] << "," << nodes[idx]+1 << ") * V(" <<  nodes[idx] << ",1)" << endl;
+cout << "Mult M (" << nodes[idx+1] << "," << nodes[idx]+1 << ") * V(" <<  nodes[idx] << ",1)" << endl << flush;
    for (int i=0;i<ml;i++)
    {
         int vi = i % vl;
@@ -333,34 +333,34 @@ void deindex(int val, int lyr, int & row, int & col)
 int cnt=0;
 void checkError(cudaError_t e)
 {
-    std::cout << "Checking for error " << std::endl;
+    std::cout << "Checking for error " << std::endl << flush;
     if (e != cudaSuccess)
     {
         std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) << '\n';
         abort();
     }
-    std::cout << "No error " << ++cnt << std::endl;
+    std::cout << "No error " << ++cnt << std::endl << flush;
 }
 
 __global__
-void CUDA_MatrixVectorMultiply(int n, double* M, double* Y, const double* X)
+void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const double* X)
 {
 
-    double nd = (double) n;
+    //double nd = (double) nc;
     // blockDim is the number of threads in a block
     // gridDim is the number of blocks in the grid
     int xindex = blockIdx.x * blockDim.x + threadIdx.x;
     int yindex = blockIdx.y * blockDim.y + threadIdx.y;
     int xstride = blockDim.x * gridDim.x;
     int ystride = blockDim.y * gridDim.y;
-    for (int i = xindex; i < n; i+= xstride)
+    for (int i = xindex; i < nc; i+= xstride)
     {
         Y[i] = 0;
-        for (int j = yindex; j < n; j+= ystride)
+        for (int j = yindex; j < nr; j+= ystride)
         {
-             Y[i] += M[i * n + j] * X[j];
+             Y[i] += M[i * nc + j] * X[j];
         }
-        Y[i] = Y[i] / nd;
+     //   Y[i] = Y[i] / nc;
     }
 }
 
@@ -370,21 +370,24 @@ void CUDA_MatrixVectorMultiply(int n, double* M, double* Y, const double* X)
 //void MatrixVectorMultiply(double* Y, const double* X)
 void MatrixVectorMultiply(rowvec & n, rowvec & a, mat & m)
 {
-    int num=a.n_cols;
+    int mcols = m.n_cols;
+    int mrows = m.n_rows;
     // copy memory from host to device
     int   threadsPerBlock =64;
-    int   blocksPerGrid = (num + threadsPerBlock- 1) / threadsPerBlock;
+    int   blocksPerGrid = (mcols*mrows + threadsPerBlock- 1) / threadsPerBlock;
+  cout << "CUDA version, using " << threadsPerBlock << " threadsPerBlock and blocksPerGrid = " << blocksPerGrid <<endl << flush;
 
-   checkError(cudaMalloc(&LayerWeightsDevice, num * num * sizeof(double)));
-   checkError(cudaMalloc(&ActuationDevice, num * sizeof(double)));
-   checkError(cudaMalloc(&NetinDevice, num * sizeof(double)));
+   checkError(cudaMalloc(&LayerWeightsDevice, mcols * mrows * sizeof(double)));
+   checkError(cudaMalloc(&ActuationDevice, mcols * sizeof(double)));
+   checkError(cudaMalloc(&NetinDevice, mcols * sizeof(double)));
+cout << "actuation ("<< a.n_rows<<","<<a.n_cols<<") X layer_weights("<<m.n_cols<<","<<m.n_rows<<")" << endl << flush;
 
     //checkError(cudaMemcpy(xDevice, X, N * sizeof(double), cudaMemcpyHostToDevice));
-    checkError(cudaMemcpy(LayerWeightsDevice, m.memptr(), num * num * sizeof(double), cudaMemcpyHostToDevice));
-    checkError(cudaMemcpy(ActuationDevice, a.memptr(), num * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (num, LayerWeightsDevice, NetinDevice, ActuationDevice);
+    checkError(cudaMemcpy(LayerWeightsDevice, m.memptr(), mrows * mcols * sizeof(double), cudaMemcpyHostToDevice));
+    checkError(cudaMemcpy(ActuationDevice, a.memptr(), mcols * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
     checkError(cudaDeviceSynchronize());
-    checkError(cudaMemcpy(n.memptr(), NetinDevice, num * sizeof(double), cudaMemcpyDeviceToHost));
+    checkError(cudaMemcpy(n.memptr(), NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
 
    checkError(cudaFree(LayerWeightsDevice));
    checkError(cudaFree(ActuationDevice));
@@ -402,9 +405,9 @@ for (int y=0;y<l.n_cols;y++)
       //cout << netin[i](y,x) << " ";
       cout << q[y*l.n_rows+x]  << ",";
   }
-  cout << endl;
+  cout << endl << flush;
 }
-cout << "******************************** " << endl <<  layer_weights[i].t()  << endl;
+cout << "******************************** " << endl <<  layer_weights[i].t()  << endl << flush;
 exit(1);
 }
 #endif
@@ -444,7 +447,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     for (int y=0;y<samples;y++)
     {
         if ( (y+1) % SAMPLEFREQ == 0)
-           cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl;
+           cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl << flush;
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.subvec(0,9).index_max();
 
@@ -452,21 +455,24 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         {
             for (int i=0;i<OutputLayer;i++)  // only n-1 transitions between n layers
             {
-               // cout << "------------------------------------ All inputs into L" << i << endl;
+               // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
-                netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
+                netin[i] =  (actuation[i] * layer_weights[i].t()); ///actuation[i].n_cols;
+cout << "Netin1 = " << netin[i] << endl << flush;
+//cout << "actuation ("<< actuation[i].n_rows<<","<<actuation[i].n_cols<<") X layer_weights("<<layer_weights[i].n_cols<<","<<layer_weights[i].n_rows<<")" << endl << flush;
                 MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i]);
+cout << "Netin2 = " << netin[i] << endl << flush;
 //                matrix_mult(actuation2, layer_weights2, netin2, i); 
 //                vector_div(netin2, vec_start_idx[i+1]-vec_start_idx[i], i);
-                //cout << "------------------------------------ Net weighted sum into L" << i << endl;
-                //cout << "------------------------------------ Activation out of L" << i << endl;
+                //cout << "------------------------------------ Net weighted sum into L" << i << endl << flush;
+                //cout << "------------------------------------ Activation out of L" << i << endl << flush;
     
                 actuation[i+1] = sigmoid(netin[i]);
             }
             if ( (y+1) % SAMPLEFREQ == 0)
             {
-               std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl;
-               std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl;
+               std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl << flush;
+               std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl << flush;
             }
             
                     //////////////////////////// forward feed end
@@ -476,7 +482,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                   int outval = actuation[OutputLayer].subvec(0,9).index_max();
                   if ( (y+1) % SAMPLEFREQ == 0)
                   {
-                      std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint  << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 << std::endl;
+                      std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint  << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 << std::endl << flush;
                   // Below just figures out the order in which to print the "A"ctal result and "O"bjective result
                   // (or "*" if correct) in the output line.
                   // So tgtval is correct if lastval==firstval(they are indicies, and will be equal if tgtval==outval)
@@ -493,7 +499,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                          cout << "         "; 
                      if (firstval!= lastval)
                          cout << "       " << laststr;  // expected   
-                     cout << endl;      
+                     cout << endl << flush;      
                   }
                   if (backprop(tgt, y) == 1)
                      break;  // exit i/epoch loop and goto next sample (as error function is within limits for this tgt)
@@ -522,22 +528,22 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
         }
         if (!train ||  (y+1) % SAMPLEFREQ == 0)
         {
-          std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl;
+          std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl << flush;
           for (int z1=0;z1<actuation[OutputLayer].subvec(0,9).index_max();z1++)
              cout << "         ";
-          cout << "       ^" << endl;
-          std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl;
+          cout << "       ^" << endl << flush;
+          std::cout << "Expec output : " << endl <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl << flush;
         }
 
     }
     if (!train)
     {
-         confusion_matrix << "Tested         " << num_tested << " samples"<<endl;
-         confusion_matrix << "Tested Correct " << tot_correct << " samples"<<endl;
-         confusion_matrix << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl << "  ";
+         confusion_matrix << "Tested         " << num_tested << " samples"<<endl << flush;
+         confusion_matrix << "Tested Correct " << tot_correct << " samples"<<endl << flush;
+         confusion_matrix << "Tested Wrong   " << tot_wrong<< " samples"<<endl << endl << endl << "  " << flush;
          for (int i=0;i<OUTPUT_LINES;i++)
              confusion_matrix  <<  "     "<< dec << std::setw(6) << "'" <<i << "'";
-         confusion_matrix << " <-- ANN chose" << endl;;
+         confusion_matrix << " <-- ANN chose" << endl << flush;
          confusion_matrix << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
          double colsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
          double rowsum[OUTPUT_LINES]={0,0,0,0,0,0,0,0,0,0};
@@ -561,7 +567,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             confusion_matrix << "  " <<  setw(7)  << std::setw(7) ;
             confusion_matrix.copyfmt(init);
             confusion_matrix <<rowsum[i] ;
-            confusion_matrix <<  setw(7)   <<"     " <<  fixed << showpoint <<pctg  <<   "%"<<endl;
+            confusion_matrix <<  setw(7)   <<"     " <<  fixed << showpoint <<pctg  <<   "%"<<endl << flush;
             confusion_matrix.copyfmt(init);
             confusion_matrix << "-----------------------------------------------------------------------------------------------------------------------------------------" ;
 
@@ -578,7 +584,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             confusion_matrix << dec <<  setw(7) << fixed << showpoint <<  pctg  << "%     ";
              confusion_matrix.copyfmt(init);
          }
-         confusion_matrix << endl << endl << endl << endl << endl << "Correct selections:" << endl;
+         confusion_matrix << endl << endl << endl << endl << endl << "Correct selections:" << endl << flush;
          confusion_matrix << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
              confusion_matrix  << dec << std::setw(6) << "'" << i << "'     ";
@@ -587,7 +593,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          {
                 confusion_matrix  << std::setw(7) << num_correct[i] <<  "      ";
          }
-         confusion_matrix << endl << endl << "Incorrect selections:" << endl;
+         confusion_matrix << endl << endl << "Incorrect selections:" << endl << flush;
          confusion_matrix << "       ";
          for (int i=0;i<OUTPUT_LINES;i++)
              confusion_matrix  << dec << std::setw(6) << "'" << i << "'     ";
@@ -596,10 +602,10 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          {
                 confusion_matrix  << std::setw(7) << num_wrong[i] <<  "      ";
          }
-         confusion_matrix << endl << endl; 
+         confusion_matrix << endl << endl << flush; 
          float pctg=(float)(tot_correct)/ (float) (tot_correct+tot_wrong) * 100.0f;
-         confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint  <<pctg << "%     " << endl << endl;
-         cout << confusion_matrix.str();
+         confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint  <<pctg << "%     " << endl << endl << flush;
+         cout << confusion_matrix.str() << flush;
          confusion_matrix.copyfmt(init);
          cout.copyfmt(init);
     }
@@ -613,22 +619,22 @@ void save_weights(string hdr)
 {
     ofstream oFile;
     string fname = hdr+string("_weights_") + fid +string(".txt");
-    cout << "Saving weights to file : " << fname << endl;
+    cout << "Saving weights to file : " << fname << endl << flush;
     oFile.open(fname, ios::out);
     if (hdr.substr(0,4)=="post")
        oFile << confusion_matrix.str();
-    oFile << "NumberOfLayers=" << NumberOfLayers << endl;
+    oFile << "NumberOfLayers=" << NumberOfLayers << endl << flush;
     for (int i=0; i< OutputLayer; i++)
     {
 
-        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl;
-        oFile << layer_weights[i] << endl;
+        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl << flush;
+        oFile << layer_weights[i] << endl << flush;
     }
-    oFile << "Error Summary" << endl;
+    oFile << "Error Summary" << endl << flush;
 
-    oFile << err_summary << endl;
+    oFile << err_summary << endl << flush;
 
-    oFile << "EndFile" << endl;
+    oFile << "EndFile" << endl << flush;
     oFile.close();
 
 }
@@ -642,7 +648,7 @@ int main (int argc, char *argv[])
 
     vector<string> strs;
     string bldver = string(__DATE__) + " at time " + string(__TIME__);
-cout << "--------------------------------  Build done on " << bldver << endl;
+cout << "--------------------------------  Build done on " << bldver << endl << flush;
         init.copyfmt(cout);
         if (argc < 2)
         {
@@ -652,19 +658,19 @@ cout << "--------------------------------  Build done on " << bldver << endl;
             nodes[1]=DEFAULT_HIDDEN;
             nodes[2]=OUTPUT_LINES;
             eta = ETA_DEFAULT;
-            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl;
-            cout << "And ETA=" << eta << endl;;
+            cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl << flush;
+            cout << "And ETA=" << eta << endl << flush;;
         }
         else if (argc < 5)
         {
-             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl;
-             cout << "       Where ETA is the learning factor, &" << endl;
-             cout << "       Where number of parameters after ETA is the number of layers" << endl;
-             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl;
-             cout << "       And the parameters themselves are numbers, "<< endl;
-             cout << "       indicating the number of nodes in that layer." << endl;
-             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl;
-             cout << "       and is the default, if no params supplied." << endl;
+             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl << flush;
+             cout << "       Where ETA is the learning factor, &" << endl << flush;
+             cout << "       Where number of parameters after ETA is the number of layers" << endl << flush;
+             cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl << flush;
+             cout << "       And the parameters themselves are numbers, "<< endl << flush;
+             cout << "       indicating the number of nodes in that layer." << endl << flush;
+             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl << flush;
+             cout << "       and is the default, if no params supplied." << endl << flush;
              exit (1);
         }
         else
@@ -674,7 +680,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
              eta = stod(string(argv[1]));
              if (eta <= 0)
              {
-                   cout << "Error: ETA must be positive, usually less than 1" << endl;
+                   cout << "Error: ETA must be positive, usually less than 1" << endl << flush;
                    exit(1);
              }
              for (int i=2;i<argc;i++)
@@ -686,7 +692,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
                 }
                 else
                 {
-                   cout << "Error in parameter " << i << " - must be positive" << endl;
+                   cout << "Error in parameter " << i << " - must be positive" << endl << flush;
                    exit (1);
                 }
              }
@@ -776,42 +782,42 @@ cout << "--------------------------------  Build done on " << bldver << endl;
 // TRAIN THE DATA
 //
     auto StartTrainTime = std::chrono::high_resolution_clock::now();
-    cout << "Training on data started (epochs=" << EPOCHS << ")...." << endl;
+    cout << "Training on data started (epochs=" << EPOCHS << ")...." << endl << flush;
 
     forward_feed(traindata, trainlabels, true, TRAININGSAMPLES);
     auto EndTrainTime = std::chrono::high_resolution_clock::now();
 
-    cout << "Training complete" << endl;
+    cout << "Training complete" << endl << flush;
 /////////////////////////////////////////////// 
 //
 // TEST THE DATA
 //
-    cout << "Testing of data started...." << endl;
+    cout << "Testing of data started...." << endl << flush;
     auto StartTestTime = std::chrono::high_resolution_clock::now();
 
     forward_feed(testdata, testlabels, false, TESTINGSAMPLES);
 
      auto EndTestTime = std::chrono::high_resolution_clock::now();
 
-    cout << "Testing complete" << endl;
+    cout << "Testing complete" << endl << flush;
 
    auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTime);
    auto TrainTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTrainTime-StartTrainTime);
    auto TestTime =  std::chrono::duration_cast<std::chrono::microseconds>(EndTestTime-StartTestTime);
  
-    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl;
-    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
-    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
+    cout << "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl << flush;
+    cout << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl << flush;
+    cout << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl << flush;
 
-    confusion_matrix << "Epochs in Training : " << EPOCHS << endl;
-    confusion_matrix << "Training Samples   : " << TRAININGSAMPLES << endl;
-    confusion_matrix << "Testing Samples    : " << TESTINGSAMPLES << endl;
-    confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl; 
-    confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl;
-    confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl;
-    confusion_matrix << "Epsilon  : " << EPSILON << endl;
-    confusion_matrix << "Eta      : " << eta << endl;
-    confusion_matrix << "Build ver: " << bldver<<endl;
+    confusion_matrix << "Epochs in Training : " << EPOCHS << endl << flush;
+    confusion_matrix << "Training Samples   : " << TRAININGSAMPLES << endl << flush;
+    confusion_matrix << "Testing Samples    : " << TESTINGSAMPLES << endl << flush;
+    confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl << flush; 
+    confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl << flush;
+    confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl << flush;
+    confusion_matrix << "Epsilon  : " << EPSILON << endl << flush;
+    confusion_matrix << "Eta      : " << eta << endl << flush;
+    confusion_matrix << "Build ver: " << bldver<<endl << flush;
     save_weights("post_training_weights");
         delete[] traindata;
         delete[] trainlabels;
