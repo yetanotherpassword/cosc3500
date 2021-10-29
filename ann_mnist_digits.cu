@@ -748,6 +748,7 @@ cout << "--------------------------------  Build done on " << bldver << endl;
          weight_updates.push_back({});
     }
     save_weights("initial_random_values");
+#if 0
     netin2_size = netin2_size * sizeof(double);
     layer_weights2_size = layer_weights2_size * sizeof(double);
 
@@ -764,6 +765,9 @@ cout << "--------------------------------  Build done on " << bldver << endl;
 //              layer_weights2[lidx+k+j*nodes[i+1]]=layer_weights[i](j,k);
 
          }
+#endif
+
+
 /////////////////////////////////////////////// 
 //
 // TRAIN THE DATA
