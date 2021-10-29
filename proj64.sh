@@ -4,13 +4,17 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=0-10:00
-#SBATCH --mem-per-cpu=8000M
+#SBATCH --mem-per-cpu=4000M
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 date
-module load cuda/10.1 gcc
+locate libopenblas.so
+module load cuda
 echo $HOSTNAME
 lscpu
+locate libopenblas.so
+echo "---------------------------------------------------1"
+locate libopenblas.so
 echo "---------------------------------------------------1"
 echo ./ann_mnist_digits_cuda
-./ann_mnist_digits_cuda
+gdb ./ann_mnist_digits_cuda
