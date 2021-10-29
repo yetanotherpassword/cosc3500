@@ -330,13 +330,16 @@ void deindex(int val, int lyr, int & row, int & col)
    col = deval % (nodes[lyr]+1);
    row =  deval / (nodes[lyr]+1);
 }
+int cnt=0;
 void checkError(cudaError_t e)
 {
+    std::cout << "Checking for error " << std::endl;
     if (e != cudaSuccess)
     {
         std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) << '\n';
         abort();
     }
+    std::cout << "No error " << ++cnt << std::endl;
 }
 
 __global__
