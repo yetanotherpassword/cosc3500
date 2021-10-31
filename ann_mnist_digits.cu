@@ -7,7 +7,7 @@
 #include <boost/algorithm/string.hpp>
 
 #undef DEBUGON
-
+#define DEFTHREADS 8192
 #define ARMA_64BIT_WORD
 #define INPUT_LINES 784
 #define OUTPUT_LINES 10
@@ -51,7 +51,7 @@
 
 // requires armodillo (see above)
 
- 
+int thrds=DEFTHREADS; 
 using namespace arma;
 using namespace std;
 
@@ -227,7 +227,7 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
-    if ((seq+1) % SAMPLEFREQ ==0)
+    //if ((seq+1) % SAMPLEFREQ ==0)
     {
        cout << "For sample :" << seq+1 << endl << flush;
        print_an_image(&mptr[start], img_is_digit);
@@ -362,6 +362,7 @@ void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const doubl
         }
      //   Y[i] = Y[i] / nc;
     }
+     __syncthreads();
 }
 
 
@@ -372,14 +373,14 @@ void MatrixVectorMultiply(rowvec & n, rowvec & a, mat & m)
 {
     int mcols = m.n_cols;
     int mrows = m.n_rows;
+    int m_biggest = max(mcols, mrows);
+    double ret[1000];
+    //memset(&ret, 0, 1000*sizeof(double));
     // copy memory from host to device
-    int   threadsPerBlock =64;
-    int   blocksPerGrid = (mcols*mrows + threadsPerBlock- 1) / threadsPerBlock;
-  cout << "CUDA version, using " << threadsPerBlock << " threadsPerBlock and blocksPerGrid = " << blocksPerGrid <<endl << flush;
+    int   threadsPerBlock =thrds;
+    int   blocksPerGrid = (m_biggest + threadsPerBlock- 1) / threadsPerBlock;
+  cout << "CUDA version, using " << threadsPerBlock << " threadsPerBlock and blocksPerGrid = " << blocksPerGrid << " and m_biggest=" << m_biggest<<endl << flush;
 
-   checkError(cudaMalloc(&LayerWeightsDevice, mcols * mrows * sizeof(double)));
-   checkError(cudaMalloc(&ActuationDevice, mcols * sizeof(double)));
-   checkError(cudaMalloc(&NetinDevice, mcols * sizeof(double)));
 cout << "actuation ("<< a.n_rows<<","<<a.n_cols<<") X layer_weights("<<m.n_cols<<","<<m.n_rows<<")" << endl << flush;
 
     //checkError(cudaMemcpy(xDevice, X, N * sizeof(double), cudaMemcpyHostToDevice));
@@ -387,11 +388,12 @@ cout << "actuation ("<< a.n_rows<<","<<a.n_cols<<") X layer_weights("<<m.n_cols<
     checkError(cudaMemcpy(ActuationDevice, a.memptr(), mcols * sizeof(double), cudaMemcpyHostToDevice));
     CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
     checkError(cudaDeviceSynchronize());
-    checkError(cudaMemcpy(n.memptr(), NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
+    //checkError(cudaMemcpy(&ret, NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
+   // cout << "ret= ";
+   // for (int i=0;i<mcols;i++)
+    //  cout << ret[i] << " ";
+   // cout << endl << flush;
 
-   checkError(cudaFree(LayerWeightsDevice));
-   checkError(cudaFree(ActuationDevice));
-   checkError(cudaFree(NetinDevice));
 }
 
 #if 0
@@ -661,15 +663,15 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
             cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " << nodes[2]<<  "\" " << endl << flush;
             cout << "And ETA=" << eta << endl << flush;;
         }
-        else if (argc < 5)
+        else if (argc < 6)
         {
-             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT" << endl << flush;
+             cout << "Usage: " << argv[0] << " ETA IN H1 [H2 H3 ...] OUT THREADS" << endl << flush;
              cout << "       Where ETA is the learning factor, &" << endl << flush;
              cout << "       Where number of parameters after ETA is the number of layers" << endl << flush;
              cout << "       Must have a minimum of 3, i.e. IN H1 OUT" << endl << flush;
              cout << "       And the parameters themselves are numbers, "<< endl << flush;
              cout << "       indicating the number of nodes in that layer." << endl << flush;
-             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << "\" " << endl << flush;
+             cout << "       e.g. \"" << argv[0] <<  " "<< ETA_DEFAULT << " " << INPUT_LINES << " " << DEFAULT_HIDDEN << " " << OUTPUT_LINES << " " << DEFTHREADS << "\" " << endl << flush;
              cout << "       and is the default, if no params supplied." << endl << flush;
              exit (1);
         }
@@ -683,7 +685,7 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
                    cout << "Error: ETA must be positive, usually less than 1" << endl << flush;
                    exit(1);
              }
-             for (int i=2;i<argc;i++)
+             for (int i=2;i<argc-1;i++)
              {
                 int p = stoi(string(argv[i]));
                 if (p > 0)
@@ -696,6 +698,8 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
                    exit (1);
                 }
              }
+             thrds=stoi(argv[argc-1]);
+             cout << "Threads chosen is " << thrds << endl << flush;
         }
 
     // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
@@ -737,15 +741,19 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
     int layer_weights2_size = 0;
     vec_start_idx[0]=0;
     mat_start_idx[0]=0;
+    int max_mat=0;
+    int max_vec=0;
     for (int i=0;i <= OutputLayer; i++)
     {
          netin2_size += nodes[i];
          if (i<OutputLayer)
          {
+            max_mat=max(max_mat,  nodes[i+1]*(nodes[i]+1));
             layer_weights2_size += nodes[i+1]*(nodes[i]+1);
             vec_start_idx[i+1] = netin2_size;
             mat_start_idx[i+1] = layer_weights2_size;
          }
+         max_vec = max(max_vec, nodes[i]+1);
          netin.push_back({});   // size=nodes[i],1
          actuation.push_back({}); // size= nodes[i],1
          deltafn.push_back({});
@@ -757,6 +765,10 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
          weight_updates.push_back({});
     }
     save_weights("initial_random_values");
+   cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec << endl << flush;
+   checkError(cudaMalloc(&ActuationDevice, max_vec * sizeof(double)));
+   checkError(cudaMalloc(&NetinDevice, max_vec * sizeof(double)));
+   checkError(cudaMalloc(&LayerWeightsDevice, max_mat * sizeof(double)));
 #if 0
     netin2_size = netin2_size * sizeof(double);
     layer_weights2_size = layer_weights2_size * sizeof(double);
@@ -823,4 +835,7 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
         delete[] trainlabels;
         delete[] testdata;
         delete[] testlabels;
+   checkError(cudaFree(LayerWeightsDevice));
+   checkError(cudaFree(ActuationDevice));
+   checkError(cudaFree(NetinDevice));
 }
