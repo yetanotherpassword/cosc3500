@@ -64,6 +64,8 @@ string fid = to_string(result);
     unsigned int NumberOfLayers;
     unsigned int OutputLayer;
     unsigned int * nodes;
+    double * * netptrs;
+    double * nettemp;
     double eta;               // Learning factor
     vector<rowvec> netin;
     vector<rowvec> actuation;
@@ -85,7 +87,7 @@ rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
 rowvec sigmoid( rowvec  & net)
 {
    rowvec out = 1/(1+exp(-net));
-   out.insert_cols(out.n_cols, 1); // add bias signal (1) column
+   //out.insert_cols(out.n_cols, 1); // add bias signal (1) column
    out(out.n_cols-1)=1.0;          // add bias signal value
    return out;
 }
@@ -224,7 +226,7 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
         img(i) = ((double ) mptr[start+i])/greyval;
     }
      //   cout << img << endl << "an image ************************" << endl << flush;
-    img(INPUT_LINES)=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
+    img(nodes[0])=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
     //if ((seq+1) % SAMPLEFREQ ==0)
@@ -237,12 +239,20 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     t(img_is_digit)=1;               // set the target 'bit'
 
 }
-
+void test1 (rowvec t)
+{
+   cout << t << endl;
+}
 int backprop(rowvec tgt, int y0)
 {
 cout << "outputlyer="<<OutputLayer<< " actuation[OutputLayer].n_rows="<<actuation[OutputLayer].n_rows<<","<<actuation[OutputLayer].n_cols<< endl;
+cout <<  " actuation[0](" << actuation[0].n_rows << "," << actuation[0].n_cols << ")" <<endl;
 
-        double err = accu((tgt - actuation[OutputLayer]) %  (tgt - actuation[OutputLayer]))*0.5;
+        rowvec final = actuation[OutputLayer];
+        final.shed_col(nodes[OutputLayer]-1);
+        rowvec tgt0  = tgt;
+        tgt0.insert_cols(nodes[OutputLayer],1);
+        double err = accu((tgt - final) %  (tgt - final))*0.5;
         if (abs(err) < EPSILON)
         {
              int val=tgt.index_max();
@@ -254,17 +264,17 @@ cout << "outputlyer="<<OutputLayer<< " actuation[OutputLayer].n_rows="<<actuatio
 
         if ( (y0+1) % SAMPLEFREQ == 0) 
           cout << "------------------------------------ BACK PROPAGATION sample="<< y0+1 << endl << flush;
+cout <<  " actuation[0](" << actuation[0].n_rows << "," << actuation[0].n_cols << ")" <<endl;
         
         ftick[OutputLayer] = -actuation[OutputLayer] + 1;
         ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);  //element wise multiply
-        deltafn[OutputLayer]  =  (tgt - actuation[OutputLayer])%(ftick[OutputLayer]);
+        deltafn[OutputLayer]  =  (tgt0 - actuation[OutputLayer])%(ftick[OutputLayer]);
         //deltafn[OutputLayer].shed_col(deltafn[OutputLayer].n_cols-1);
         for (int i=OutputLayer-1;i>=0;i--)
         {
-cout << "i=" << i << "w(" <<  weight_updates[i].n_rows << "," <<  weight_updates[i].n_cols << ") d(" <<deltafn[i+1].n_cols << "," << deltafn[i+1].n_rows << ") a(" << actuation[i+1].n_rows << "," << actuation[i+1].n_cols << ")" <<endl;
-            colvec c=deltafn[i+1].t();
-cout << "i=" << i << "w(" <<  weight_updates[i].n_rows << "," <<  weight_updates[i].n_cols << ") c(" <<c.n_rows << "," << c.n_cols << ") a(" << actuation[i].n_rows << "," << actuation[i].n_cols << ")" <<endl;
-            weight_updates[i]  =  c * actuation[i];
+cout << "i=" << i << "w(" <<  weight_updates[i].n_rows << "," <<  weight_updates[i].n_cols << ") d(" <<deltafn[i+1].n_cols << "," << deltafn[i+1].n_rows << ") a(" << actuation[i].n_rows << "," << actuation[i].n_cols << ")" <<endl;
+  
+            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
 //cout << " For " << i << " to " << i+1<< " layer weights=("<< new_layer_weights[i].n_rows<<","<< deltafn[i+1].n_cols<<") "<<endl << flush;
              
@@ -345,6 +355,8 @@ void checkError(cudaError_t e)
     std::cout << "No error " << ++cnt << std::endl << flush;
 }
 
+
+/*
 __global__
 void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const double* X)
 {
@@ -369,40 +381,112 @@ void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const doubl
 
      __syncthreads();
 }
-
-
+*/
+__global__
+void CUDA_MatrixVectorMultiply2 (int nr, int nc, double* M, double* Y, double* X)
+{
+    int tid=threadIdx.x+blockIdx.x*blockDim.x;
+        float sum=0;
+    if(tid<nr){
+        for(int i=0; i<nc; i++)
+            sum += X[i]*M[(i*nr)+tid];
+        Y[tid]=sum/nc;
+    }
+}
+/*
+void MatrixVectorMultiply2(rowvec  &n, rowvec  &a, mat  &m, double * * ret)
+{   
+    cudaError_t cudaStat;
+    cublasStatus_t stat;
+    cublasHandle_t handle;
+    int i, j;
+    double* devPtrA;
+    double* a = 0;
+    int M=m.n_rows;
+    int N=m.n_cols;
+    a = (double*)malloc (M * N * sizeof (*a));
+    if (!a) {
+        printf ("host memory allocation failed");
+        return EXIT_FAILURE;
+    }
+    memcpy(a, m.memptr(), M* N* sizeof(double));
+   // for (j = 0; j < N; j++) {
+   //     for (i = 0; i < M; i++) {
+   //         a[IDX2C(i,j,M)] = (float)(i * N + j + 1);
+   //     }
+    //}
+    cudaStat = cudaMalloc ((void**)&devPtrA, M*N*sizeof(*a));
+    if (cudaStat != cudaSuccess) {
+        printf ("device memory allocation failed");
+        return EXIT_FAILURE;
+    }
+    stat = cublasCreate(&handle);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("CUBLAS initialization failed\n");
+        return EXIT_FAILURE;
+    }
+    stat = cublasSetMatrix (M, N, sizeof(*a), a, M, devPtrA, M);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("data download failed");
+        cudaFree (devPtrA);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
+    modify (handle, devPtrA, M, N, 1, 2, 16.0f, 12.0f);
+    stat = cublasGetMatrix (M, N, sizeof(*a), devPtrA, M, a, M);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        printf ("data upload failed");
+        cudaFree (devPtrA);
+        cublasDestroy(handle);
+        return EXIT_FAILURE;
+    }
+    cudaFree (devPtrA);
+    cublasDestroy(handle);
+    for (j = 0; j < N; j++) {
+        for (i = 0; i < M; i++) {
+            printf ("%7.0f", a[IDX2C(i,j,M)]);
+        }
+        printf ("\n");
+    }
+    free(a);
+    return EXIT_SUCCESS;
+}
+*/
 
 // implementation of the matrix-vector multiply function
 //void MatrixVectorMultiply(double* Y, const double* X)
-void MatrixVectorMultiply(rowvec  &n, rowvec  &a, mat  &m)
+void MatrixVectorMultiply(rowvec  &n, rowvec  &a, mat  &m, double * ret)
 {
     int mcols = m.n_cols;
     int mrows = m.n_rows;
     int m_biggest = max(mcols, mrows);
-    double ret[785*31];
     double * ptr=m.memptr();
     //memset(&ret, 0, 1000*sizeof(double));
     // copy memory from host to device
     int   threadsPerBlock =thrds;
     int   blocksPerGrid = (m_biggest + threadsPerBlock- 1) / threadsPerBlock;
+    blocksPerGrid=4;
+    threadsPerBlock=256;
   cout << "CUDA version, using " << threadsPerBlock << " threadsPerBlock and blocksPerGrid = " << blocksPerGrid << " and m_biggest=" << m_biggest<<endl << flush;
 
 cout << "actuation ("<< a.n_rows<<","<<a.n_cols<<") X layer_weights("<<m.n_cols<<","<<m.n_rows<<")" << endl << flush;
 
-    checkError(cudaMemcpy(LayerWeightsDevice, m.memptr(), mrows * mcols * sizeof(double), cudaMemcpyHostToDevice));
+cout << "Coping To Device " << "mcols="<< mcols << "*8 = " << mcols * sizeof(double) << " bytes from " << a.memptr() << " to " << ActuationDevice << endl;
     checkError(cudaMemcpy(ActuationDevice, a.memptr(), mcols * sizeof(double), cudaMemcpyHostToDevice));
-    CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
+cout << "Coping To Device mcols* mrows=" <<  mrows* mcols * sizeof(double) << " bytes from " << m.memptr() << " to " << LayerWeightsDevice<< endl;
+    checkError(cudaMemcpy(LayerWeightsDevice, m.memptr(), mrows * mcols * sizeof(double), cudaMemcpyHostToDevice));
+cout << "Calling CUDA_MatrixVectorMultiply <<<" << blocksPerGrid << "," << threadsPerBlock << ">>> ("<<mrows<<","<<mcols<<","<<LayerWeightsDevice<<","<<NetinDevice<<","<<ActuationDevice<<endl;
+    checkError(cudaDeviceSynchronize());
+   // CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
+     CUDA_MatrixVectorMultiply2<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
+cout << "Netin="<< NetinDevice << endl;
 
     checkError(cudaDeviceSynchronize());
-    checkError(cudaMemcpy(n.memptr(), NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
+    checkError(cudaMemcpy(ret, NetinDevice, mrows * sizeof(double), cudaMemcpyDeviceToHost));
+cout << "Coping to Host mols="<< mrows << " * " << sizeof(double) << " = " <<  mrows * sizeof(double) << " bytes from " << NetinDevice << " to " << NetinDevice << endl;
 
     //checkError(cudaMemcpy(&ret[0], NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
 double * tmp=n.memptr();
-    cout << "ret= ";
-    for (int i=0;i<mcols;i++)
-      cout << tmp[i] << " ";
-    cout << endl << flush;
-
 
 }
 
@@ -469,19 +553,31 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
-    //            netin[i] =  (actuation[i] * layer_weights[i].t()); ///actuation[i].n_cols;
-cout << "Actu  "<< actuation[i].n_cols << endl;
+                netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
+cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+#if 0
+cout << "Actu  "<< actuation[i] << endl;
 cout << "w  "<< layer_weights[i].n_rows << "x" <<  layer_weights[i].n_cols << endl;
 
+#endif
 //cout << "actuation ("<< actuation[i].n_rows<<","<<actuation[i].n_cols<<") X layer_weights("<<layer_weights[i].n_cols<<","<<layer_weights[i].n_rows<<")" << endl << flush;
-                MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i]);
-cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+                MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], nettemp);
+cout << "nettemp=";
+for (int y=0;y< netin[i].n_cols;y++)
+   cout << nettemp[y] << " " ;
+cout << endl;
+memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
+cout << "tgt=" << tgt << endl;
+cout << "Netin3  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+#if 0
+#endif
 //                matrix_mult(actuation2, layer_weights2, netin2, i); 
 //                vector_div(netin2, vec_start_idx[i+1]-vec_start_idx[i], i);
                 //cout << "------------------------------------ Net weighted sum into L" << i << endl << flush;
                 //cout << "------------------------------------ Activation out of L" << i << endl << flush;
     
                 actuation[i+1] = sigmoid(netin[i]);
+cout << "actuation[i+1]=" << actuation[i+1] << endl;
             }
             if ( (y+1) % SAMPLEFREQ == 0)
             {
@@ -713,10 +809,11 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
                 }
              }
              thrds=stoi(argv[argc-1]);
-             cout << "Threads chosen is " << thrds << endl << flush;
-             cout << "Number of Layers is " << NumberOfLayers << endl << flush;
         }
+        cout << "Threads chosen is " << thrds << endl << flush;
+        cout << "Number of Layers is " << NumberOfLayers << endl << flush;
 
+    netptrs = new double * [NumberOfLayers];
     // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
     for(char **current = environ; *current; current++) {
         string tmp = *current;
@@ -759,29 +856,25 @@ cout << "--------------------------------  Build done on " << bldver << endl << 
     int max_mat=0;
     int max_vec=0;
     int bias_field = 1;
+
     for (int i=0;i <= OutputLayer; i++)
     {
-         netin2_size += nodes[i];
-         if (i<OutputLayer)
-         {
-            max_mat=max(max_mat,  nodes[i+1]*(nodes[i]+1));
-            layer_weights2_size += nodes[i+1]*(nodes[i]+1);
-            vec_start_idx[i+1] = netin2_size;
-            mat_start_idx[i+1] = layer_weights2_size;
-         }
+         max_vec=max(max_vec, (nodes[i]+bias_field));
          rowvec rb (nodes[i]+bias_field);
-         rowvec r (nodes[i]);
-         actuation.push_back(i==OutputLayer?r:rb); // size= nodes[i],1
+         actuation.push_back(rb); // size= nodes[i],1
 cout << "acutation push back " << i << "rows="<< actuation.front().n_rows << " col=" << actuation.front().n_cols << endl;
          deltafn.push_back({});
          ftick.push_back({});
-          if (i<OutputLayer)
-          {
-cout << "netin push back " << i << "rows="<< rb.n_rows << " col=" << rb.n_cols << endl;
-         netin.push_back(rb);   // size=nodes[i],1
-            max_vec = max(max_vec, nodes[i]+1);
-            cout << "For weights at layer "<< i+1 << "we have a ("<<nodes[i+1]<<","<<nodes[i]+1<< ") Matrix" << endl;
-            tmpwgt = randu<mat>(nodes[i+1],nodes[i]+1); // network weights for each node + 1 node bias weight
+         if (i<OutputLayer)
+         {
+            max_mat=max(max_mat, (nodes[i]+bias_field)*(nodes[i+1]+bias_field));
+            netptrs[i] = new double [nodes[i]+bias_field];
+            rowvec rb2 (netptrs[i], nodes[i+1]+bias_field, false);
+
+            netin.push_back(rb2);   // size=nodes[i],1
+cout << "netin push back " << i << "rows="<< rb2.n_rows << " col=" << rb2.n_cols << endl;
+            tmpwgt = randu<mat>(nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+cout << "For weights at layer "<< i+1 << "we have a ("<<nodes[i+1]<<","<<nodes[i]+1<< ") Matrix" << endl;
             layer_weights.push_back( tmpwgt );
             new_layer_weights.push_back(tmpwgt);
             weight_updates.push_back(tmpwgt);
@@ -790,7 +883,7 @@ cout << "netin push back " << i << "rows="<< rb.n_rows << " col=" << rb.n_cols <
     save_weights("initial_random_values");
    cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec << endl << flush;
    cout << "vector lens=" << netin.size() <<"," <<layer_weights.size() << "," <<actuation.size() << endl;
-
+   nettemp = new double [max_vec];
    checkError(cudaMalloc(&ActuationDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&NetinDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&LayerWeightsDevice, max_mat * sizeof(double)));
