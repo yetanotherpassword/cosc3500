@@ -8,7 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #undef DEBUGON
-#define DEFTHREADS 8192
+#define DEFTHREADS 64
 #define ARMA_64BIT_WORD
 #define INPUT_LINES 784
 #define OUTPUT_LINES 10
@@ -543,11 +543,12 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
+#ifdef SERIAL_ONLY
                 netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
+#else
                 //cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
-                MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], nettemp);
-                memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
-    
+                MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], netptrs[i]);
+#endif    
                 actuation[i+1] = sigmoid(netin[i]);
             }
             if ( (y+1) % SAMPLEFREQ == 0)
@@ -891,6 +892,12 @@ int main (int argc, char *argv[])
     confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count() <<" us"<< endl << flush; 
     confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count() <<" us"<< endl << flush;
     confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count() <<" us"<< endl << flush;
+    confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count()/1000000 <<" s"<< endl << flush; 
+    confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count()/1000000 <<" s"<< endl << flush;
+    confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count()/1000000 <<" s"<< endl << flush;
+    confusion_matrix << endl << endl <<  "Total Time       : " <<    std::setw(12) << TotalTime.count()/60000000 <<" min"<< endl << flush; 
+    confusion_matrix << "Total Train Time : " << std::setw(12) <<    TrainTime.count()/60000000 <<" min"<< endl << flush;
+    confusion_matrix  << "Total Test Time  : " <<  std::setw(12) <<   TestTime.count()/60000000 <<" min"<< endl << flush;
     confusion_matrix << "Epsilon  : " << EPSILON << endl << flush;
     confusion_matrix << "Eta      : " << eta << endl << flush;
     confusion_matrix << "Build ver: " << bldver<<endl << flush;
