@@ -23,6 +23,30 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
+#define BLOCK_HEIGHT 1024
+#define BLOCK_WIDTH 64
+
+#if 0
+#if __CUDA_ARCH__ < 600
+__device__ double atomicAdd(double* address, double val)
+{
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                        __double_as_longlong(val +
+                               __longlong_as_double(assumed)));
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
+#endif
 /*
  * ALLAN CAMPTON
  * COSC3500 Milestone 1 Serial Version
@@ -376,15 +400,237 @@ void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const doubl
      __syncthreads();
 }
 */
+// Kernel - Adding two matrices MatA and MatB
+
+
+__global__ void gen_matvec(double *A, double*x, double*y, const int m, const int n) 
+{
+  unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
+  if ( xIndex < m ){
+    double c = 0.0f;
+    for(int i=0; i<n; i++)
+      c = c + x[i] * A[xIndex + m * i];
+    y[xIndex] = c;
+  }
+}
+double matVecNaive (double * out, double * in, double * A, const int m, const int n) {
+
+  // set up threading and blocking variables
+  cudaDeviceProp dp;
+  cudaGetDeviceProperties(&dp,0);
+  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
+
+  int threads_perblockm = min(m, max_threads_per_block);
+  dim3 threadsPerBlockm(threads_perblockm);
+  int num_blocksm = (int)ceil((double)m/(double)threads_perblockm);
+  dim3 numBlocksm(num_blocksm);
+
+  // set up timing
+  cudaEvent_t start, stop;
+  float time;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start,0);
+
+  // execute kernel
+  gen_matvec <<< numBlocksm, threadsPerBlockm >>>((double*)A, (double*)in, (double*)out, m, n);
+
+  cudaThreadSynchronize();
+  cudaEventRecord(stop,0);
+  cudaEventSynchronize(stop);
+  cudaEventElapsedTime(&time, start, stop);
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+
+  return time;
+}
+
+__global__ void MatMulKernel(double *out, double *in, double *a, const int matrixHeight, const int matrixWidth) {
+  // get variables for loop
+  // copy section of b into shared mem
+  // go through the threads vertically and sum them into a variable
+  // atomic add these variables to the corresponding c index
+
+  // looping is happening horizontally on the matrix
+  // BLOCK_WIDTH is again horizontal
+  // BLOCK_HEIGHT is going vertical
+  // n / BLOCK_WIDTH blocks horizontally
+  // m / BLOCK_HEIGHT block vertically
+
+  // get variables for loop
+  // variable for loop length: blockEltHeight
+  __shared__ int blockElt;
+  __shared__ int blockxInd;
+  __shared__ int blockyInd;
+  if (threadIdx.x == 0) {
+    if ((blockIdx.x + 1) * BLOCK_WIDTH <= matrixWidth)
+      blockElt = BLOCK_WIDTH;
+    else blockElt = matrixWidth % BLOCK_WIDTH;
+    blockxInd = blockIdx.x * BLOCK_WIDTH;
+    blockyInd = blockIdx.y * BLOCK_HEIGHT;
+  }
+  
+  __syncthreads();
+  
+  // copy section of b into shared mem
+  // use the first BLOCK_WIDTH of thread
+  __shared__ double b[BLOCK_WIDTH];
+
+  if (threadIdx.x < blockElt) 
+    b[threadIdx.x] = in[blockxInd + threadIdx.x];
+  
+  __syncthreads();
+
+  // summing variable
+  double cSum = (double) 0;
+  int threadyInd = blockyInd + threadIdx.x;
+
+  // make sure we are inside the matrix verticallly
+  if (threadyInd < matrixHeight) {
+  
+    // go through the threads vertically and sum them into a variable
+    for (int i=0; i<blockElt; i++)
+      // A col index   : blockIdx.x * BLOCK_WIDTH + i : blockxInd + i
+      // A row index  : blockIdx.y * BLOCK_HEIGHT + threadIdx.x : blockyInd + threadIdx.x : threadyInd
+      // B index : b[i]
+
+      // cSum = B index * ( A col index * matrixHeight + A row index)
+      cSum += b[i] * a[(blockxInd + i) * (matrixHeight) + (threadyInd)];
+      //printf("csum = %f\n", cSum);
+    
+    // atomic add these variables to the corresponding c index
+    atomicAdd(out + threadyInd, cSum);
+  }
+  
+}
+
+
+void CUDA_MatrixVectorMultiply5(int nr, int nc, double* M, double* Y, double* X)
+//void CUDA_MatrixVectorMultiply5(double* Y, double* X, double* M, int nr, int nc)
+//double matVecMul (double * out, double * in, double * A, const int m, const int n)
+{
+  // set up threading and blocking variables
+  cudaDeviceProp dp;
+  cudaGetDeviceProperties(&dp,0);
+  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
+
+  int threads_perblockm = min(nr, max_threads_per_block);
+  dim3 threadsPerBlockm(threads_perblockm);
+  int num_blocksm = (int)ceil((double)nr/(double)threads_perblockm);
+  dim3 numBlocksm(num_blocksm);
+
+  int blockCols = (int) ceil(nc / (double) BLOCK_WIDTH);
+  int blockRows = (int) ceil(nr / (double) BLOCK_HEIGHT);
+  dim3 dimBlock(BLOCK_HEIGHT);
+  dim3 dimGrid(blockCols, blockRows);
+
+  int sharedMem = 3 * sizeof (int) + BLOCK_WIDTH * sizeof (double);
+
+  cudaMalloc((void**) &LayerWeightsDevice, nr*nc*sizeof(double));
+  cudaMalloc((void**) &ActuationDevice, nr);
+  cudaMalloc((void**) &NetinDevice, nc);
+
+  // copy elements from CPU to GPU
+  cudaMemcpy(LayerWeightsDevice, M, nr*nc*sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(ActuationDevice, X, nr*sizeof(double), cudaMemcpyHostToDevice);
+
+
+
+  // set up timing
+  cudaEvent_t start, stop;
+  float time;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start,0);
+
+  // execute kernels
+  //zero_vector_double<<<numBlocksm, threadsPerBlockm>>>(out, m);
+  MatMulKernel<<<dimGrid, dimBlock, sharedMem>>>(NetinDevice, ActuationDevice, LayerWeightsDevice, nr, nc);
+
+  cudaThreadSynchronize();
+  cudaMemcpy(Y, NetinDevice, nc*sizeof(double), cudaMemcpyDeviceToHost);
+cout << "MatMulKernel=";
+for (int i=0;i<nc;i++)
+  cout  << Y[i] << " ";
+cout << endl;
+  cudaEventRecord(stop,0);
+  cudaEventSynchronize(stop);
+  cudaEventElapsedTime(&time, start, stop);
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+
+//  return time;
+}
+
+#if 0
+double matVecMulT (double * out, double * in, double * A, const int m, const int n)
+{
+  // set up threading and blocking variables
+  cudaDeviceProp dp;
+  cudaGetDeviceProperties(&dp,0);
+  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
+
+  int threads_perblockn = min(n, max_threads_per_block);
+  dim3 threadsPerBlockn(threads_perblockn);
+  int num_blocksn = (int)ceil((double)n/(double)threads_perblockn);
+  dim3 numBlocksn(num_blocksn);
+
+  int blockCols = (int) ceil(n / (double) BLOCK_HEIGHT);
+  int blockRows = (int) ceil(m / (double) BLOCK_WIDTH);
+  dim3 dimBlock(BLOCK_HEIGHT);
+  dim3 dimGrid(blockCols, blockRows);
+
+  int sharedMem = 3 * sizeof (int) + BLOCK_WIDTH * sizeof (double);
+
+  // set up timing
+  cudaEvent_t start, stop;
+  double time;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  cudaEventRecord(start,0);
+
+  // execute kernels
+  //zero_vector_double<<<numBlocksn, threadsPerBlockn>>>(out, n);
+  MatMulKernelT<<<dimGrid, dimBlock, sharedMem>>>(out, in, A, m, n);
+
+  cudaThreadSynchronize();
+  cudaEventRecord(stop,0);
+  cudaEventSynchronize(stop);
+  cudaEventElapsedTime(&time, start, stop);
+  cudaEventDestroy(start);
+  cudaEventDestroy(stop);
+
+  return time;
+}
+#endif
+#if 0
+__global__ void CUDA_MatrixVectorMultiply4(int nr, int nc, double* M, double* Y, double* X)
+{
+int row = blockIdx.y * blockDim.y + threadIdx.y;
+int col = blockIdx.x * blockDim.x + threadIdx.x;
+double sum = 0.0;
+for (int k = 0; k < nr; k++) {
+sum += M[row*nr+k] * X[k * nr + col];
+}
+Y[row*nr+col] = sum;
+}
+__global__ void CUDA_MatrixVectorMultiply3(int nr, int nc, double* M, double* Y, double* X)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    if (i < nr && j < nc)
+        Y[i][j] = M[i][j] + X[i][j];
+}
+#endif
 __global__
 void CUDA_MatrixVectorMultiply2 (int nr, int nc, double* M, double* Y, double* X)
 {
     int tid=threadIdx.x+blockIdx.x*blockDim.x;
-        float sum=0;
-    if(tid<nr){
-        for(int i=0; i<nc; i++)
-            sum += X[i]*M[(i*nr)+tid];
-        Y[tid]=sum/nc;
+        double sum=0;
+    if(tid<nc){
+        for(int i=0; i<nr; i++)
+            sum += X[i]*M[(i*nc)+tid];
+        Y[tid]=sum/nr;
     }
 }
 /*
@@ -457,26 +703,58 @@ void MatrixVectorMultiply(rowvec  &n, rowvec  &a, mat  &m, double * ret)
     double * ptr=m.memptr();
     //memset(&ret, 0, 1000*sizeof(double));
     // copy memory from host to device
-    int   threadsPerBlock =thrds;
-    int   blocksPerGrid = (m_biggest + threadsPerBlock- 1) / threadsPerBlock;
-#if ALT_BLK
-    int blocksPerGrid=m_biggest/threadsPerBlock+1
-#endif
+#if 0
+    int   threadsPerBlock0 =256;
+    //int   threadsPerBlock =thrds;
+    //int   blocksPerGrid = (m_biggest + threadsPerBlock- 1) / threadsPerBlock;
+    int blocksPerGrid0=m_biggest/threadsPerBlock0+1;
     //blocksPerGrid=4;
     //threadsPerBlock=256;
+ 
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((N + threadsPerBlock.x -1) / threadsPerBlock.x, (N+threadsPerBlock.y -1) / threadsPerBlock.y);
+#endif
+    CUDA_MatrixVectorMultiply5(mrows, mcols, m.memptr(), ret, a.memptr());
+
+#if 0
 
     checkError(cudaMemcpy(ActuationDevice, a.memptr(), mcols * sizeof(double), cudaMemcpyHostToDevice));
     checkError(cudaMemcpy(LayerWeightsDevice, m.memptr(), mrows * mcols * sizeof(double), cudaMemcpyHostToDevice));
-    // cout << "Calling CUDA_MatrixVectorMultiply <<<" << blocksPerGrid << "," << threadsPerBlock << ">>> ("<<mrows<<","<<mcols<<","<<LayerWeightsDevice<<","<<NetinDevice<<","<<ActuationDevice<<endl;
+     cout << "Calling CUDA_MatrixVectorMultiply <<<" << blocksPerGrid0 << "," << threadsPerBlock0 << ">>> ("<<mrows<<","<<mcols<<","<<LayerWeightsDevice<<","<<NetinDevice<<","<<ActuationDevice<<endl;
     //checkError(cudaDeviceSynchronize());
    // CUDA_MatrixVectorMultiply<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
-     CUDA_MatrixVectorMultiply2<<<blocksPerGrid, threadsPerBlock>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
+     CUDA_MatrixVectorMultiply2<<<blocksPerGrid0, threadsPerBlock0>>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
+#endif
+cout << "layerweights=" << m << endl;
+double * tmp=m.memptr();
+cout << "memptr=";
+for (int z=0;z<mrows;z++)
+{
+  for (int x=0; x<mcols; x++)
+  {
+    cout << tmp[x*mrows+z] << " ";
+  }
+  cout << endl;
+/*
+for (int i=0;i<10;i++)
+{
+for (int j=0;j<10;j++)
+   cout << netp[j*10+i] << " ";
+*/
+cout << endl;
 
+
+}
+cout << "copying mrows of Netin = " << mrows << endl << "netin=";
     checkError(cudaDeviceSynchronize());
     checkError(cudaMemcpy(ret, NetinDevice, mrows * sizeof(double), cudaMemcpyDeviceToHost));
+  for (int x=0; x<mrows; x++)
+  {
+    cout << ret[x] << " ";
+  }
+  cout << endl;
 
     //checkError(cudaMemcpy(&ret[0], NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
-double * tmp=n.memptr();
 
 }
 
@@ -548,7 +826,15 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 #else
                 //cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
                 MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], netptrs[i]);
+                //memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
 #endif    
+cout << "nettemp= actuation[i].n_cols="<<actuation[i].n_cols<< "m.n_rows= " << layer_weights[i].n_rows << " m.n_cols="<< layer_weights[i].n_cols << endl;;
+for (int y=0; y<layer_weights[i].n_rows;y++)
+   cout << nettemp[y] << " ";
+cout << endl;
+                cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+
+    
                 actuation[i+1] = sigmoid(netin[i]);
             }
             if ( (y+1) % SAMPLEFREQ == 0)
@@ -853,6 +1139,9 @@ int main (int argc, char *argv[])
    checkError(cudaMalloc(&NetinDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&LayerWeightsDevice, max_mat * sizeof(double)));
 
+#ifdef __CUDA_ARCH__ 
+cout << "CUDA ARCH ++ " << __CUDA_ARCH__ << endl;
+#endif
 
 /////////////////////////////////////////////// 
 //
