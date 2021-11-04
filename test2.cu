@@ -2,6 +2,7 @@
 #include <armadillo>
 using namespace std;
 using namespace arma;
+//nvcc --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets -std=c++11 -g -Iarmadillo-10.6.2/include/   test2.cu  -l cublas_static -l lapack_static -L/usr/lib64  -o test2
 
 void checkError(cudaError_t e)
 {
@@ -91,10 +92,10 @@ int main()
    rowvec r(rbuf, 2, false, true);
     v = { 1, 2, 3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0 };
 
-mat A(Abuf, 20, 2, false, true);
-  A  = //{ {1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0},
-       //  {1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0}};
-             { {1,2},
+mat A(Abuf, 2, 20,  false, true);
+  A  = { {1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0},
+         {1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0}};
+/*             { {1,2},
          
                {3, 4},
                {3, 4},
@@ -114,13 +115,13 @@ mat A(Abuf, 20, 2, false, true);
                { 5, 6},
                {3, 4},
                { 5, 6},
-               {7,8} };
+               {7,8} }; */
 
 cout << "A*v=";
-cout << v*A << endl;
+cout << v*A.t() << endl;
 //A=A.t();
 //MultArmVM(vbuf, Abuf, rbuf, 20, 2);
-A=A.t();
+
  matVecNaive (rbuf, vbuf, Abuf, 20, 2) ;
 cout << "rbuf=" << rbuf[0] << " " << rbuf[1] << endl;
 cout << "r=" << r << endl;
