@@ -5,7 +5,7 @@
 
 #include <armadillo>
 #include <boost/algorithm/string.hpp>
-#include <omp.h>
+//#include <omp.h>
 #include <immintrin.h>
 #include <fmaintrin.h>
 
@@ -296,6 +296,18 @@ int backprop(rowvec tgt, int y0)
 }
 
 // implementation of the matrix-vector multiply function
+//  void MultArmVM(double * V, double * M, double * R, int m_nr, int m_nc)
+//   {
+//     double sum;
+//       for (int c=0; c < m_nc; c++)
+//         {
+//             sum=0;
+//                 for (int r = 0; r < m_nr; r++)  // m_nr == v_nc
+//                        sum += M[c*m_nr+r] * V[r];
+//                            R[c] = sum;
+//                              }
+//                               }
+//
 void MatrixVectorMultiply(double* Y, const double* X, double *M, int m_rows, int m_cols)
 {
    __m256d localX;
@@ -307,12 +319,14 @@ void MatrixVectorMultiply(double* Y, const double* X, double *M, int m_rows, int
 //   v4df accum=0;
    double temp[4];
    double tempo[8];
+//j=0 i=32 m_rows=785 m_cols=31
    for (int i = 0; i <m_rows; i++)
    {
        __m256d localY = _mm256_setzero_pd();
        double leftover = 0.0;
        for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
        {
+cout << "j=" << j << " i=" << i << " m_rows=" << m_rows << " m_cols=" << m_cols<< endl;
            localX =_mm256_loadu_pd (&X[j*4]);
            localM = _mm256_loadu_pd (&M[i*m_rows+j*4]);
            localY = _mm256_fmadd_pd (localM, localX, localY);
@@ -324,6 +338,38 @@ void MatrixVectorMultiply(double* Y, const double* X, double *M, int m_rows, int
        for (int k=0; k<quad_double_leftover;k++)
        {
            Y[i] += M[i*m_rows+quad_double_vec_size*4+k]*X[quad_double_vec_size*4+k];
+       }
+   }
+
+}
+void MatrixVectorMultiply512(double* Y, const double* X, double *M, int m_rows, int m_cols)
+{
+   __m512d localX;
+   __m512d localM;
+  int dbls_per_smm = 8;
+  int oct_double_vec_size = m_cols / dbls_per_smm;
+  int oct_double_leftover = m_cols % dbls_per_smm;
+//   v4df accum=0;
+   double temp[dbls_per_smm];
+//j=0 i=32 m_rows=785 m_cols=31
+   for (int i = 0; i <m_rows; i++)
+   {
+       __m512d localY = _mm512_setzero_pd();
+       double leftover = 0.0;
+       for (int j = 0; j < oct_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m512d type
+       {
+cout << "j=" << j << " i=" << i << " m_rows=" << m_rows << " m_cols=" << m_cols<< endl;
+           localX =_mm512_loadu_pd (&X[j*dbls_per_smm]);
+           localM = _mm512_loadu_pd (&M[i*m_rows+j*dbls_per_smm]);
+           localY = _mm512_fmadd_pd (localM, localX, localY);
+       }
+       _mm512_storeu_pd (temp, localY);
+       Y[i]=0;
+       for (int k=0; k< dbls_per_smm;k ++)
+           Y[i] += temp[k];
+       for (int k=0; k<oct_double_leftover;k++)
+       {
+           Y[i] += M[i*m_rows+oct_double_vec_size*dbls_per_smm+k]*X[oct_double_vec_size*dbls_per_smm+k];
        }
    }
 
@@ -376,7 +422,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
- MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_cols,  layer_weights[i].n_rows);
+ MatrixVectorMultiply512(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_rows,  layer_weights[i].n_cols);
             //    netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
                 cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
 
