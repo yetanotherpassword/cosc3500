@@ -5,7 +5,7 @@
 
 #include <armadillo>
 #include <boost/algorithm/string.hpp>
-//#include <omp.h>
+#include <omp.h>
 #include <immintrin.h>
 #include <fmaintrin.h>
 
@@ -88,6 +88,9 @@
     double * layer_weights2;
     stringstream confusion_matrix;
     rowvec err_summary=ones<rowvec>(OUTPUT_LINES) * (-1);
+
+    string REQUEST_NUM_THREADS="";
+    string msg="";
 
  void MultArmVM(double * V, double * M, double * R, int m_nr, int m_nc)
  {
@@ -295,6 +298,67 @@ int backprop(rowvec tgt, int y0)
         return 0;
 }
 
+
+
+   void update_cyclic_params ( int thread_num, int num_of_threads, int & from, int & to, int orig_from, int orig_to)
+   {
+       int thread_len = (orig_to - orig_from) / num_of_threads;
+       from = thread_num * thread_len + orig_from;
+       to = (thread_num +1) * thread_len  + orig_from;
+       if (thread_num == num_of_threads - 1)
+       {
+           to += (orig_to - orig_from) - (num_of_threads * thread_len);
+           if (msg == "")
+               msg = "Reqested:" + REQUEST_NUM_THREADS + " Got " + to_string(num_of_threads)+ "\n";
+       }
+   }
+
+// implementation of the matrix-vector multiply function
+void MatrixVectorMultiply2(double* Y, const double* X, double *M, int m_rows, int m_cols)
+{
+    int quad_double_vec_size = m_cols / 4;
+    int quad_double_leftover = m_cols % 4;
+    #pragma omp parallel
+    {
+       __m256d localX;
+       __m256d localM;
+       double temp[4];
+       {
+           int id = omp_get_thread_num();
+           int nthrds = omp_get_num_threads();
+           int from, to;
+           update_cyclic_params( id, nthrds, from, to, 0, m_rows);
+           for (int i = from; i < to; ++i)
+           {
+//              Y[i] = 0;
+//              for (int j = 0; j < N; ++j)
+//              {
+//                 Y[i] += M[i*N+j] * X[j];
+//              }
+
+
+                __m256d localY = _mm256_setzero_pd();
+                double leftover = 0.0;
+                for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
+                {
+                    localX =_mm256_loadu_pd (&X[j*4]);
+                    localM = _mm256_loadu_pd (&M[i*m_rows+j*4]);
+                    localY = _mm256_fmadd_pd (localM, localX, localY);
+                }
+                _mm256_storeu_pd (temp, localY);
+                Y[i]=0;
+                for (int k=0; k< 4;k ++)
+                    Y[i] += temp[k];
+                for (int k=0; k<quad_double_leftover;k++)
+                {
+                    Y[i] += M[i*m_rows+quad_double_vec_size*4+k]*X[quad_double_vec_size*4+k];
+                }
+           }
+        }
+    }
+}
+
+
 // implementation of the matrix-vector multiply function
 //  void MultArmVM(double * V, double * M, double * R, int m_nr, int m_nc)
 //   {
@@ -314,12 +378,8 @@ void MatrixVectorMultiply(double* Y, const double* X, double *M, int m_rows, int
    __m256d localM;
   int quad_double_vec_size = m_cols / 4;
   int quad_double_leftover = m_cols % 4;
-  int oct_double_vec_size = m_cols / 8;
-  int oct_double_leftover = m_cols % 8;
-//   v4df accum=0;
    double temp[4];
-   double tempo[8];
-//j=0 i=32 m_rows=785 m_cols=31
+
    for (int i = 0; i <m_rows; i++)
    {
        __m256d localY = _mm256_setzero_pd();
@@ -424,11 +484,16 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
- MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_rows,  layer_weights[i].n_cols);
+ MatrixVectorMultiply2(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_rows,  layer_weights[i].n_cols);
             //    netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
            //     cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
 
                 actuation[i+1] = sigmoid(netin[i]);
+                if (msg.length() > 0)
+                {
+                    cout << msg << endl;
+                    msg="";
+                }
             }
             if ( (y+1) % SAMPLEFREQ == 0)
             {
@@ -659,6 +724,21 @@ int main (int argc, char *argv[])
              }
         }
         cout << "Number of Layers is " << NumberOfLayers << endl << flush;
+
+        // FOR OMP GET VARIABLE SET FOR NUMBER OF THREADS REQUESTED
+        if (std::getenv("OMP_NUM_THREADS")==NULL)
+        {
+           cout << "OMP_NUM_THREADS not set, using default (will print at end)" << endl;
+           REQUEST_NUM_THREADS="NONE";
+        }
+        else
+        {
+            REQUEST_NUM_THREADS= string(getenv("OMP_NUM_THREADS"));
+            if (stoi(REQUEST_NUM_THREADS) > 0)
+              cout << "OMP_NUM_THREADS set to "<< REQUEST_NUM_THREADS<< endl;
+            else
+              cout << "Error: OMP_NUM_THREADS set to "<< REQUEST_NUM_THREADS<< " - lets see what happens !" << endl;
+        }
 
     //netptrs = new double * [NumberOfLayers];
     // Use slurm job number if avaiable (else defaults to epoch time) for file ids created
