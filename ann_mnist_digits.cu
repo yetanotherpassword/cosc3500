@@ -62,6 +62,9 @@
     double * LayerWeightsDevice;
     double * ActuationDevice;
     double * NetinDevice;
+  double * dev_A;
+  double * dev_in;
+  double * dev_out;
 
     std::time_t result = std::time(nullptr);
     string fid = to_string(result);
@@ -329,9 +332,6 @@ __global__ void gen_matvec(double *A, double*x, double*y, const int m, const int
 float matVecNaive (double * out, double * in, double * A, const int m, const int n) {
 
   // set up threading and blocking variables
-  double * dev_A;
-  double * dev_in;
-  double * dev_out;
   cudaDeviceProp dp;
   cudaGetDeviceProperties(&dp,0);
   unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
@@ -350,9 +350,6 @@ cout << "num_blocksm=" << num_blocksm << endl;
   checkError(cudaEventCreate(&stop));
   checkError(cudaEventRecord(start,0));
 
- checkError(cudaMalloc( &dev_A, m*n*sizeof(double)));
- checkError(cudaMalloc( &dev_in, m*sizeof(double)));
- checkError(cudaMalloc( &dev_out, n*sizeof(double)));
  checkError(cudaMemcpy(dev_A, A,  m*n*sizeof(double), cudaMemcpyHostToDevice));
  checkError(cudaMemcpy(dev_in, in,  m*sizeof(double), cudaMemcpyHostToDevice));
 
@@ -830,6 +827,9 @@ int main (int argc, char *argv[])
    checkError(cudaMalloc(&ActuationDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&NetinDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&LayerWeightsDevice, max_mat * sizeof(double)));
+ checkError(cudaMalloc( &dev_A, max_mat*sizeof(double)));
+ checkError(cudaMalloc( &dev_in, max_vec*sizeof(double)));
+ checkError(cudaMalloc( &dev_out, max_vec*sizeof(double)));
 
 #ifdef __CUDA_ARCH__ 
 cout << "CUDA ARCH ++ " << __CUDA_ARCH__ << endl;
