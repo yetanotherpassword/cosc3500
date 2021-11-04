@@ -326,7 +326,6 @@ void MatrixVectorMultiply(double* Y, const double* X, double *M, int m_rows, int
        double leftover = 0.0;
        for (int j = 0; j < quad_double_vec_size; j++)  // doubles are 64bit, so doing  4 at a tiem with __m256d type
        {
-cout << "j=" << j << " i=" << i << " m_rows=" << m_rows << " m_cols=" << m_cols<< endl;
            localX =_mm256_loadu_pd (&X[j*4]);
            localM = _mm256_loadu_pd (&M[i*m_rows+j*4]);
            localY = _mm256_fmadd_pd (localM, localX, localY);
@@ -342,6 +341,9 @@ cout << "j=" << j << " i=" << i << " m_rows=" << m_rows << " m_cols=" << m_cols<
    }
 
 }
+/*
+ * need gcc v4.9 or higherr....
+ *
 void MatrixVectorMultiply512(double* Y, const double* X, double *M, int m_rows, int m_cols)
 {
    __m512d localX;
@@ -375,7 +377,7 @@ cout << "j=" << j << " i=" << i << " m_rows=" << m_rows << " m_cols=" << m_cols<
 
 }
 
-
+*/
 
 void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
 {
@@ -422,9 +424,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             {
                // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
- MatrixVectorMultiply512(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_rows,  layer_weights[i].n_cols);
+ MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_rows,  layer_weights[i].n_cols);
             //    netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
-                cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+           //     cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
 
                 actuation[i+1] = sigmoid(netin[i]);
             }
