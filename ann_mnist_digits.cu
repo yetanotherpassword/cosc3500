@@ -8,7 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #undef DEBUGON
-#define DEFTHREADS 64
+#define DEFTHREADS 256
 #define ARMA_64BIT_WORD
 #define INPUT_LINES 784
 #define OUTPUT_LINES 10
@@ -516,10 +516,10 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 #else
                 //cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
              //   MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], netptrs[i]);
- matVecNaive (  netin[i].memptr(),  actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_cols, layer_weights[i].n_rows) ;
+ float t = matVecNaive (  netin[i].memptr(),  actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_cols, layer_weights[i].n_rows) ;
                 //memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
    netin[i] = netin[i]/actuation[i].n_cols; 
-                cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+   cout << "Time taken: " << t << endl;
 #endif    
 
                 actuation[i+1] = sigmoid(netin[i]);
@@ -832,7 +832,7 @@ int main (int argc, char *argv[])
  checkError(cudaMalloc( &dev_out, max_vec*sizeof(double)));
 
 #ifdef __CUDA_ARCH__ 
-cout << "CUDA ARCH ++ " << __CUDA_ARCH__ << endl;
+cout << "CUDA ARCH == " << __CUDA_ARCH__ << endl;
 #endif
 
 /////////////////////////////////////////////// 
