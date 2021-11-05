@@ -28,7 +28,7 @@
 #define BLOCK_HEIGHT 1024
 #define BLOCK_WIDTH 64
 #define SPACE_GAP "   "
-
+#define ONLYIF if (false)
 /*
  * ALLAN CAMPTON
  * COSC3500 Milestone 1 Serial Version
@@ -121,7 +121,7 @@ void sigmoid( vect  & net, vect & actplus)
     for (int i=0;i<net.size-1;i++)
     {
         actplus.v[i] = 1/(1+exp(-net.v[i])); 
-        cout << "1/1(+exp(-" << net.v[i] << "))" << endl;
+        ONLYIF cout << "1/1(+exp(-" << net.v[i] << "))" << endl;
     }
     actplus.v[net.size-1] = 1.0;          // add bias signal value
 }
@@ -417,7 +417,7 @@ void VectorMultiplyMatrix(vect & Y, vect & X, matx & M)
 void VectorMultiplyVector(matx & M, vect & Y, vect & X)
 //void MatrixTranspMultiplyVector(vect & Y, vect & X, matx & M)
 {
-cout << "multiplying y=("<< Y.size << "x1) to X (1x"<<X.size<<") = (" << M.rows << "x" << M.cols << ")"<< endl;
+ONLYIF cout << "multiplying y=("<< Y.size << "x1) to X (1x"<<X.size<<") = (" << M.rows << "x" << M.cols << ")"<< endl;
    if ( M.rows == Y.size && M.cols == X.size)
    {
       for (int i = 0; i < M.rows; ++i)
@@ -425,8 +425,8 @@ cout << "multiplying y=("<< Y.size << "x1) to X (1x"<<X.size<<") = (" << M.rows 
          for (int j = 0; j < M.cols; ++j)
          {
             M.m[i*M.rows+j] = X.v[j] * Y.v[i];
-            cout << "M["<<i<<"," << j<< "] =  X["<<j<<"] * Y[" << i << "]" << SPACE_GAP << "M="<<M.m[i*M.rows+j]<< " X=" << X.v[j] << " Y="<<  Y.v[i] << endl;
-            if (std::isnan(M.m[i]))
+            ONLYIF cout << "M["<<i<<"," << j<< "] =  X["<<j<<"] * Y[" << i << "]" << SPACE_GAP << "M="<<M.m[i*M.rows+j]<< " X=" << X.v[j] << " Y="<<  Y.v[i] << endl;
+       ONLYIF     if (std::isnan(M.m[i]))
                cout << "NAN ERROR Y=" << Y.v[i] << "X=" << X.v[j] << " i=" << i << " j=" << endl;
          }
       }
@@ -439,7 +439,7 @@ cout << "multiplying y=("<< Y.size << "x1) to X (1x"<<X.size<<") = (" << M.rows 
 }
 void VectorMultiplyMatrixTransp(vect & Y, vect & X, matx & M)
 {
-cout << "multiplying x=(1x"<< X.size << ") to M ("<<M.cols<<"x"<<M.rows<<") = (1x" << Y.size << ")"<< endl;
+ONLYIF cout << "multiplying x=(1x"<< X.size << ") to M ("<<M.cols<<"x"<<M.rows<<") = (1x" << Y.size << ")"<< endl;
    if (X.size == M.cols && M.rows == Y.size)
    {
       for (int i = 0; i < M.rows; ++i)
@@ -448,8 +448,8 @@ cout << "multiplying x=(1x"<< X.size << ") to M ("<<M.cols<<"x"<<M.rows<<") = (1
          for (int j = 0; j < M.cols; ++j)
          {
             Y.v[i] += M.m[i*M.rows+j] * X.v[j];
-     //       cout << "Y["<<i<<"] += M["<<i<<","<<j<<")* X["<<j<<"] =>"<< Y.v[i] << "=" << M.m[i*M.rows+j] << "*" << X.v[j] << endl;
-            if (std::isnan(Y.v[i]))
+     ONLYIF        cout << "Y["<<i<<"] += M["<<i<<","<<j<<")* X["<<j<<"] =>"<< Y.v[i] << "=" << M.m[i*M.rows+j] << "*" << X.v[j] << endl;
+        ONLYIF     if (std::isnan(Y.v[i]))
                cout << "NAN ERROR M=" << M.m[i*M.rows+j] << "X=" << X.v[j] << " i=" << i << " j=" <<  endl;
                 
          }
@@ -514,11 +514,11 @@ int backprop(vect & tgt, int y0)
           if (i<tgt.size)
           {
            ftick[OutputLayer].v[i] = (1-actuation[OutputLayer].v[i] ) * actuation[OutputLayer].v[i];
-if (std::isnan(ftick[OutputLayer].v[i])) {
+ONLYIF if (std::isnan(ftick[OutputLayer].v[i])) {
   cout << "Error ISNAN at ftick OutputLayer="<< OutputLayer << " i=" << i << endl; exit(1);}
            deltafn[OutputLayer].v[i]  =  (tgt.v[i] - actuation[OutputLayer].v[i])*(ftick[OutputLayer].v[i]);
-cout << deltafn[OutputLayer].v[i] << " = " << "(" << tgt.v[i] << " - " << actuation[OutputLayer].v[i] << ") * " << ftick[OutputLayer].v[i]<<endl;
-if (std::isnan(deltafn[OutputLayer].v[i])) {
+ONLYIF cout << deltafn[OutputLayer].v[i] << " = " << "(" << tgt.v[i] << " - " << actuation[OutputLayer].v[i] << ") * " << ftick[OutputLayer].v[i]<<endl;
+ONLYIF if (std::isnan(deltafn[OutputLayer].v[i])) {
   cout << "Error ISNAN at deltafn OutputLayer="<< OutputLayer << " i=" << i << endl; exit(1);}
           }
         }
@@ -526,7 +526,7 @@ if (std::isnan(deltafn[OutputLayer].v[i])) {
 
         for (int i=OutputLayer-1;i>=0;i--)
         {
-cout << "WUP("<<weight_updates[i].rows<<"x"<<weight_updates[i].cols<<") = DFN("<< deltafn[i+1].size << ") * actuation("<< actuation[i].size<< ")"<<endl;
+ONLYIF cout << "WUP("<<weight_updates[i].rows<<"x"<<weight_updates[i].cols<<") = DFN("<< deltafn[i+1].size << ") * actuation("<< actuation[i].size<< ")"<<endl;
             VectorMultiplyVector(weight_updates[i], deltafn[i+1], actuation[i]);
             
             VectorMultiplyMatrix(deltafn[i], deltafn[i+1], layer_weights[i]);
