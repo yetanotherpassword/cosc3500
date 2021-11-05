@@ -18,8 +18,10 @@
 #define DEFAULT_HIDDEN 30
 #define ETA_DEFAULT 0.5f
 
-#define SAMPLEFREQ 1000
-#define EPOCHS 512
+#define SAMPLEFREQ 1
+#undef SAMPLEFREQ
+
+#define EPOCHS 1
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
@@ -65,6 +67,8 @@
   double * dev_A;
   double * dev_in;
   double * dev_out;
+float mintime=1000000;
+float maxtime=-10;
 
     std::time_t result = std::time(nullptr);
     string fid = to_string(result);
@@ -231,13 +235,20 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
     img(nodes[0])=1;          // set bias signal, so can multiply with [node weights | bias weights] augmented matrix
 
     int img_is_digit=(int) lp[8+seq];
+#ifdef SAMPLEFREQ
     if ((seq+1) % SAMPLEFREQ ==0)
     {
        cout << "For sample :" << seq+1 << endl << flush;
        print_an_image(&mptr[start], img_is_digit);
     }
-
+#endif
     t=zeros<rowvec>(OUTPUT_LINES); // create the target vector (plus one for 'bias' bit)
+    if (img_is_digit>9)
+    {
+       cout << "Error: img_is_digit=" << img_is_digit << "seq=" << seq  << endl;
+       exit(1);
+    }
+
     t(img_is_digit)=1;               // set the target 'bit'
 
 }
@@ -263,15 +274,18 @@ int backprop(rowvec tgt, int y0)
         if (abs(err) < EPSILON)
         {
              int val=tgt.index_max();
+#ifdef SAMPLEFREQ
              if ( (y0+1) % SAMPLEFREQ == 0) 
                 cout << "---------------------------------- BACK PROPAGATION  sample=" << y0+1 <<" err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl << flush;
+#endif
              err_summary(val) = err;
              return 1;
         }
 
+#ifdef SAMPLEFREQ
         if ( (y0+1) % SAMPLEFREQ == 0) 
           cout << "------------------------------------ BACK PROPAGATION sample="<< y0+1 << endl << flush;
-        
+#endif        
         ftick[OutputLayer] = -actuation[OutputLayer] + 1;
         ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);  //element wise multiply
         deltafn[OutputLayer]  =  (tgt0 - actuation[OutputLayer])%(ftick[OutputLayer]);
@@ -335,12 +349,12 @@ float matVecNaive (double * out, double * in, double * A, const int m, const int
   cudaDeviceProp dp;
   cudaGetDeviceProperties(&dp,0);
   unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-cout << "max_threads_per_block=" << max_threads_per_block << endl;
+//cout << "max_threads_per_block=" << max_threads_per_block << endl;
   int threads_perblockm = min(m, max_threads_per_block);
-cout << "threads_perblockm=" << threads_perblockm << endl;
+//cout << "threads_perblockm=" << threads_perblockm << endl;
   dim3 threadsPerBlockm(threads_perblockm);
   int num_blocksm = (int)ceil((double)m/(double)threads_perblockm);
-cout << "num_blocksm=" << num_blocksm << endl;
+//cout << "num_blocksm=" << num_blocksm << endl;
   dim3 numBlocksm(num_blocksm);
 
   // set up timing
@@ -365,7 +379,7 @@ cout << "num_blocksm=" << num_blocksm << endl;
   checkError(cudaEventDestroy(start));
   checkError(cudaEventDestroy(stop));
 
-cout << "out="<< out[0] << " "<< out[1] << endl;
+//cout << "out="<< out[0] << " "<< out[1] << endl;
   return time;
 }
 __global__
@@ -499,8 +513,10 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     }
     for (int y=0;y<samples;y++)
     {
+#ifdef SAMPLEFREQ
         if ( (y+1) % SAMPLEFREQ == 0)
            cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl << flush;
+#endif
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
         int tgtval = tgt.subvec(0,9).index_max();
 
@@ -512,29 +528,37 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 // sum layer 1 weighted input
 #ifdef SERIAL_ONLY
                 netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
-                cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+#ifdef SAMPLEFREQ
+                if ( (y+1) % SAMPLEFREQ == 0)
+                    cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+#endif
 #else
-                //cout << "Netin2  ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
              //   MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], netptrs[i]);
- float t = matVecNaive (  netin[i].memptr(),  actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_cols, layer_weights[i].n_rows) ;
+                float t = matVecNaive (  netin[i].memptr(),  actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_cols, layer_weights[i].n_rows) ;
                 //memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
    netin[i] = netin[i]/actuation[i].n_cols; 
-   cout << "Time taken: " << t << endl;
+   if (t > maxtime)
+     maxtime=t;
+   if (t < mintime )
+     mintime=t;
+
 #endif    
 
                 actuation[i+1] = sigmoid(netin[i]);
             }
+#ifdef SAMPLEFREQ
             if ( (y+1) % SAMPLEFREQ == 0)
             {
                std::cout << "Final output : " << endl <<   std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl << flush;
                std::cout << "Expec output : " << endl  <<  std::setw(7) << fixed << showpoint << tgt.subvec(0,9) << " Sample: " << y+1 << std::endl << flush;
             }
-            
+#endif            
                     //////////////////////////// forward feed end
             if (train)
             {
                  // printout intermediate result
                   int outval = actuation[OutputLayer].subvec(0,9).index_max();
+#ifdef SAMPLEFREQ
                   if ( (y+1) % SAMPLEFREQ == 0)
                   {
                       std::cout << "Train output : " << endl  <<  std::setw(7) << fixed << showpoint  << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 << std::endl << flush;
@@ -556,6 +580,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                          cout << "       " << laststr;  // expected   
                      cout << endl << flush;      
                   }
+#endif
                   if (backprop(tgt, y) == 1)
                      break;  // exit i/epoch loop and goto next sample (as error function is within limits for this tgt)
             }
@@ -581,7 +606,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
             }
             num_tested++;
         }
-        if (!train ||  (y+1) % SAMPLEFREQ == 0)
+        if (!train ) 
         {
           std::cout << "Final output : " << endl  << std::setw(7) << fixed << showpoint << actuation[OutputLayer].subvec(0,9) << " Sample: " << y+1 <<std::endl << flush;
           for (int z1=0;z1<actuation[OutputLayer].subvec(0,9).index_max();z1++)
@@ -890,552 +915,8 @@ cout << "CUDA ARCH == " << __CUDA_ARCH__ << endl;
    checkError(cudaFree(LayerWeightsDevice));
    checkError(cudaFree(ActuationDevice));
    checkError(cudaFree(NetinDevice));
-}
-#if 0
-#include <iostream>
-using namespace std;
-
-__global__
-void kernel(float *a, float *b, float *c, int N, int M) {
-    int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    float sum = 0;
-    if (tid < M) {
-        for (int i = 0; i < N; i++)
-            sum += a[i] * b[(i * M) + tid];
-        c[tid] = sum;
-
-    }
-}
-
-int main(void) {
-
-    float *dev_a, *dev_b, *dev_c;
-
-    int N = 785;
-    int M = 31;
-
-    float a[N];
-    float b[N][M];
-    float c[M];
-
-    for (int i = 0; i < N; i++) {
-        a[i] = (float) rand()/ (float) RAND_MAX;
-        cout << "a[" << i << "]=" << a[i] << endl;
-    }
-
-    for (int i = 0; i < N; i++) {
-        for (int e = 0; e < M; e++) {
-            b[i][e] = (float) rand()/ (float) RAND_MAX;
-        cout << "b[" << i << "][" << e << "]=" << b[i][e] << endl;
-        }
-    }
-
-    cudaMalloc((void**) &dev_a, sizeof(float) * N);
-    cudaMalloc((void**) &dev_b, sizeof(float) * N * M);
-    cudaMalloc((void**) &dev_c, sizeof(float) * M);
-
-    cudaMemcpy(dev_a, a, sizeof(float) * N, cudaMemcpyHostToDevice);
-    cudaMemcpy(dev_b, b, sizeof(float) * N * M, cudaMemcpyHostToDevice);
-
-    kernel<<<M / 256 + 1, 256>>>(dev_a, dev_b, dev_c, N, M);
-
-    cudaMemcpy(c, dev_c, sizeof(float) * M, cudaMemcpyDeviceToHost);
-
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-    cudaFree(dev_c);
-
-    for (int i = 0; i < M; i++) {
-        //cout << c[i] << endl;
-        cout << "c[" << i << "]=" << c[i] << endl;
-    }
-// for (int i=0;i<10;i++)
-//   cout << (float) rand()/ (float) RAND_MAX << endl;
-    return 0;
-}
-void matrix_mult (double  * m2, double * vin2, double * vout2, int idx)
-{
-   int ms=mat_start_idx[idx];
-   int me=mat_start_idx[idx+1];
-   int vs=vec_start_idx[idx];
-   int ve=vec_start_idx[idx+1];
-   int vl=ve-vs;
-   int ml=me-ms;
-   double tmp =0;
-
-   for (int i=0;i<ml;i++)
-   {
-        int vi = i % vl;
-        tmp += m2[ms+i]*vin2[vs+vi];
-        if ((vi == 0) || (i+1) % vi == 0)
-        {
-           int vo2idx=(i/vl);
-           vout2[vo2idx] = tmp;
-           tmp =0;
-        }
-   }
-    
-}
-
-void vector_mult (double  * v2, double i2, int idx)
-{
-   int s=vec_start_idx[idx];
-   int e=vec_start_idx[idx+1];
-   for (int i=s;i<e;i++)
-        v2[i] = v2[i] * i2;
-    
-}
-
-void vector_div (double  * v2, double i2, int idx)
-{
-    vector_mult(v2, 1/i2, idx); 
-}
-
-int index(int lyr, int row, int col)
-{
-   int olyr = lyr==0?0:nodes[lyr-1];
-   int ret = olyr+row*(nodes[lyr]+1)+col;
-   return ret;
-}
-
-void deindex(int val, int lyr, int & row, int & col)
-{
-   int olyr = lyr==0?0:nodes[lyr-1];
-   int deval = val-olyr;
-   col = deval % (nodes[lyr]+1);
-   row =  deval / (nodes[lyr]+1);
-}
-// Kernel - Adding two matrices MatA and MatB
-
-
-__global__ void gen_matvec(double *A, double*x, double*y, const int m, const int n) 
-{
-  unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
-  if ( xIndex < m ){
-    double c = 0.0f;
-    for(int i=0; i<n; i++)
-      c = c + x[i] * A[xIndex + m * i];
-    y[xIndex] = c;
-  }
-}
-double matVecNaive (double * out, double * in, double * A, const int m, const int n) {
-
-  // set up threading and blocking variables
-  cudaDeviceProp dp;
-  cudaGetDeviceProperties(&dp,0);
-  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-
-  int threads_perblockm = min(m, max_threads_per_block);
-  dim3 threadsPerBlockm(threads_perblockm);
-  int num_blocksm = (int)ceil((double)m/(double)threads_perblockm);
-  dim3 numBlocksm(num_blocksm);
-
-  // set up timing
-  cudaEvent_t start, stop;
-  float time;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start,0);
-
-  // execute kernel
-  gen_matvec <<< numBlocksm, threadsPerBlockm >>>((double*)A, (double*)in, (double*)out, m, n);
-
-  cudaThreadSynchronize();
-  cudaEventRecord(stop,0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
-  cudaEventDestroy(start);
-  cudaEventDestroy(stop);
-
-  return time;
-}
-
-__global__ void MatMulKernel(double *out, double *in, double *a, const int matrixHeight, const int matrixWidth) {
-  // get variables for loop
-  // copy section of b into shared mem
-  // go through the threads vertically and sum them into a variable
-  // atomic add these variables to the corresponding c index
-
-  // looping is happening horizontally on the matrix
-  // BLOCK_WIDTH is again horizontal
-  // BLOCK_HEIGHT is going vertical
-  // n / BLOCK_WIDTH blocks horizontally
-  // m / BLOCK_HEIGHT block vertically
-
-  // get variables for loop
-  // variable for loop length: blockEltHeight
-  __shared__ int blockElt;
-  __shared__ int blockxInd;
-  __shared__ int blockyInd;
-  if (threadIdx.x == 0) {
-    if ((blockIdx.x + 1) * BLOCK_WIDTH <= matrixWidth)
-      blockElt = BLOCK_WIDTH;
-    else blockElt = matrixWidth % BLOCK_WIDTH;
-    blockxInd = blockIdx.x * BLOCK_WIDTH;
-    blockyInd = blockIdx.y * BLOCK_HEIGHT;
-  }
-  
-  __syncthreads();
-  
-  // copy section of b into shared mem
-  // use the first BLOCK_WIDTH of thread
-  __shared__ double b[BLOCK_WIDTH];
-
-  if (threadIdx.x < blockElt) 
-    b[threadIdx.x] = in[blockxInd + threadIdx.x];
-  
-  __syncthreads();
-
-  // summing variable
-  double cSum = (double) 0;
-  int threadyInd = blockyInd + threadIdx.x;
-
-  // make sure we are inside the matrix verticallly
-  if (threadyInd < matrixHeight) {
-  
-    // go through the threads vertically and sum them into a variable
-    for (int i=0; i<blockElt; i++)
-      // A col index   : blockIdx.x * BLOCK_WIDTH + i : blockxInd + i
-      // A row index  : blockIdx.y * BLOCK_HEIGHT + threadIdx.x : blockyInd + threadIdx.x : threadyInd
-      // B index : b[i]
-
-      // cSum = B index * ( A col index * matrixHeight + A row index)
-      cSum += b[i] * a[(blockxInd + i) * (matrixHeight) + (threadyInd)];
-      //printf("csum = %f\n", cSum);
-    
-    // atomic add these variables to the corresponding c index
-    atomicAdd(out + threadyInd, cSum);
-  }
-  
-}
-
-
-void CUDA_MatrixVectorMultiply5(int nr, int nc, double* M, double* Y, double* X)
-//void CUDA_MatrixVectorMultiply5(double* Y, double* X, double* M, int nr, int nc)
-//double matVecMul (double * out, double * in, double * A, const int m, const int n)
-{
-  // set up threading and blocking variables
-  cudaDeviceProp dp;
-  cudaGetDeviceProperties(&dp,0);
-  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-
-  int threads_perblockm = min(nr, max_threads_per_block);
-  dim3 threadsPerBlockm(threads_perblockm);
-  int num_blocksm = (int)ceil((double)nr/(double)threads_perblockm);
-  dim3 numBlocksm(num_blocksm);
-
-  int blockCols = (int) ceil(nc / (double) BLOCK_WIDTH);
-  int blockRows = (int) ceil(nr / (double) BLOCK_HEIGHT);
-  dim3 dimBlock(BLOCK_HEIGHT);
-  dim3 dimGrid(blockCols, blockRows);
-
-  int sharedMem = 3 * sizeof (int) + BLOCK_WIDTH * sizeof (double);
-
-  cudaMalloc((void**) &LayerWeightsDevice, nr*nc*sizeof(double));
-  cudaMalloc((void**) &ActuationDevice, nr);
-  cudaMalloc((void**) &NetinDevice, nc);
-
-  // copy elements from CPU to GPU
-  cudaMemcpy(LayerWeightsDevice, M, nr*nc*sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(ActuationDevice, X, nr*sizeof(double), cudaMemcpyHostToDevice);
-
-
-
-  // set up timing
-  cudaEvent_t start, stop;
-  float time;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start,0);
-
-  // execute kernels
-  //zero_vector_double<<<numBlocksm, threadsPerBlockm>>>(out, m);
-  MatMulKernel<<<dimGrid, dimBlock, sharedMem>>>(NetinDevice, ActuationDevice, LayerWeightsDevice, nr, nc);
-
-  cudaThreadSynchronize();
-  cudaMemcpy(Y, NetinDevice, nc*sizeof(double), cudaMemcpyDeviceToHost);
-cout << "MatMulKernel=";
-for (int i=0;i<nc;i++)
-  cout  << Y[i] << " ";
-cout << endl;
-  cudaEventRecord(stop,0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
-  cudaEventDestroy(start);
-  cudaEventDestroy(stop);
-
-//  return time;
-}
-
-double matVecMulT (double * out, double * in, double * A, const int m, const int n)
-{
-  // set up threading and blocking variables
-  cudaDeviceProp dp;
-  cudaGetDeviceProperties(&dp,0);
-  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-
-  int threads_perblockn = min(n, max_threads_per_block);
-  dim3 threadsPerBlockn(threads_perblockn);
-  int num_blocksn = (int)ceil((double)n/(double)threads_perblockn);
-  dim3 numBlocksn(num_blocksn);
-
-  int blockCols = (int) ceil(n / (double) BLOCK_HEIGHT);
-  int blockRows = (int) ceil(m / (double) BLOCK_WIDTH);
-  dim3 dimBlock(BLOCK_HEIGHT);
-  dim3 dimGrid(blockCols, blockRows);
-
-  int sharedMem = 3 * sizeof (int) + BLOCK_WIDTH * sizeof (double);
-
-  // set up timing
-  cudaEvent_t start, stop;
-  double time;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
-  cudaEventRecord(start,0);
-
-  // execute kernels
-  //zero_vector_double<<<numBlocksn, threadsPerBlockn>>>(out, n);
-  MatMulKernelT<<<dimGrid, dimBlock, sharedMem>>>(out, in, A, m, n);
-
-  cudaThreadSynchronize();
-  cudaEventRecord(stop,0);
-  cudaEventSynchronize(stop);
-  cudaEventElapsedTime(&time, start, stop);
-  cudaEventDestroy(start);
-  cudaEventDestroy(stop);
-
-  return time;
-}
-__global__ void CUDA_MatrixVectorMultiply4(int nr, int nc, double* M, double* Y, double* X)
-{
-int row = blockIdx.y * blockDim.y + threadIdx.y;
-int col = blockIdx.x * blockDim.x + threadIdx.x;
-double sum = 0.0;
-for (int k = 0; k < nr; k++) {
-sum += M[row*nr+k] * X[k * nr + col];
-}
-Y[row*nr+col] = sum;
-}
-__global__ void CUDA_MatrixVectorMultiply3(int nr, int nc, double* M, double* Y, double* X)
-{
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i < nr && j < nc)
-        Y[i][j] = M[i][j] + X[i][j];
-}
-__global__
-void CUDA_MatrixVectorMultiply2 (int nr, int nc, double* M, double* Y, double* X)
-{
-    int tid=threadIdx.x+blockIdx.x*blockDim.x;
-        double sum=0;
-    if(tid<nc){
-        for(int i=0; i<nr; i++)
-            sum += X[i]*M[(i*nc)+tid];
-        Y[tid]=sum/nr;
-    }
-}
-/*
-void MatrixVectorMultiply2(rowvec  &n, rowvec  &a, mat  &m, double * * ret)
-{   
-    cudaError_t cudaStat;
-    cublasStatus_t stat;
-    cublasHandle_t handle;
-    int i, j;
-    double* devPtrA;
-    double* a = 0;
-    int M=m.n_rows;
-    int N=m.n_cols;
-    a = (double*)malloc (M * N * sizeof (*a));
-    if (!a) {
-        printf ("host memory allocation failed");
-        return EXIT_FAILURE;
-    }
-    memcpy(a, m.memptr(), M* N* sizeof(double));
-   // for (j = 0; j < N; j++) {
-   //     for (i = 0; i < M; i++) {
-   //         a[IDX2C(i,j,M)] = (float)(i * N + j + 1);
-   //     }
-    //}
-    cudaStat = cudaMalloc ((void**)&devPtrA, M*N*sizeof(*a));
-    if (cudaStat != cudaSuccess) {
-        printf ("device memory allocation failed");
-        return EXIT_FAILURE;
-    }
-    stat = cublasCreate(&handle);
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf ("CUBLAS initialization failed\n");
-        return EXIT_FAILURE;
-    }
-    stat = cublasSetMatrix (M, N, sizeof(*a), a, M, devPtrA, M);
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf ("data download failed");
-        cudaFree (devPtrA);
-        cublasDestroy(handle);
-        return EXIT_FAILURE;
-    }
-    modify (handle, devPtrA, M, N, 1, 2, 16.0f, 12.0f);
-    stat = cublasGetMatrix (M, N, sizeof(*a), devPtrA, M, a, M);
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf ("data upload failed");
-        cudaFree (devPtrA);
-        cublasDestroy(handle);
-        return EXIT_FAILURE;
-    }
-    cudaFree (devPtrA);
-    cublasDestroy(handle);
-    for (j = 0; j < N; j++) {
-        for (i = 0; i < M; i++) {
-            printf ("%7.0f", a[IDX2C(i,j,M)]);
-        }
-        printf ("\n");
-    }
-    free(a);
-    return EXIT_SUCCESS;
-}
-*/
-
-void matrix_multiply_cuda(rowvec & n,  rowvec & a, mat & l)
-{
-double * q = (double *) l.memptr();
-for (int y=0;y<l.n_cols;y++)
-{
-  for (int x=0;x<l.n_rows;x++)
-  {
-      //cout << netin[i](y,x) << " ";
-      cout << q[y*l.n_rows+x]  << ",";
-  }
-  cout << endl << flush;
-}
-cout << "******************************** " << endl <<  layer_weights[i].t()  << endl << flush;
-exit(1);
-}
-
-#include <iostream>
-#include <armadillo>
-using namespace std;
-using namespace arma;
-//nvcc --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets -std=c++11 -g -Iarmadillo-10.6.2/include/   test2.cu  -l cublas_static -l lapack_static -L/usr/lib64  -o test2
-
-void checkError(cudaError_t e)
-{
-    if (e != cudaSuccess)
-    {
-        std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) << '\n';
-        abort();
-    }
-}
-
-
-__global__ void gen_matvec(double *A, double*x, double*y, const int m, const int n)
-{
-  unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
-  if ( xIndex < n ){
-    double c = 0.0f;
-    for(int i=0; i<m; i++)
-      c = c + x[i] * A[xIndex + n * i];
-    y[xIndex] = c;
-  }
-}
-
-float matVecNaive (double * out, double * in, double * A, const int m, const int n) {
-
-  // set up threading and blocking variables
-  double * dev_A;
-  double * dev_in;
-  double * dev_out;
-  cudaDeviceProp dp;
-  cudaGetDeviceProperties(&dp,0);
-  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-cout << "max_threads_per_block=" << max_threads_per_block << endl;
-  int threads_perblockm = min(m, max_threads_per_block);
-cout << "threads_perblockm=" << threads_perblockm << endl;
-  dim3 threadsPerBlockm(threads_perblockm);
-  int num_blocksm = (int)ceil((double)m/(double)threads_perblockm);
-cout << "num_blocksm=" << num_blocksm << endl;
-  dim3 numBlocksm(num_blocksm);
-
-  // set up timing
-  cudaEvent_t start, stop;
-  float time;
-  checkError(cudaEventCreate(&start));
-  checkError(cudaEventCreate(&stop));
-  checkError(cudaEventRecord(start,0));
-
- checkError(cudaMalloc( &dev_A, m*n*sizeof(double)));
- checkError(cudaMalloc( &dev_in, m*sizeof(double)));
- checkError(cudaMalloc( &dev_out, n*sizeof(double)));
- checkError(cudaMemcpy(dev_A, A,  m*n*sizeof(double), cudaMemcpyHostToDevice));
- checkError(cudaMemcpy(dev_in, in,  m*sizeof(double), cudaMemcpyHostToDevice));
-
-
-  // execute kernel
-  gen_matvec <<< numBlocksm, threadsPerBlockm >>>((double*)dev_A, (double*)dev_in, (double*)dev_out, m, n);
-  checkError(cudaThreadSynchronize());
- checkError(cudaMemcpy(out, dev_out,  n*sizeof(double), cudaMemcpyDeviceToHost));
-  checkError(cudaEventRecord(stop,0));
-  checkError(cudaEventSynchronize(stop));
-  checkError(cudaEventElapsedTime(&time, start, stop));
-  checkError(cudaEventDestroy(start));
-  checkError(cudaEventDestroy(stop));
-
-cout << "out="<< out[0] << " "<< out[1] << endl;
-  return time;
-}
-
-
- void MultArmVM(double * V, double * M, double * R, int m_nr, int m_nc)
- {
-  double sum;
-  for (int c=0; c < m_nc; c++)
-  {
-    sum=0;
-    for (int r = 0; r < m_nr; r++)  // m_nr == v_nc
-       sum += M[c*m_nr+r] * V[r];
-    R[c] = sum;
-  }
- }
-int main()
-{
-   double vbuf[20]= { 1, 2, 3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0 };
-
-   double Abuf[40]={1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0,1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0};
-   double rbuf[2];
-   rowvec v(vbuf, 20, false, true);
-   rowvec r(rbuf, 2, false, true);
-    v = { 1, 2, 3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9,0 };
-
-mat A(Abuf, 2, 20,  false, true);
-  A  = { {1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0},
-         {1, 2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,0}};
-/*             { {1,2},
-         
-               {3, 4},
-               {3, 4},
-               {3, 4},
-               { 5, 6},
-               {3, 4},
-               { 5, 6},
-               {3, 4},
-               { 5, 6},
-               {3, 4},
-               { 5, 6},
-               {3, 4},
-               { 5, 6},
-               {3, 4},
-               { 5, 6},
-               { 5, 6},
-               { 5, 6},
-               {3, 4},
-               { 5, 6},
-               {7,8} }; */
-
-cout << "A*v=";
-cout << v*A.t() << endl;
-//A=A.t();
-//MultArmVM(vbuf, Abuf, rbuf, 20, 2);
-cout << A.n_rows << "," << A.n_cols << endl;
- matVecNaive (rbuf, vbuf, Abuf, 20, 2) ;
-cout << "rbuf=" << rbuf[0] << " " << rbuf[1] << endl;
-cout << "r=" << r << endl;
-}
+#ifndef SERIAL_ONLY
+   cout << "Max time for CUDA call : " << maxtime;
+   cout << "Min time for CUDA call : " << mintime;
 #endif
+}
