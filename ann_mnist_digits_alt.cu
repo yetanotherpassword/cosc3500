@@ -480,7 +480,7 @@ void MatrixVectorMultiply(vect & Y, vect & X, matx & M)
       exit(1);
    }
 }
-int backprop(vect tgt, int y0)
+int backprop(vect & tgt, int y0)
 {
 
         vect final;
@@ -488,11 +488,6 @@ int backprop(vect tgt, int y0)
         final.v=new double[final.size];
         memcpy(final.v, actuation[OutputLayer].v, final.size);
 
-        vect tgt0;
-        tgt0.size  = tgt.size+1;
-        tgt0.v = new double [tgt0.size];
-        memcpy( tgt0.v, tgt.v, tgt.size);
-        tgt0.v[tgt0.size-1] = 0;
 
         double err=0;
         for (int i=0;i<final.size;i++)
@@ -516,13 +511,22 @@ int backprop(vect tgt, int y0)
         
         for (int i=0;i< ftick[OutputLayer].size;i++)
         {
+          if (i<tgt.size)
+          {
            ftick[OutputLayer].v[i] = (1-actuation[OutputLayer].v[i] ) * actuation[OutputLayer].v[i];
-           deltafn[OutputLayer].v[i]  =  (tgt0.v[i] - actuation[OutputLayer].v[i])*(ftick[OutputLayer].v[i]);
+if (std::isnan(ftick[OutputLayer].v[i])) {
+  cout << "Error ISNAN at ftick OutputLayer="<< OutputLayer << " i=" << i << endl; exit(1);}
+           deltafn[OutputLayer].v[i]  =  (tgt.v[i] - actuation[OutputLayer].v[i])*(ftick[OutputLayer].v[i]);
+cout << deltafn[OutputLayer].v[i] << " = " << "(" << tgt.v[i] << " - " << actuation[OutputLayer].v[i] << ") * " << ftick[OutputLayer].v[i]<<endl;
+if (std::isnan(deltafn[OutputLayer].v[i])) {
+  cout << "Error ISNAN at deltafn OutputLayer="<< OutputLayer << " i=" << i << endl; exit(1);}
+          }
         }
 
 
         for (int i=OutputLayer-1;i>=0;i--)
         {
+cout << "WUP("<<weight_updates[i].rows<<"x"<<weight_updates[i].cols<<") = DFN("<< deltafn[i+1].size << ") * actuation("<< actuation[i].size<< ")"<<endl;
             VectorMultiplyVector(weight_updates[i], deltafn[i+1], actuation[i]);
             
             VectorMultiplyMatrix(deltafn[i], deltafn[i+1], layer_weights[i]);
