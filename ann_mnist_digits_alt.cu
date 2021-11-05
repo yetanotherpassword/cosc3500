@@ -285,7 +285,7 @@ int idxmatchval(vect q, int i)
    return idx;
 }
 
-int idxmaxval(vect q, int l)
+int idxmaxval(vect & q, int l)
 {
    int len=q.size;
    len = len > 10?10:len;
@@ -306,6 +306,7 @@ int idxmaxval(vect q, int l)
           
        exit(1);
    }
+ cout << "returning idx=" << idx << " as "<< q.v[idx] << " is biggest eg " << q.v[0] <<"," <<q.v[1] <<"," <<q.v[2]<<"," <<q.v[3]<<"," <<q.v[4]<<"," <<q.v[5]<<"," <<q.v[6]<<"," <<q.v[7]<<"," <<q.v[8]<<"," <<q.v[9] << endl;
    return idx;
 }
 
@@ -325,23 +326,34 @@ __global__ void gen_matvec(double *A, double*x, double*y, const int m, const int
   unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
   if ( xIndex < n ){
     double c = 0.0f;
-    for(int i=0; i<m; i++)
-      c = c + x[i] * A[xIndex + n * i];
+    for(int i=0; i<n; i++)
+      c = c + x[i] * A[xIndex + m * i];
     y[xIndex] = c;
   }
 }
 
-float matVecNaive (double * out, double * in, double * A, const int m, const int n) {
+float matVecNaive (vect &n, vect & a, mat & l)
+{
 
+  double * out=n.v;
+  double * in=a.v;
+  double * A = l.m;
+  int mrows=l.rows;
+  int mcols=l.cols;
+  int nsize=n.size;
+  int asize=a.size;
+  cout << " Going to multiply act(1," << asize << ") X layerw("<<mrows<<","<<mcols<<") to get netin (1x" << nsize << ")" << endl;
+  
+  
   // set up threading and blocking variables
   cudaDeviceProp dp;
   cudaGetDeviceProperties(&dp,0);
   unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
 //cout << "max_threads_per_block=" << max_threads_per_block << endl;
-  int threads_perblockm = min(m, max_threads_per_block);
+  int threads_perblockm = min(mrows, max_threads_per_block);
 //cout << "threads_perblockm=" << threads_perblockm << endl;
   dim3 threadsPerBlockm(threads_perblockm);
-  int num_blocksm = (int)ceil((double)m/(double)threads_perblockm);
+  int num_blocksm = (int)ceil((double)mrows/(double)threads_perblockm);
 //cout << "num_blocksm=" << num_blocksm << endl;
   dim3 numBlocksm(num_blocksm);
 
@@ -352,15 +364,15 @@ float matVecNaive (double * out, double * in, double * A, const int m, const int
   checkError(cudaEventCreate(&stop));
   checkError(cudaEventRecord(start,0));
 
- checkError(cudaMemcpy(dev_A, A,  m*n*sizeof(double), cudaMemcpyHostToDevice));
- checkError(cudaMemcpy(dev_in, in,  m*sizeof(double), cudaMemcpyHostToDevice));
+ checkError(cudaMemcpy(dev_A, A,  mrows*mcols*sizeof(double), cudaMemcpyHostToDevice));
+ checkError(cudaMemcpy(dev_in, in,  mrows*sizeof(double), cudaMemcpyHostToDevice));
 
 
   // execute kernel
-  gen_matvec <<< numBlocksm, threadsPerBlockm >>>((double*)dev_A, (double*)dev_in, (double*)dev_out, m, n);
+  gen_matvec <<< numBlocksm, threadsPerBlockm >>>((double*)dev_A, (double*)dev_in, (double*)dev_out, mrows, mcols);
     //gen_matvec<<<  numBlocksm, threadsPerBlockm  >>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
   checkError(cudaDeviceSynchronize());
- checkError(cudaMemcpy(out, dev_out,  n*sizeof(double), cudaMemcpyDeviceToHost));
+ checkError(cudaMemcpy(out, dev_out,  mcols*sizeof(double), cudaMemcpyDeviceToHost));
   checkError(cudaEventRecord(stop,0));
   checkError(cudaEventSynchronize(stop));
   checkError(cudaEventElapsedTime(&time, start, stop));
@@ -396,14 +408,14 @@ void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const doubl
 
 void VectorMultiplyMatrix(vect & Y, vect & X, matx & M)
 {
-   if (X.size == M.rows && M.cols == Y.size)
+   if (Y.size == M.rows && M.cols == X.size)
    {
       for (int i = 0; i < M.rows; ++i)
       {
          Y.v[i] = 0;
          for (int j = 0; j < M.cols; ++j)
          {
-            Y.v[i] += M.m[i*M.rows+j] * X.v[j];
+            Y.v[i] += M.m[i*M.cols+j] * X.v[j];
          }
       }
    }
@@ -417,14 +429,16 @@ void VectorMultiplyMatrix(vect & Y, vect & X, matx & M)
 void VectorMultiplyVector(matx & M, vect & Y, vect & X)
 //void MatrixTranspMultiplyVector(vect & Y, vect & X, matx & M)
 {
-ONLYIF cout << "multiplying y=("<< Y.size << "x1) to X (1x"<<X.size<<") = (" << M.rows << "x" << M.cols << ")"<< endl;
+cout << "multiplying y=("<< Y.size << "x1) to X (1x" <<X.size<<") = (" << M.rows << "x" << M.cols << ")"<< endl;
+// to multiply a (31x1) with (1x11) to get a (31x11) Matrix !
+
    if ( M.rows == Y.size && M.cols == X.size)
    {
       for (int i = 0; i < M.rows; ++i)
       {
          for (int j = 0; j < M.cols; ++j)
          {
-            M.m[i*M.rows+j] = X.v[j] * Y.v[i];
+            M.m[i*M.cols+j] = Y.v[i] * X.v[j];
             ONLYIF cout << "M["<<i<<"," << j<< "] =  X["<<j<<"] * Y[" << i << "]" << SPACE_GAP << "M="<<M.m[i*M.rows+j]<< " X=" << X.v[j] << " Y="<<  Y.v[i] << endl;
        ONLYIF     if (std::isnan(M.m[i]))
                cout << "NAN ERROR Y=" << Y.v[i] << "X=" << X.v[j] << " i=" << i << " j=" << endl;
@@ -447,10 +461,10 @@ ONLYIF cout << "multiplying x=(1x"<< X.size << ") to M ("<<M.cols<<"x"<<M.rows<<
          Y.v[i] = 0;
          for (int j = 0; j < M.cols; ++j)
          {
-            Y.v[i] += M.m[i*M.rows+j] * X.v[j];
-     ONLYIF        cout << "Y["<<i<<"] += M["<<i<<","<<j<<")* X["<<j<<"] =>"<< Y.v[i] << "=" << M.m[i*M.rows+j] << "*" << X.v[j] << endl;
+            Y.v[i] += M.m[i*M.cols+j] * X.v[j];
+     ONLYIF        cout << "Y["<<i<<"] += M["<<i<<","<<j<<")* X["<<j<<"] =>"<< Y.v[i] << "=" << M.m[i*M.cols+j] << "*" << X.v[j] << endl;
         ONLYIF     if (std::isnan(Y.v[i]))
-               cout << "NAN ERROR M=" << M.m[i*M.rows+j] << "X=" << X.v[j] << " i=" << i << " j=" <<  endl;
+               cout << "NAN ERROR M=" << M.m[i*M.cols+j] << "X=" << X.v[j] << " i=" << i << " j=" <<  endl;
                 
          }
       }
@@ -470,7 +484,7 @@ void MatrixVectorMultiply(vect & Y, vect & X, matx & M)
          Y.v[i] = 0;
          for (int j = 0; j < M.cols; ++j)
          {
-            Y.v[i] += M.m[i*M.rows+j] * X.v[j];
+            Y.v[i] += M.m[i*M.cols+j] * X.v[j];
          }
       }
    }
@@ -480,7 +494,7 @@ void MatrixVectorMultiply(vect & Y, vect & X, matx & M)
       exit(1);
    }
 }
-int backprop(vect & tgt, int y0)
+int backprop(vect & tgt0, int y0)
 {
 
         vect final;
@@ -491,11 +505,11 @@ int backprop(vect & tgt, int y0)
 
         double err=0;
         for (int i=0;i<final.size;i++)
-            err += (tgt.v[i] - final.v[i]) * (tgt.v[i] - final.v[i]) * 0.5;
+            err += (tgt0.v[i] - final.v[i]) * (tgt0.v[i] - final.v[i]) * 0.5;
 
         if (abs(err) < EPSILON)
         {
-             int val=idxmaxval(tgt, __LINE__);
+             int val=idxmaxval(tgt0, __LINE__);
 #ifdef SAMPLEFREQ
              if ( (y0+1) % SAMPLEFREQ == 0) 
                 cout << "---------------------------------- BACK PROPAGATION  sample=" << y0+1 <<" err=" << err << " < epsilon, for tgt '"<< val <<"' so error is acceptable, returning" << endl << flush;
@@ -511,13 +525,13 @@ int backprop(vect & tgt, int y0)
         
         for (int i=0;i< ftick[OutputLayer].size;i++)
         {
-          if (i<tgt.size)
+          if (i<tgt0.size)
           {
            ftick[OutputLayer].v[i] = (1-actuation[OutputLayer].v[i] ) * actuation[OutputLayer].v[i];
 ONLYIF if (std::isnan(ftick[OutputLayer].v[i])) {
   cout << "Error ISNAN at ftick OutputLayer="<< OutputLayer << " i=" << i << endl; exit(1);}
-           deltafn[OutputLayer].v[i]  =  (tgt.v[i] - actuation[OutputLayer].v[i])*(ftick[OutputLayer].v[i]);
-ONLYIF cout << deltafn[OutputLayer].v[i] << " = " << "(" << tgt.v[i] << " - " << actuation[OutputLayer].v[i] << ") * " << ftick[OutputLayer].v[i]<<endl;
+           deltafn[OutputLayer].v[i]  =  (tgt0.v[i] - actuation[OutputLayer].v[i])*(ftick[OutputLayer].v[i]);
+ONLYIF cout << deltafn[OutputLayer].v[i] << " = " << "(" << tgt0.v[i] << " - " << actuation[OutputLayer].v[i] << ") * " << ftick[OutputLayer].v[i]<<endl;
 ONLYIF if (std::isnan(deltafn[OutputLayer].v[i])) {
   cout << "Error ISNAN at deltafn OutputLayer="<< OutputLayer << " i=" << i << endl; exit(1);}
           }
@@ -527,7 +541,8 @@ ONLYIF if (std::isnan(deltafn[OutputLayer].v[i])) {
         for (int i=OutputLayer-1;i>=0;i--)
         {
 ONLYIF cout << "WUP("<<weight_updates[i].rows<<"x"<<weight_updates[i].cols<<") = DFN("<< deltafn[i+1].size << ") * actuation("<< actuation[i].size<< ")"<<endl;
-            VectorMultiplyVector(weight_updates[i], deltafn[i+1], actuation[i]);
+            //VectorMultiplyVector(weight_updates[i], deltafn[i+1], actuation[i]);
+            VectorMultiplyVector(weight_updates[i], actuation[i], deltafn[i+1]);
             
             VectorMultiplyMatrix(deltafn[i], deltafn[i+1], layer_weights[i]);
            // weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
@@ -671,10 +686,10 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 #ifdef SERIAL_ONLY
                 //netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
                 
-                VectorMultiplyMatrixTransp(netin[i],  actuation[i], layer_weights[i]);
+                VectorMultiplyMatrix(netin[i],  actuation[i], layer_weights[i]);
 #else
              //   MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], netptrs[i]);
-                float t = matVecNaive (  netin[i].v,  actuation[i].v, layer_weights[i].m, layer_weights[i].cols, layer_weights[i].rows ) ;
+                float t = matVecNaive (  netin[i],  actuation[i], layer_weights[i]);
                 //memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
 
                 if (t > maxtime)
@@ -1064,19 +1079,19 @@ int main (int argc, char *argv[])
 
             netin.push_back(rb2);   // size=nodes[i],1
             matx tmpwgt;
-            tmpwgt.rows=nodes[i+1]+1;
-            tmpwgt.cols=nodes[i]+1;
+            tmpwgt.rows=nodes[i]+1;
+            tmpwgt.cols=nodes[i+1]+1;
             tmpwgt.m =  new double [ tmpwgt.rows * tmpwgt.cols];
             for (int j=0;j<tmpwgt.rows * tmpwgt.cols;j++)
                tmpwgt.m[j] = ((double)rand())/(double)RAND_MAX;
             matx tmpwgtup;
-            tmpwgtup.rows=nodes[i+1]+1;
-            tmpwgtup.cols=nodes[i]+1;
+            tmpwgtup.rows=nodes[i]+1;
+            tmpwgtup.cols=nodes[i+1]+1;
             tmpwgtup.m =  new double [ tmpwgtup.rows * tmpwgtup.cols];
 
             matx tmpwgtnew;
-            tmpwgtnew.rows=nodes[i+1]+1;
-            tmpwgtnew.cols=nodes[i]+1;
+            tmpwgtnew.rows=nodes[i]+1;
+            tmpwgtnew.cols=nodes[i+1]+1;
             tmpwgtnew.m =  new double [ tmpwgtnew.rows * tmpwgtnew.cols];
 
             layer_weights.push_back( tmpwgt );
