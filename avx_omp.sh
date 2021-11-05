@@ -26,7 +26,7 @@ echo ${SLURM_TMPDIR}
 #var/spool/slurmd/job11076110/slurm_script
 date
 echo "-----------------------------------------------------------------------------"
-echo "Built by:   g++ ann_mnist_digits2.cpp -g -o ann_mnist_digits2  -std=c++11 -fopenmp -larmadillo -lblas -Bstatic -Iarmadillo-10.6.2/include/ -Larmadillo-10.6.2/build -mavx2 -mfma -mavx"
+echo "Built by:   g++ ann_mnist_digits_avx_omp.cpp -g -o ann_mnist_digits_avx_omp  -std=c++11 -fopenmp -larmadillo -lblas -Bstatic -Iarmadillo-10.6.2/include/ -Larmadillo-10.6.2/build -mavx2 -mfma -mavx"
 
-echo ann_mnist_digits2
-./ann_mnist_digits2
+echo ann_mnist_digits_avx_omp
+./ann_mnist_digits_avx_omp
