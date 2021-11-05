@@ -1,3 +1,5 @@
+#include <string>
+#include <iostream>
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -408,7 +410,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          }
          confusion_matrix << endl << endl; 
          confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
-         cout << confusion_matrix;
+         cout << confusion_matrix.str();
     }
                 
 }
@@ -421,7 +423,7 @@ void save_weights(string hdr)
     cout << "Saving weights to file : " << fname << endl;
     oFile.open(fname, ios::out);
     if (hdr.substr(1,4)=="post")
-       oFile << confusion_matrix;      
+       oFile << confusion_matrix.str();      
     oFile << "NumberOfLayers=" << NumberOfLayers << endl;
     for (int i=0; i< OLayer; i++)
     {
