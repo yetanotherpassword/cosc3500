@@ -5,6 +5,7 @@
 #include <cmath>
 #include <chrono>
 #include <boost/algorithm/string.hpp>
+#include <vector>
 
 #undef DEBUGON
 #define DEFTHREADS 256
@@ -86,7 +87,7 @@ float maxtime=-10;
        int rows;
        int cols;
     } matx;
-    vector<vect> netin;
+    std::vector<vect> netin;
     vector<vect> actuation;
     vector<vect> deltafn;
     vector<vect> ftick;
@@ -426,7 +427,7 @@ cout << "multiplying y=("<< Y.size << "x1) to X (1x"<<X.size<<") = (" << M.rows 
             M.m[i*M.rows+j] = X.v[j] * Y.v[i];
             cout << "M["<<i<<"," << j<< "] =  X["<<j<<"] * Y[" << i << "]" << SPACE_GAP << "M="<<M.m[i*M.rows+j]<< " X=" << X.v[j] << " Y="<<  Y.v[i] << endl;
             if (std::isnan(M.m[i]))
-               cout << "Y=" << Y.v[i] << "X=" << X.v[j] << " i=" << i << " j=" << endl;
+               cout << "NAN ERROR Y=" << Y.v[i] << "X=" << X.v[j] << " i=" << i << " j=" << endl;
          }
       }
    }
@@ -449,7 +450,7 @@ cout << "multiplying x=(1x"<< X.size << ") to M ("<<M.cols<<"x"<<M.rows<<") = (1
             Y.v[i] += M.m[i*M.rows+j] * X.v[j];
      //       cout << "Y["<<i<<"] += M["<<i<<","<<j<<")* X["<<j<<"] =>"<< Y.v[i] << "=" << M.m[i*M.rows+j] << "*" << X.v[j] << endl;
             if (std::isnan(Y.v[i]))
-               cout << "M=" << M.m[i*M.rows+j] << "X=" << X.v[j] << " i=" << i << " j=" <<  endl;
+               cout << "NAN ERROR M=" << M.m[i*M.rows+j] << "X=" << X.v[j] << " i=" << i << " j=" <<  endl;
                 
          }
       }
