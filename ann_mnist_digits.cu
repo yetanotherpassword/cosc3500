@@ -1,11 +1,13 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
-#include <nvblas.h>
-#include <cublas.h>
+//#include <nvblas.h>
+//#include <cublas.h>
+#include <chrono>
 #define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
 #include <boost/algorithm/string.hpp>
+#include <vector>
 
 #undef DEBUGON
 #define DEFTHREADS 256
@@ -83,7 +85,6 @@ float maxtime=-10;
     vector<mat> layer_weights;
     vector<mat> weight_updates;
     vector<mat> new_layer_weights;
-    mat tmpwgt; 
     ios init(NULL);
     int vec_start_idx[100];
     int mat_start_idx[100];
@@ -292,7 +293,6 @@ int backprop(rowvec tgt, int y0)
 
         for (int i=OutputLayer-1;i>=0;i--)
         {
-  
             weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
              
@@ -318,165 +318,6 @@ void checkError(cudaError_t e)
     }
 }
 
-
-
-__global__ void gen_matvec2(const int m, const int n, double *A, double*y, double*x)
-{
-  unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
-  if ( xIndex < n ){
-    double c = 0.0f;
-    for(int i=0; i<m; i++)
-      c = c + x[i] * A[xIndex + n * i];
-    y[xIndex] = c;
-  }
-}
-
-
-__global__ void gen_matvec(double *A, double*x, double*y, const int m, const int n)
-{
-  unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
-  if ( xIndex < n ){
-    double c = 0.0f;
-    for(int i=0; i<m; i++)
-      c = c + x[i] * A[xIndex + n * i];
-    y[xIndex] = c;
-  }
-}
-
-float matVecNaive (double * out, double * in, double * A, const int m, const int n) {
-
-  // set up threading and blocking variables
-  cudaDeviceProp dp;
-  cudaGetDeviceProperties(&dp,0);
-  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-//cout << "max_threads_per_block=" << max_threads_per_block << endl;
-  int threads_perblockm = min(m, max_threads_per_block);
-//cout << "threads_perblockm=" << threads_perblockm << endl;
-  dim3 threadsPerBlockm(threads_perblockm);
-  int num_blocksm = (int)ceil((double)m/(double)threads_perblockm);
-//cout << "num_blocksm=" << num_blocksm << endl;
-  dim3 numBlocksm(num_blocksm);
-
-  // set up timing
-  cudaEvent_t start, stop;
-  float time;
-  checkError(cudaEventCreate(&start));
-  checkError(cudaEventCreate(&stop));
-  checkError(cudaEventRecord(start,0));
-
- checkError(cudaMemcpy(dev_A, A,  m*n*sizeof(double), cudaMemcpyHostToDevice));
- checkError(cudaMemcpy(dev_in, in,  m*sizeof(double), cudaMemcpyHostToDevice));
-
-
-  // execute kernel
-  gen_matvec <<< numBlocksm, threadsPerBlockm >>>((double*)dev_A, (double*)dev_in, (double*)dev_out, m, n);
-    //gen_matvec<<<  numBlocksm, threadsPerBlockm  >>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
-  checkError(cudaThreadSynchronize());
- checkError(cudaMemcpy(out, dev_out,  n*sizeof(double), cudaMemcpyDeviceToHost));
-  checkError(cudaEventRecord(stop,0));
-  checkError(cudaEventSynchronize(stop));
-  checkError(cudaEventElapsedTime(&time, start, stop));
-  checkError(cudaEventDestroy(start));
-  checkError(cudaEventDestroy(stop));
-
-//cout << "out="<< out[0] << " "<< out[1] << endl;
-  return time;
-}
-__global__
-void CUDA_MatrixVectorMultiply(int nr, int nc, double* M, double* Y, const double* X)
-{
-
-    // blockDim is the number of threads in a block
-    // gridDim is the number of blocks in the grid
-    int xindex = blockIdx.x * blockDim.x + threadIdx.x;
-    int yindex = blockIdx.y * blockDim.y + threadIdx.y;
-    int xstride = blockDim.x * gridDim.x;
-    int ystride = blockDim.y * gridDim.y;
-
-    for (int i = xindex; i < nc; i+= xstride)
-    {
-        Y[i] = 0;
-        for (int j = yindex; j < nr; j+= ystride)
-        {
-             Y[i] += M[i * nc + j] * X[j];
-        }
-        Y[i] = Y[i] / nr;
-    }
-
-     __syncthreads();
-}
-
-// implementation of the matrix-vector multiply function
-void MatrixVectorMultiply(rowvec  &n, rowvec  &a, mat  &m, double * ret)
-{
-    int mcols = m.n_rows;
-    int mrows = m.n_cols;
-    int m_biggest = max(mcols, mrows);
-mat t=m.t();
-rowvec res=a*t;
-double * aptr=a.memptr();
-double * nptr=n.memptr();
-double * mptr=m.memptr();
-
-    int   threadsPerBlock0 =256;
-    //int   threadsPerBlock =thrds;
-    //int   blocksPerGrid = (m_biggest + threadsPerBlock- 1) / threadsPerBlock;
-    int blocksPerGrid0=m_biggest/threadsPerBlock0+1;
-    //blocksPerGrid=4;
-    //threadsPerBlock=256;
- 
-//    dim3 threadsPerBlock(16, 16);
-//    dim3 numBlocks((N + threadsPerBlock.x -1) / threadsPerBlock.x, (N+threadsPerBlock.y -1) / threadsPerBlock.y);
-
-
-  cudaDeviceProp dp;
-  cudaGetDeviceProperties(&dp,0);
-  unsigned int max_threads_per_block = dp.maxThreadsPerBlock;
-  int threads_perblockm = min(mrows, max_threads_per_block);
-  dim3 threadsPerBlockm(threads_perblockm);
-  int num_blocksm = (int)ceil((double)mrows/(double)threads_perblockm);
-  dim3 numBlocksm(num_blocksm);
-
-  cout << "max_threads_per_block=" << max_threads_per_block << endl;
-  cout << "threads_perblockm=" << threads_perblockm << endl;
-  cout << "num_blocksm=" << num_blocksm << endl;
-
-  // set up timing
-  cudaEvent_t start, stop;
-  float time;
-  checkError(cudaEventCreate(&start));
-  checkError(cudaEventCreate(&stop));
-  checkError(cudaEventRecord(start,0));
- checkError(cudaMalloc( &LayerWeightsDevice, mrows*mcols*sizeof(double)));
- checkError(cudaMalloc( &ActuationDevice, mrows*sizeof(double)));
- checkError(cudaMalloc( &NetinDevice, mcols*sizeof(double)));
-
-
-    checkError(cudaMemcpy(ActuationDevice, a.memptr(), mrows * sizeof(double), cudaMemcpyHostToDevice));
-    checkError(cudaMemcpy(LayerWeightsDevice, m.memptr(), mrows * mcols * sizeof(double), cudaMemcpyHostToDevice));
-     cout << "Calling gen_matvec2 || CUDA_MatrixVectorMultiply <<<" << num_blocksm << "," << threads_perblockm<< ">>> ("<<mrows<<","<<mcols<<","<<LayerWeightsDevice<<","<<NetinDevice<<","<<ActuationDevice<<endl;
-
-    gen_matvec2<<<  numBlocksm, threadsPerBlockm  >>> (mrows, mcols, LayerWeightsDevice, NetinDevice, ActuationDevice);
-
-    //checkError(cudaDeviceSynchronize());
-  checkError(cudaThreadSynchronize());
-  checkError(cudaEventRecord(stop,0));
-  checkError(cudaEventSynchronize(stop));
-  checkError(cudaEventElapsedTime(&time, start, stop));
-  checkError(cudaEventDestroy(start));
-  checkError(cudaEventDestroy(stop));
-
-
-    checkError(cudaMemcpy(ret, NetinDevice, mcols * sizeof(double), cudaMemcpyDeviceToHost));
-cout <<"ret ================="<<endl;
-  for (int x=0; x<mcols; x++)
-  {
-    cout << ret[x] << " ";
-  }
-  cout << endl;
-
-
-}
 
 
 void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train, int samples)
@@ -533,9 +374,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                     cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
 #endif
 #else
-             //   MatrixVectorMultiply(netin[i],  actuation[i], layer_weights[i], netptrs[i]);
-                float t = matVecNaive (  netin[i].memptr(),  actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_cols, layer_weights[i].n_rows) ;
-                //memcpy(netptrs[i], nettemp, actuation[i].n_cols * sizeof(double));
+                
    netin[i] = netin[i]/actuation[i].n_cols; 
    if (t > maxtime)
      maxtime=t;
@@ -839,10 +678,13 @@ int main (int argc, char *argv[])
 
             netin.push_back(rb2);   // size=nodes[i],1
 
-            tmpwgt = randu<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+            mat tmpwgt = randu<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+            mat tmpwgt0 = zeros<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+            mat tmpwgt00 = zeros<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
             layer_weights.push_back( tmpwgt );
-            new_layer_weights.push_back(tmpwgt);
-            weight_updates.push_back(tmpwgt);
+            new_layer_weights.push_back(tmpwgt0);
+cout << "i="<< i << " and weight_updates has ("<< tmpwgt00.n_rows <<"x"<<tmpwgt00.n_cols << ")"<<endl;
+            weight_updates.push_back(tmpwgt00);
           }
     }
     save_weights("initial_random_values");
@@ -916,7 +758,7 @@ cout << "CUDA ARCH == " << __CUDA_ARCH__ << endl;
    checkError(cudaFree(ActuationDevice));
    checkError(cudaFree(NetinDevice));
 #ifndef SERIAL_ONLY
-   cout << "Max time for CUDA call : " << maxtime;
-   cout << "Min time for CUDA call : " << mintime;
+   cout << "Max time for CUDA call : " << maxtime << endl;
+   cout << "Min time for CUDA call : " << mintime << endl;
 #endif
 }
