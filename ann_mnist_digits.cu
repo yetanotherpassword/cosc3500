@@ -7,6 +7,7 @@
 #define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
 #include <boost/algorithm/string.hpp>
+#include<boost/algorithm/string/split.hpp>       
 #include <vector>
 
 #undef DEBUGON
@@ -23,13 +24,13 @@
 #define SAMPLEFREQ 1
 #undef SAMPLEFREQ
 
-#define EPOCHS 64
+#define EPOCHS 1
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
 #define BLOCK_HEIGHT 1024
 #define BLOCK_WIDTH 64
-
+//nvcc --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets -std=c++11 -g -Iarmadillo-10.6.2/include/ -DSERIAL_ONLY  -L armadillo-10.6.2/build/ -larmadillo  -l lapack_static  -o ann_mnist_digits_cuda_ser  ann_mnist_digits.cu
 /*
  * ALLAN CAMPTON
  * COSC3500 Milestone 1 Serial Version
@@ -85,6 +86,15 @@ float maxtime=-10;
     vector<mat> layer_weights;
     vector<mat> weight_updates;
     vector<mat> new_layer_weights;
+
+    vector<double *> layer_weights_ptr;
+    vector<double *> weight_updates_ptr;
+    vector<double *> new_layer_weights_ptr;
+    vector<double *> netin_ptr;
+    vector<double *> actuation_ptr;
+    vector<double *> deltafn_ptr;
+    vector<double *> ftick_ptr;
+
     ios init(NULL);
     int vec_start_idx[100];
     int mat_start_idx[100];
@@ -105,6 +115,62 @@ float maxtime=-10;
     R[c] = sum;
   }
  }
+
+// implementation of the matrix-vector multiply function
+void MatrixTranspVectorMultiply2(double* Y, const double* X, double* M, int m_nr, int m_nc)
+{
+int t_r = m_nc; // same as x_nc
+int t_c = m_nr; // same as y_nc
+// matrix passed in is m_nr x m_nc, need to transpose it to m_nr x m_nc 
+// and its stored in as columns so can maniuplate indexes
+   for (int i = 0; i < t_r; ++i) 
+   {
+//cout << "i="<<i<<" m_nc="<<m_nr<<" m_nr="<<m_nr<<endl;
+      Y[i] = 0;
+      int t=0;
+      for (int j = i; j < t_c*t_r; j+=t_c) 
+      {
+        
+         Y[i] += M[i*t_c+j] * X[t++];
+         //cout << "j="<<j<<" Y{"<<i<<"] += " << M[j*m_nc+i] << "*" << X[j] << endl;
+      }
+   }
+}
+// implementation of the matrix-vector multiply function
+void MatrixTranspVectorMultiply(double* Y, const double* X, double* M, int m_nr, int m_nc)
+{
+   for (int i = 0; i < m_nr; ++i) //m_nc == y_nc
+   {
+//cout << "i="<<i<<" m_nc="<<m_nr<<" m_nr="<<m_nr<<endl;
+      Y[i] = 0;
+      for (int j = 0; j < m_nc; ++j) //m_nr == x_nc
+      {
+         Y[i] += M[i*m_nc+j] * X[j];
+         //cout << "j="<<j<<" Y{"<<i<<"] += " << M[j*m_nc+i] << "*" << X[j] << endl;
+      }
+   }
+}
+// implementation of the matrix-vector multiply function
+void MatrixVectorMultiply(double* Y, double* X, double* M, int m_nr, int m_nc)
+{
+cout << "X=   ";
+for (int i=0;i<m_nr;i++)
+ cout << "X="<< X[i] <<endl;
+cout <<endl<< "M=   ";
+for (int i=0;i<m_nr*m_nc;i+=m_nc)
+ cout << "M="<< M[i] <<endl;
+ cout << "X="<< X[0] << " "<<X[0] << " "<< X[1] << " "<<X[2] << " "<<X[3] << " "<<X[4]<<endl;
+   for (int i = 0; i < m_nc; ++i) //m_nc == y_nc
+   {
+//cout << "i="<<i<<" m_nc="<<m_nr<<" m_nr="<<m_nr<<endl;
+      Y[i] = 0;
+      for (int j = 0; j < m_nr; ++j) //m_nr == x_nc
+      {
+         Y[i] += M[j*m_nc+i] * X[j];
+         //cout << "j="<<j<<" Y{"<<i<<"] += " << M[j*m_nc+i] << "*" << X[j] << endl;
+      }
+   }
+}
 
 
 rowvec sigmoid( rowvec  & net)
@@ -252,6 +318,9 @@ void load_an_image(int seq, unsigned char * &mptr, rowvec & img, rowvec & t, uns
 
     t(img_is_digit)=1;               // set the target 'bit'
 
+//for (int i=0;i<784;i++)
+//{   cout << "img=" << i << " / " << img(0) << " & " << *(img.memptr()+i) << " && " << actuation[0](i) << " * " << *(actuation[0].memptr()+i) << *(actuation_ptr[0]+i) << endl;
+//}
 }
 // For use with gdb
 void output (mat t)
@@ -293,7 +362,8 @@ int backprop(rowvec tgt, int y0)
 
         for (int i=OutputLayer-1;i>=0;i--)
         {
-            weight_updates[i]  =  deltafn[i+1].t() * actuation[i];
+            colvec c=deltafn[i+1].t();
+            weight_updates[i]  =  c * actuation[i];
             new_layer_weights[i]  =  layer_weights[i] + (eta *  weight_updates[i]) ;
              
             ftick[i] = -actuation[i] + 1;
@@ -359,6 +429,9 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
            cout << "------------------------------------ FORWARD FEED OF "<<intype <<" SAMPLE # "<< y+1 << endl << flush;
 #endif
         load_an_image(y, imgdata, actuation[0], tgt, labdata);
+//cout << "Act[0]ptr=" << actuation_ptr[0] << endl;
+//for (int h=0;h<785;h++)
+//cout << "Act["<<h<<"]=" << *(actuation[0].memptr()+h) << endl;
         int tgtval = tgt.subvec(0,9).index_max();
 
         for (int e=0;e<epochs;e++)
@@ -368,20 +441,84 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                // cout << "------------------------------------ All inputs into L" << i << endl << flush;
                 // sum layer 1 weighted input
 #ifdef SERIAL_ONLY
+#if 0
+double d[20];
+               mat a(d,1,4,false,true);
+a={{10,20,30,40}};
+               mat c={{1,2},{3,4},{5,6},{7,8}};
+               mat b=c.t();
+double * m= b.memptr();
+
+for (int q=0;q<8;q++)
+   cout << "b[" << q<< "]="<< *(m+q) << endl;
+m=c.memptr();
+for (int q=0;q<8;q++)
+   cout << "c[" << q<< "]="<< m[q] << endl;
+double *p=layer_weights_ptr[i];
+                for (int k=0;k< b.n_rows; k++)
+                  for (int j=0;j<b.n_cols; j++)
+{
+                     p[k*b.n_cols+j]=b(k,j);
+cout << "p{"<< k*b.n_cols+j << " == " <<  p[k*b.n_cols+j] << endl;
+}
+                for (int j=0;j< a.n_cols; j++)
+                  actuation_ptr[i][j]=a(j);
+                MatrixTranspVectorMultiply(d, a.memptr(), b.memptr(), b.n_cols,  b.n_rows);
+cout <<"d=" << d[0] << " " << d[1] << endl;
+cout <<"a=" << a << endl;
+cout <<"b=" << b << endl;
+cout <<"c=" << c << endl;
+cout <<"a*b=" << d[0] << " " << d[1] << endl;
+                MatrixTranspVectorMultiply(d, a.memptr(), c.memptr(), b.n_cols,  b.n_rows);
+cout <<"a=" << a << endl;
+cout <<"b=" << b << endl;
+cout <<"c=" << c << endl;
+cout <<"a*b=" << d[0] << " " << d[1] << endl;
+exit(1);
+///////////////////////////////////////////////////////
                 netin[i] =  (actuation[i] * layer_weights[i].t())/actuation[i].n_cols;
+///////////////////////////////////////////////////////
+//                    cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
+                for (int k=0;k< layer_weights[i].n_rows; k++)
+                  for (int j=0;j<layer_weights[i].n_cols; j++)
+                     layer_weights_ptr[i][k*layer_weights[i].n_cols+j]=layer_weights[i](k,j);
+                for (int j=0;j< actuation[i].n_cols; j++)
+                  actuation_ptr[i][j]=actuation[i](j);
+#endif
+                double dd[50000];
+                mat c(dd, layer_weights[i].n_cols, layer_weights[i].n_rows, false, true);
+                c=layer_weights[i].t();
+                //MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(), c.n_rows,  c.n_cols);
+                MatrixVectorMultiply(netin_ptr[i], actuation[i].memptr(), c.memptr(), c.n_rows,  c.n_cols);
+             //   MatrixTranspVectorMultiply(netin[i].memptr(), actuation[i].memptr(), layer_weights[i].memptr(), layer_weights[i].n_rows,  layer_weights[i].n_cols);
+                for (int j=0;j< netin[i].n_cols; j++)
+                {
+                  cout <<"net= j"<< j << "  "<<*(netin_ptr[i]+j) <<  "**" << netin[i](j)  << "***" << *(netin[i].memptr()+j) << endl;
+            //      netin[i](j) = netin_ptr[i][j]/actuation[i].n_cols;
+                }
+cout << "act["<<i<<"]=" << actuation[i] << endl;
+mat z= layer_weights[i].t();
+cout << "lay_wg=" << z.col(0) << endl;
+cout << "netin[i]="<< netin[i] << endl;
+exit(1);
 #ifdef SAMPLEFREQ
                 if ( (y+1) % SAMPLEFREQ == 0)
                     cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
 #endif
 #else
-                
-   netin[i] = netin[i]/actuation[i].n_cols; 
-   if (t > maxtime)
-     maxtime=t;
-   if (t < mintime )
-     mintime=t;
+   //if (t > maxtime)
+   //  maxtime=t;
+   //if (t < mintime )
+   //  mintime=t;
 
 #endif    
+//                for (int j=0;j< netin[i].n_cols; j++)
+  //              {
+            //      cout <<"net= j"<< j << "  "<<*(netin_ptr[i]+j) <<  "**" << netin[i](j)  << "***" << *(netin[i].memptr()+j) << endl;
+    //              netin[i](j) = netin_ptr[i][j]/actuation[i].n_cols;
+      //          }
+                
+                    cout << "Netin serial ("<<  netin[i].n_rows << "," <<  netin[i].n_cols << ")= "  << netin[i] << endl << flush;
 
                 actuation[i+1] = sigmoid(netin[i]);
             }
@@ -532,6 +669,147 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
 }
 
 
+#if 0
+float  randw[10][1000][1000];
+void read_weights()
+{
+
+    float x;
+    int r;
+    vector<string> strs;
+    std::string type="";
+    std::string line;
+
+    while (line.substr(0,6) != "layers")
+    {
+      getline(wgts, line);
+    }
+    boost::split(strs,line,boost::is_any_of(":"));
+    int nolayers=stoi(strs[1]);
+
+#if 0
+#ifndef orig
+float flip=-1.0;
+#endif
+#endif
+      getline(wgts, line);
+    for (int z=0;z<nolayers;z++)
+    {
+      boost::split(strs,line,boost::is_any_of(":"));
+      int layer=stoi(strs[1]);
+      int rows=stoi(strs[3]);
+      int cols=stoi(strs[5]);
+      cout << layer << " "<< rows << " " << cols<<endl;
+
+        getline(wgts, line);
+      for (r=0;r<rows;r++)
+      {
+    std::istringstream in(line);      //make a stream for the line itself
+        for (int c=0;c<cols;c++)
+        {
+          in >> x;       //now read the whitespace-separated floats
+#if 0
+#ifndef orig
+       x=x*flip;
+       flip=-flip;
+#endif
+#endif
+          randw[z][r][c]=x;
+//  cout << "randw["<<z<<"]["<<r<<"]["<<c<<"]"<<"="<< randw[z][r][c]<<endl;
+        }
+        getline(wgts, line);
+      }
+    }
+
+}
+#endif
+double l2[10][50000];
+int lays[100];
+   int t=0;
+void load_weights(string fname)
+{
+    ifstream iFile;
+    cout << "Loading weights from file : " << fname << endl << flush;
+    iFile.open(fname, ios::in);
+    string aline;
+   int nd;
+     vector<string> strs;
+
+    if (fname.substr(0,4)=="post")
+       stringstream confusion_matrix2;
+    getline(iFile, aline);
+   boost::split(strs, aline, boost::is_any_of("="));
+   if (strs.size() > 1)
+      lays[t]=stoi(strs[1]);
+   cout<< " Has " << lays[t] << "layers" << endl;
+//    cout << aline;
+    getline(iFile, aline);
+   boost::split(strs, aline, boost::is_any_of("="));
+   if (strs.size() > 1)
+      nd=stoi(strs[1]);
+   cout<< " Has " << nd << " nodes" << endl;
+  while (iFile.good()) 
+  {
+       getline(iFile, aline);
+    if (aline.find("NodesInLayer") != std::string::npos)
+    {
+      t++;
+   boost::split(strs, aline, boost::is_any_of("="));
+   if (strs.size() > 1)
+      lays[t]=stoi(strs[1]);
+   cout<< " Has " << lays[t] << "layers" << endl;
+    }
+    else if (aline.find("Error Summary") != std::string::npos)
+      return;
+    else
+    {
+boost::trim(aline);
+   boost::split(strs, aline, boost::is_any_of(" "));
+   boost::algorithm::split(strs,aline,boost::is_any_of("\t "),boost::token_compress_on);
+   for (int y=0;y< strs.size();y++)
+   {
+   if (strs[y].length() > 0)
+   {
+    l2[t][y]=stod(strs[y]);
+    cout << y << ":" << l2[t][y] << endl;
+   }
+   }
+}
+  }
+//1:NumberOfLayers=3
+//2:NodesInLayer0=784
+//35:NodesInLayer1=30
+//48:Error Summary
+//51:EndFile
+
+#if 0
+string n1,n2,n3;
+double tmp1,tmp2;
+  iFile >> n1 >> endl  >> n2 >> endl;
+while (iFile.good()) {
+  while (! iFile.eoln())
+  {
+    iFile >> tmp1;
+    cout <<tmp1 << endl;
+  }
+ iFile >> n1;  
+cout  <<n1 <<  endl;
+}
+	    oFile >> "NumberOfLayers=" >> NumberOfLayers >> endl << flush;
+    for (int i=0; i< OutputLayer; i++)
+    {
+
+        oFile <<  "NodesInLayer"<<i<<"=" << nodes[i] << endl << flush;
+        oFile << layer_weights[i] << endl << flush;
+    }
+    oFile << "Error Summary" << endl << flush;
+
+    oFile << err_summary << endl << flush;
+
+    oFile << "EndFile" << endl << flush;
+    oFile.close();
+#endif
+}
 
 
 void save_weights(string hdr)
@@ -564,6 +842,12 @@ int main (int argc, char *argv[])
 {
    extern char **environ;
    string hname="";
+string y="initial_random_values_weights_11337071.txt";
+load_weights(y);
+cout << "Have " << t << " layers" << endl;
+for (int i=0;i<t;i++)
+  cout << " Layer " << i << " has " << lays[i] << " nodes" << endl;
+exit(0);
 
     vector<string> strs;
     string bldver = string(__DATE__) + " at time " + string(__TIME__);
@@ -665,26 +949,56 @@ int main (int argc, char *argv[])
     for (int i=0;i <= OutputLayer; i++)
     {
          max_vec=max(max_vec, (nodes[i]+bias_field));
-         rowvec rb (nodes[i]+bias_field);
-         actuation.push_back(rb); // size= nodes[i],1
-         deltafn.push_back({});
-         ftick.push_back({});
+         double * rbptr = new double [ nodes[i]+1];
+         rowvec rb (rbptr, nodes[i]+bias_field, false, true);
+         actuation.push_back(rb); 
+         actuation_ptr.push_back(rbptr);
+         double * drbptr = new double [ nodes[i]+1];
+         rowvec drb (drbptr, nodes[i]+bias_field, false, true);
+         deltafn.push_back(drb);
+         deltafn_ptr.push_back(drbptr);
+
+         double * frbptr = new double [ nodes[i]+1];
+         rowvec frb (frbptr, nodes[i]+bias_field, false, true);
+         ftick.push_back(frb);
+         ftick_ptr.push_back(frbptr);
+
          if (i<OutputLayer)
          {
             max_mat=max(max_mat, (nodes[i]+bias_field)*(nodes[i+1]+bias_field));
-            //netptrs[i] = new double [nodes[i]+bias_field];
-            //rowvec rb2 (netptrs[i], nodes[i+1]+bias_field, false, true);
-            rowvec rb2 (nodes[i+1]+bias_field);
+            double * tmpptrr = new double [nodes[i+1]+bias_field];
+            rowvec rb2 (tmpptrr, nodes[i+1]+bias_field, false, true);
 
             netin.push_back(rb2);   // size=nodes[i],1
+            netin_ptr.push_back(tmpptrr);
 
-            mat tmpwgt = randu<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
-            mat tmpwgt0 = zeros<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
-            mat tmpwgt00 = zeros<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+            double  *tmpptr  = new double [ (nodes[i+1]+1) * (nodes[i]+1) ];
+            mat tmpwgt (tmpptr, nodes[i+1]+1 , nodes[i]+1, false, true); // network weights for each node + 1 node bias weight
+
+            double  *tmpptr0  = new double [ (nodes[i+1]+1) * (nodes[i]+1) ];
+            mat tmpwgt0 (tmpptr0, nodes[i+1]+1 , nodes[i]+1, false, true); // network weights for each node + 1 node bias weight
+
+            double  *tmpptr00  = new double [ (nodes[i+1]+1) * (nodes[i]+1) ];
+            mat tmpwgt00 (tmpptr00, nodes[i+1]+1 ,nodes[i]+1, false, true); // network weights for each node + 1 node bias weight
+
+             mat rmpwgt = randu<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+             mat rmpwgt0 = zeros<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+             mat rmpwgt00 = zeros<mat>( nodes[i+1]+1,nodes[i]+1); // network weights for each node + 1 node bias weight
+
+             tmpwgt = rmpwgt;
+             tmpwgt0 = rmpwgt0;
+             tmpwgt00 = rmpwgt00;
+
             layer_weights.push_back( tmpwgt );
+            layer_weights_ptr.push_back(tmpptr);
+
             new_layer_weights.push_back(tmpwgt0);
-cout << "i="<< i << " and weight_updates has ("<< tmpwgt00.n_rows <<"x"<<tmpwgt00.n_cols << ")"<<endl;
+            new_layer_weights_ptr.push_back(tmpptr0);
+
             weight_updates.push_back(tmpwgt00);
+            weight_updates_ptr.push_back(tmpptr00);
+cout << "*********** Y(" << netin[i].n_rows << "x" << netin[i].n_cols << ") = X(" << actuation[i].n_rows << "x" << actuation[i].n_cols << ") TIMES M(" << layer_weights[i].n_rows << "x" <<  layer_weights[i].n_cols << ")" << endl; 
+
           }
     }
     save_weights("initial_random_values");
