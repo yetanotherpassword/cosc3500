@@ -724,15 +724,18 @@ float flip=-1.0;
 }
 #endif
 double l2[10][50000];
-int lays[100];
+int nd[100];
+int nd2[100];
+int lays;
    int t=0;
+ int x=0;
 void load_weights(string fname)
 {
     ifstream iFile;
     cout << "Loading weights from file : " << fname << endl << flush;
     iFile.open(fname, ios::in);
     string aline;
-   int nd;
+  
      vector<string> strs;
 
     if (fname.substr(0,4)=="post")
@@ -740,42 +743,53 @@ void load_weights(string fname)
     getline(iFile, aline);
    boost::split(strs, aline, boost::is_any_of("="));
    if (strs.size() > 1)
-      lays[t]=stoi(strs[1]);
-   cout<< " Has " << lays[t] << "layers" << endl;
+      lays=stoi(strs[1]);
+   cout<< " Has " << lays << "layers" << endl;
 //    cout << aline;
+/*
     getline(iFile, aline);
    boost::split(strs, aline, boost::is_any_of("="));
    if (strs.size() > 1)
       nd=stoi(strs[1]);
    cout<< " Has " << nd << " nodes" << endl;
+*/
   while (iFile.good()) 
   {
        getline(iFile, aline);
     if (aline.find("NodesInLayer") != std::string::npos)
     {
+      nd2[t]=x;
+      x=0;
       t++;
+      
    boost::split(strs, aline, boost::is_any_of("="));
    if (strs.size() > 1)
-      lays[t]=stoi(strs[1]);
-   cout<< " Has " << lays[t] << "layers" << endl;
+      nd[t]=stoi(strs[1]);
+   cout<< " Has " << nd[t] << "layers" << endl;
     }
-    else if (aline.find("Error Summary") != std::string::npos)
-      return;
-    else
+    else if ((aline.find("Error Summary") != std::string::npos) )
     {
-boost::trim(aline);
-   boost::split(strs, aline, boost::is_any_of(" "));
-   boost::algorithm::split(strs,aline,boost::is_any_of("\t "),boost::token_compress_on);
-   for (int y=0;y< strs.size();y++)
-   {
-   if (strs[y].length() > 0)
-   {
-    l2[t][y]=stod(strs[y]);
-    cout << y << ":" << l2[t][y] << endl;
-   }
-   }
-}
+       nd2[t]=x;
+      x=0;
+      t++;
+      return;
+    }
+    else if (aline.find("LayerBiases") == std::string::npos)
+    {
+       boost::trim(aline);
+       boost::split(strs, aline, boost::is_any_of(" "));
+       boost::algorithm::split(strs,aline,boost::is_any_of("\t "),boost::token_compress_on);
+      for (int y=0;y< strs.size();y++)
+      {
+        if (strs[y].length() > 0)
+        {
+           l2[t][x++]=stod(strs[y]);
+           cout << y << ":" << l2[t][x-1] << endl;
+       }
+     }
+    }
   }
+}
 //1:NumberOfLayers=3
 //2:NodesInLayer0=784
 //35:NodesInLayer1=30
@@ -809,7 +823,6 @@ cout  <<n1 <<  endl;
     oFile << "EndFile" << endl << flush;
     oFile.close();
 #endif
-}
 
 
 void save_weights(string hdr)
@@ -842,12 +855,8 @@ int main (int argc, char *argv[])
 {
    extern char **environ;
    string hname="";
-string y="initial_random_values_weights_11337071.txt";
-load_weights(y);
-cout << "Have " << t << " layers" << endl;
-for (int i=0;i<t;i++)
-  cout << " Layer " << i << " has " << lays[i] << " nodes" << endl;
-exit(0);
+//string y="initial_random_values_weights_11337071.txt";
+string y="initial_random_values_weights_1636167104.txt";
 
     vector<string> strs;
     string bldver = string(__DATE__) + " at time " + string(__TIME__);
@@ -1001,10 +1010,37 @@ cout << "*********** Y(" << netin[i].n_rows << "x" << netin[i].n_cols << ") = X(
 
           }
     }
-    save_weights("initial_random_values");
+    save_weights("yyyinitial_random_values");
    cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec << endl << flush;
    cout << "vector lens=" << netin.size() <<"," <<layer_weights.size() << "," <<actuation.size() << endl;
-
+////////////////////*
+/*
+double l2[10][50000];
+int nd[100];
+int nd2[100];
+Have 3 layers t=3
+ Layer 0 has 0 nodes and 0
+ Layer 1 has 784 nodes and 24335
+ Layer 2 has 30 nodes and 341*/
+////////////
+load_weights(y);
+for (int i=0;i<lays;i++)
+{
+  for (int j=0;j<nd2[i+1];j++)
+  {
+if (j==0) cout << (j+1) << "/" << nd[i+1]+2 << " ==0??" << endl;
+    int r=(j)/(nd[i+1]+1); 
+    int c=(j) % (nd[i+1]+1);
+    layer_weights[i](r,c) =  l2[i][j];
+  }
+}
+    save_weights("xxxinitial_random_values");
+/*
+cout << "Have " << lays << " layers t="<< t << endl;
+for (int i=0;i<lays;i++)
+  cout << " Layer " << i << " has " << nd[i] << " nodes and " << nd2[i] << endl;
+*/
+exit(0);
    checkError(cudaMalloc(&ActuationDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&NetinDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&LayerWeightsDevice, max_mat * sizeof(double)));
