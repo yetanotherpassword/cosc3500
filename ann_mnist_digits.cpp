@@ -1,5 +1,3 @@
-#include <string>
-#include <iostream>
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -319,10 +317,10 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
                 string maxc= tgtval == maxval ? to_string(maxval)+"A":to_string(maxval)+"O";
                 if (minval==maxval)
                    minc="*"+to_string(minval); // correct
-                for (int z = 0; z < minval; z++)
+                for (int z1 = 0; z1 < minval; z1++)
                     cout << "         ";
                 cout << "       " << minc;  
-                for (int z = 0; z < maxval - minval-1; z++)
+                for (int z1 = 0; z1 < maxval - minval-1; z1++)
                     cout << "         ";
                 if (minval != maxval)
                     cout << "       " << maxc;  // expected
@@ -361,6 +359,8 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
     {
          confusion_matrix << endl << endl << endl << "CONFUSION MATRIX" << endl << "****************" << endl;
          confusion_matrix << "Tested " << num_tested << " samples"<<endl;
+         cout << "Tested Correct " << tot_correct << " samples"<<endl;
+         cout << "Tested Wrong   " << tot_wrong<< " samples"<<endl;
          for (int i=0;i<10;i++)
              confusion_matrix  <<  "      "<< dec << std::setw(7) << i ;
          confusion_matrix << "      Guessed" ;
@@ -410,7 +410,7 @@ void forward_feed(unsigned char * &imgdata, unsigned char * &labdata, bool train
          }
          confusion_matrix << endl << endl; 
          confusion_matrix << "Total Correct : " <<  std::setw(7) << fixed << showpoint <<std::setprecision(2) <<totpctg << "%     " << resetiosflags( ios::fixed | ios::showpoint ) <<endl << endl;
-         cout << confusion_matrix.str();
+         cout << confusion_matrix;
     }
                 
 }
@@ -422,8 +422,8 @@ void save_weights(string hdr)
     string fname = hdr+string("_weights_") + to_string(result)+string(".txt");
     cout << "Saving weights to file : " << fname << endl;
     oFile.open(fname, ios::out);
-    if (hdr.substr(1,4)=="post")
-       oFile << confusion_matrix.str();      
+    if (hdr.substr(0,4)=="post")
+       oFile << confusion_matrix;      
     oFile << "NumberOfLayers=" << NumberOfLayers << endl;
     for (int i=0; i< OLayer; i++)
     {
