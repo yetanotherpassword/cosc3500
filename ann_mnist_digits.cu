@@ -1010,7 +1010,7 @@ cout << "*********** Y(" << netin[i].n_rows << "x" << netin[i].n_cols << ") = X(
 
           }
     }
-    save_weights("yyyinitial_random_values");
+    save_weights("initial_random_values");
    cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec << endl << flush;
    cout << "vector lens=" << netin.size() <<"," <<layer_weights.size() << "," <<actuation.size() << endl;
 ////////////////////*
@@ -1031,16 +1031,17 @@ for (int i=0;i<lays;i++)
 if (j==0) cout << (j+1) << "/" << nd[i+1]+2 << " ==0??" << endl;
     int r=(j)/(nd[i+1]+1); 
     int c=(j) % (nd[i+1]+1);
-    layer_weights[i](r,c) =  l2[i][j];
+    layer_weights[i](r,c) =  l2[i+1][j];
+ cout << " layer["<<i<<"] ("<<r<<","<<c<<")="<<l2[i+1][j] << endl;
   }
 }
-    save_weights("xxxinitial_random_values");
+   // save_weights("reloadedinitial_random_values");
 /*
 cout << "Have " << lays << " layers t="<< t << endl;
 for (int i=0;i<lays;i++)
   cout << " Layer " << i << " has " << nd[i] << " nodes and " << nd2[i] << endl;
 */
-exit(0);
+
    checkError(cudaMalloc(&ActuationDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&NetinDevice, max_vec * sizeof(double)));
    checkError(cudaMalloc(&LayerWeightsDevice, max_mat * sizeof(double)));
