@@ -1,8 +1,6 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
-//#include <nvblas.h>
-//#include <cublas.h>
 #include <chrono>
 #define ARMA_ALLOW_FAKE_GCC
 #include <armadillo>
@@ -10,7 +8,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <vector>
 
-#undef DEBUGON
+// Application Parameters
 #define DEFTHREADS 256
 #define ARMA_64BIT_WORD
 #define INPUT_LINES 784
@@ -20,22 +18,17 @@
 #define IMAGE_OFFSET 16
 #define DEFAULT_HIDDEN 30
 #define ETA_DEFAULT 0.5f
-
-#define SAMPLEFREQ 1
-//#undef SAMPLEFREQ
-
-#define EPOCHS 512
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define BLOCK_HEIGHT 1024
-#define BLOCK_WIDTH 64
+#define EPOCHS 1
+
+// How often to print samples, 1=All, 2=every second one, etc
+// Undefine or define to very large number to remove output
+#define SAMPLEFREQ 1
+//#undef SAMPLEFREQ
 
 
-// nvcc --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets -std=c++11 -g
-// -Iarmadillo-10.6.2/include/ -DSERIAL_ONLY  -L armadillo-10.6.2/build/
-// -larmadillo  -l lapack_static  -o ann_mnist_digits_cuda_ser
-// ann_mnist_digits.cu
 /*
  * ALLAN CAMPTON
  * COSC3500 Milestone 2 Parallel Version
@@ -62,12 +55,6 @@
  *    make
  *    sbatch ./goslurm.sh ann_mnist_digits
  */
-// g++ armo.cpp -g -o armo -std=c++11 -O2 -larmadillo
-
-// requires armodillo (see above)
-
-
-
 
 
 int thrds = DEFTHREADS;
@@ -77,11 +64,10 @@ using namespace std;
 double *LayerWeightsDevice;
 double *ActuationDevice;
 double *NetinDevice;
-double *dev_A;
-double *dev_in;
-double *dev_out;
 float mintime = 1000000;
 float maxtime = -10;
+std::chrono::microseconds CUDA_Max = std::chrono::microseconds::min();
+std::chrono::microseconds CUDA_Min = std::chrono::microseconds::max();
 
 std::time_t result = std::time(nullptr);
 string fid = to_string(result);
@@ -105,13 +91,15 @@ vector<double*> actuation_ptr;
 vector<double*> deltafn_ptr;
 vector<double*> ftick_ptr;
 
+cudaEvent_t start, stop;
+
 ios init(NULL);
-double *netin2;
-double *actuation2;
-double *layer_weights2;
 stringstream confusion_matrix;
 rowvec err_summary = ones<rowvec> (OUTPUT_LINES) *(-1);
 
+int tile_dimension = 8; 
+
+#ifdef WANT_TO_LOAD_WEIGHTS
 // Used for loading weights from file (if ever required)
 double l2[10][50000];
 int nd[100];
@@ -119,6 +107,7 @@ int nd2[100];
 int lays;
 int t = 0;
 int x = 0;
+#endif
 
 void checkError(cudaError_t e)
 {
@@ -129,113 +118,85 @@ void checkError(cudaError_t e)
           abort();
      }
 }
-__global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols, int TILE_DIM) {
+__global__ 
+void VectorMatrixMultiply(double* act, double* lwgts, double* net, int actuation_rows, int actuation_cols, int layer_weights_rows, int layer_weights_cols, int netin_rows, int netin_cols, int tile_dimension) 
+{
 
-    double CValue = 0;
+    double netin_accum = 0;
 
-    int Row = blockIdx.y*TILE_DIM + threadIdx.y;
-    int Col = blockIdx.x*TILE_DIM + threadIdx.x;
+    int row = blockIdx.y*tile_dimension + threadIdx.y;
+    int col = blockIdx.x*tile_dimension + threadIdx.x;
 
-    for (int k = 0; k < (TILE_DIM + ACols - 1)/TILE_DIM; k++) {
-
-        for (int n = 0; n < TILE_DIM; ++n) 
-            if ((k*TILE_DIM + n < ACols && Row < ARows) && (k*TILE_DIM + n < BRows && Col < BCols))
-                CValue += A[Row*ACols + k*TILE_DIM + n] * B[(k*TILE_DIM + n)*BCols + Col];
-
+    for (int i = 0; i < (tile_dimension + actuation_cols - 1)/tile_dimension; i++) 
+    {
+        for (int j = 0; j < tile_dimension; ++j) 
+            if ((i*tile_dimension + j < actuation_cols && row < actuation_rows) && (i*tile_dimension + j < layer_weights_rows && col < layer_weights_cols))
+                netin_accum += act[row*actuation_cols + i*tile_dimension + j] * lwgts[(i*tile_dimension + j)*layer_weights_cols + col];
     }
 
-    if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y)*CCols)+(blockIdx.x*blockDim.x)+threadIdx.x]=CValue;
-/*
-for (int i=0;i<m_nr*m_nc ;i++)
-{
-    int c1=i % m_nc;
-    int r1=i / m_nc;
-    Y[c1] += X[r1] * M[c1 *m_nr + r1];
-}*/
+    if (row < netin_rows && col < netin_cols) 
+          net[((blockIdx.y * blockDim.y + threadIdx.y)*netin_cols)+(blockIdx.x*blockDim.x)+threadIdx.x]=netin_accum;
 }
 
 int domult(int i) {
 
-mat c=layer_weights[i].t();
-int DIMX=1;
-int DIMY=c.n_rows;
-int DIMZ=c.n_cols;
-int TILE_DIM=64; 
+    float time;
+    int x_dimension = 1;
+    int y_dimension = layer_weights[i].n_cols;
+    int z_dimension = layer_weights[i].n_rows;
 
-    int CRows=DIMX;    //1 x 31 (output)
-    int CCols = DIMZ;
+    int netin_rows = x_dimension;
+    int netin_cols = z_dimension;
 
-    int ARows=DIMX;   // 1 x 785 (sample)
-    int ACols=DIMY;
+    int actuation_rows = x_dimension;
+    int actuation_cols = y_dimension;
 
-    int BRows=DIMY;   // 785 x 31 (weights)
-    int BCols=DIMZ;
+    int layer_weights_rows = y_dimension;
+    int layer_weights_cols = z_dimension;
 
+//    cout << "Multiplying vector ( " << actuation_rows << " x " << actuation_cols << " ) *  ( " << layer_weights_rows << " x " << layer_weights_cols << " ) =  ( " << netin_rows << " x " << netin_cols << " ) "<<endl;
 
-cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRows << " x " << BCols << " ) =  ( " << CRows << " x " << CCols << " ) "<<endl;
-
-    dim3 dimBlock(TILE_DIM, TILE_DIM, 1);
+    dim3 dimBlock(tile_dimension, tile_dimension, 1);
     dim3 dimGrid;
 
-    dimGrid.x = (CCols + dimBlock.x - 1)/dimBlock.x;
-    dimGrid.y = (CRows + dimBlock.y - 1)/dimBlock.y;
+    dimGrid.x = (netin_cols + dimBlock.x - 1)/dimBlock.x;
+    dimGrid.y = (netin_rows + dimBlock.y - 1)/dimBlock.y;
 
-  double* hostC   = (double*)malloc(DIMX*DIMZ*sizeof(double)); // 1x31  netin
+    checkError(cudaMemcpy(ActuationDevice, actuation[i].memptr(), x_dimension*y_dimension*sizeof(double), cudaMemcpyHostToDevice));
+    checkError(cudaMemcpy(LayerWeightsDevice,  layer_weights[i].memptr(), y_dimension*z_dimension*sizeof(double), cudaMemcpyHostToDevice));
 
- //   memcpy(hostA, actuation[i].memptr(), DIMX*DIMY*sizeof(double));
- //   memcpy(hostB, layer_weights[i].memptr(), DIMY*DIMZ*sizeof(double));
-     memcpy(hostC, netin[i].memptr(), DIMX*DIMZ*sizeof(double));
+    cudaEventRecord(start,0);
+    auto StartCUDATime = std::chrono::high_resolution_clock::now();
 
 
-   // checkError(cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double)));
-   // checkError(cudaMalloc((void **)&deviceB, DIMY*DIMZ*sizeof(double)));
-   // checkError(cudaMalloc((void **)&deviceC, DIMX*DIMZ*sizeof(double)));
+    VectorMatrixMultiply<<<dimGrid, dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, actuation_rows, actuation_cols, layer_weights_rows, layer_weights_cols, netin_rows, netin_cols, tile_dimension);
 
-   checkError(cudaMemcpy(ActuationDevice, actuation[i].memptr(), DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice));
-   checkError(cudaMemcpy(LayerWeightsDevice ,  layer_weights[i].memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice));
-//   checkError(cudaMemcpy(LayerWeightsDevice ,  c.memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice));
-
-    MatMulNoShared<<<dimGrid , dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, ARows , ACols, BRows ,BCols , CRows , CCols, TILE_DIM);
     checkError(cudaDeviceSynchronize());
 
-    //checkError(cudaMemcpy(hostC, NetinDevice, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost));
-    checkError(cudaMemcpy(netin[i].memptr(), NetinDevice, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost));
+    auto EndCUDATime = std::chrono::high_resolution_clock::now();
+    auto TotalCUDATime = std::chrono::duration_cast<std::chrono::microseconds > (          EndCUDATime - StartCUDATime);
+
+    if (TotalCUDATime > CUDA_Max)
+       CUDA_Max = TotalCUDATime;
+
+    if (TotalCUDATime < CUDA_Min)
+       CUDA_Min = TotalCUDATime;
+
+
+    cudaEventRecord(stop,0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&time, start, stop);
+
+    if (time < mintime)
+       mintime = time;
+    if (time > maxtime)
+       maxtime = time;
+    checkError(cudaMemcpy(netin[i].memptr(), NetinDevice, x_dimension*z_dimension*sizeof(double), cudaMemcpyDeviceToHost));
     netin[i] = netin[i] / actuation[i].n_cols;
     
- /*  
-std::cout << "A=";
-for (int i=0;i<ARows;i++)
-{
-   for (int j=0;j<ACols;j++)
-   {
-      std::cout << hostA[i*ACols+j] << " ";
-   }
- std::cout << std::endl;
-}
-
-std::cout << "B=";
-for (int i=0;i<BRows;i++)
-{
-   for (int j=0;j<BCols;j++)
-   {
-      std::cout << hostB[i*BCols+j] << " ";
-   }
- std::cout << std::endl;
-}
-std::cout << "C=";
-*/
-/*
-for (int r=0;r<CRows;r++)
-{
-   for (int k=0;k<CCols;k++)
-   {
-     // std::cout << hostC[i*CCols+j] << " ";
-      netin[i](r,k) =  hostC[r*CCols+k] / (double) actuation[i].n_cols;
-   }
- //std::cout << std::endl;
-}*/
     return 0;
 }
+
 void MultArmVM(double *V, double *M, double *R, int m_nr, int m_nc)
 {
      double sum;
@@ -442,15 +403,16 @@ void load_an_image(int seq, unsigned char* &mptr, rowvec &img, rowvec &t,
           cout << "Error: img_is_digit=" << img_is_digit << "seq=" << seq << endl;
           exit(1);
      }
-
      t(img_is_digit) = 1;	// set the target 'bit'
-
 }
+
+
 // For use with gdb
 void output(mat t)
 {
      cout << t << endl;
 }
+
 // For use with gdb
 void output(rowvec t)
 {
@@ -759,6 +721,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
      }
 }
 
+#ifdef WANT_TO_LOAD_WEIGHTS
 void load_weights(string fname)
 {
      ifstream iFile;
@@ -821,6 +784,7 @@ void load_weights(string fname)
           }
      }
 }
+#endif
 
 void save_weights(string hdr)
 {
@@ -953,6 +917,10 @@ int main(int argc, char *argv[])
           }
      }
 
+ // set up CUDA timing structs
+     cudaEventCreate(&start);
+     cudaEventCreate(&stop);
+
      OutputLayer = NumberOfLayers - 1;
      unsigned char *trainlabels;
      unsigned char *testlabels;
@@ -992,12 +960,21 @@ int main(int argc, char *argv[])
           {
                max_mat =
                     max(max_mat, (nodes[i] + bias_field) *(nodes[i + 1] + bias_field));
+               // These buffers for the rowvec and mat structures below are done to ensure
+               // the Armadillo matrix can be accessed directly and the library doesnt move
+               // the memory around
                double *tmpptrr = new double[nodes[i + 1] + bias_field];
                rowvec rb2(tmpptrr, nodes[i + 1] + bias_field, false, true);
 
-               netin.push_back(rb2);	// size=nodes[i],1
+               // Create an array of matrices (one element for each layer) for the netin value
+               // This holds the sum of weighted signals, for each node, that gets squashed to 
+               // produce the nodes output for next layer
+               netin.push_back(rb2);
                netin_ptr.push_back(tmpptrr);
 
+               // Create a buffer of required size for weights, in each layer
+               // (plus two more, one for delta updates, and one for holding new weight to be
+               // applied after backprop. These maybe consolidated later
                double *tmpptr = new double[(nodes[i + 1] + bias_field) *(nodes[i] + bias_field)];
                mat tmpwgt(tmpptr, nodes[i + 1] + bias_field, nodes[i] + bias_field, false,
                     true);	// network weights for each node + 1 node bias weight
@@ -1020,7 +997,8 @@ int main(int argc, char *argv[])
                tmpwgt = rmpwgt;
                tmpwgt0 = rmpwgt0;
                tmpwgt00 = rmpwgt00;
-
+               // create an array of three matrices (weights for forward prop)
+               // and deltas and new values, for back propagation
                layer_weights.push_back(tmpwgt);
                layer_weights_ptr.push_back(tmpptr);
 
@@ -1035,20 +1013,22 @@ int main(int argc, char *argv[])
                     layer_weights[i].n_cols << ")" << endl;
           }
      }
+     // Save initial starting weights if required for later
      save_weights("initial_random_values");
+
+    // Informational, the max value of matrix and vectors are record and used to reserve CUDA memory 
      cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec <<
           endl << flush;
-     cout << "vector lens=" << netin.size() << "," << layer_weights.size() << "," <<
-          actuation.size() << endl;
-#ifdef UI_TBD
+
+#ifdef WANT_TO_LOAD_WEIGHTS
+     // this is a function to load previously saved weights, to either ensure constant initial values
+     // if say moving platforms with different psudeo RNG, or to load post weights after training
+     // This works, but only implemented, so far, by direct code changes, no UI currently implemented
      load_weights(y);
 #endif
      checkError(cudaMalloc(&ActuationDevice, max_vec* sizeof(double)));
      checkError(cudaMalloc(&NetinDevice, max_vec* sizeof(double)));
      checkError(cudaMalloc(&LayerWeightsDevice, max_mat* sizeof(double)));
-     checkError(cudaMalloc(&dev_A, max_mat* sizeof(double)));
-     checkError(cudaMalloc(&dev_in, max_vec* sizeof(double)));
-     checkError(cudaMalloc(&dev_out, max_vec* sizeof(double)));
 
 #ifdef __CUDA_ARCH__
      cout << "Built for CUDA ARCH == " << __CUDA_ARCH__ << endl;
@@ -1124,8 +1104,15 @@ int main(int argc, char *argv[])
      checkError(cudaFree(LayerWeightsDevice));
      checkError(cudaFree(ActuationDevice));
      checkError(cudaFree(NetinDevice));
+     checkError(cudaEventDestroy(start));
+     checkError(cudaEventDestroy(stop));
 #ifndef SERIAL_ONLY
      cout << "Max time for CUDA call : " << maxtime << endl;
      cout << "Min time for CUDA call : " << mintime << endl;
+     cout << "Max time for CUDA call2 : " << CUDA_Max.count()<< endl;
+     cout << "Min time for CUDA call2 : " << CUDA_Min.count()<< endl;
 #endif
+    cout << "Used Tile Dimension of " << tile_dimension << endl;
+
+
 }
