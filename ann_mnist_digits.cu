@@ -22,7 +22,7 @@
 #define ETA_DEFAULT 0.5f
 
 #define SAMPLEFREQ 1
-#undef SAMPLEFREQ
+//#undef SAMPLEFREQ
 
 #define EPOCHS 1
 #define EPSILON 1E-04
@@ -119,7 +119,16 @@ int nd2[100];
 int lays;
 int t = 0;
 int x = 0;
-mat c;
+
+void checkError(cudaError_t e)
+{
+     if (e != cudaSuccess)
+     {
+          std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) <<
+               '\n';
+          abort();
+     }
+}
 __global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols, int TILE_DIM) {
 
     double CValue = 0;
@@ -136,6 +145,13 @@ __global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int A
     }
 
     if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y)*CCols)+(blockIdx.x*blockDim.x)+threadIdx.x]=CValue;
+/*
+for (int i=0;i<m_nr*m_nc ;i++)
+{
+    int c1=i % m_nc;
+    int r1=i / m_nc;
+    Y[c1] += X[r1] * M[c1 *m_nr + r1];
+}*/
 }
 
 int domult(int i) {
@@ -156,7 +172,7 @@ int TILE_DIM=16;
     int BCols=DIMZ;
 
 
-cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRows << " x " << BCols << " ) =  ( " << CRows << " x " << CCols << " ) "<<endl;
+//cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRows << " x " << BCols << " ) =  ( " << CRows << " x " << CCols << " ) "<<endl;
 
     dim3 dimBlock(TILE_DIM, TILE_DIM, 1);
     dim3 dimGrid;
@@ -170,20 +186,22 @@ cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRow
     double* hostB    = (double*)malloc(DIMY*DIMZ*sizeof(double)); // 785x31 layer_weights
     double* hostC    = (double*)malloc(DIMX*DIMZ*sizeof(double)); // 1x31  netin
 
-    memcpy(hostA, actuation[i].memptr(), DIMX*DIMY*sizeof(double));
-    memcpy(hostB, c.memptr(), DIMY*DIMZ*sizeof(double));
-    memcpy(hostC, netin[i].memptr(), DIMX*DIMZ*sizeof(double));
+ //   memcpy(hostA, actuation[i].memptr(), DIMX*DIMY*sizeof(double));
+ //   memcpy(hostB, layer_weights[i].memptr(), DIMY*DIMZ*sizeof(double));
+ //   memcpy(hostC, netin[i].memptr(), DIMX*DIMZ*sizeof(double));
 
 
-    cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double));
-    cudaMalloc((void **)&deviceB, DIMY*DIMZ*sizeof(double));
-    cudaMalloc((void **)&deviceC, DIMX*DIMZ*sizeof(double));
+   // checkError(cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double)));
+   // checkError(cudaMalloc((void **)&deviceB, DIMY*DIMZ*sizeof(double)));
+   // checkError(cudaMalloc((void **)&deviceC, DIMX*DIMZ*sizeof(double)));
 
-    cudaMemcpy(deviceA, hostA, DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(deviceB, hostB, DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice);
+   checkError(cudaMemcpy(ActuationDevice, actuation[i].memptr(), DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice));
+   checkError(cudaMemcpy(LayerWeightsDevice ,  layer_weights[i].memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice));
 
-    MatMulNoShared<<<dimGrid , dimBlock>>>(deviceA , deviceB , deviceC , ARows , ACols, BRows ,BCols , CRows , CCols, TILE_DIM);
-    cudaMemcpy(hostC, deviceC, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost);
+    MatMulNoShared<<<dimGrid , dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, ARows , ACols, BRows ,BCols , CRows , CCols, TILE_DIM);
+    checkError(cudaDeviceSynchronize());
+
+    checkError(cudaMemcpy(netin[i].memptr(), NetinDevice, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost));
  /*  
 std::cout << "A=";
 for (int i=0;i<ARows;i++)
@@ -206,12 +224,12 @@ for (int i=0;i<BRows;i++)
 }
 std::cout << "C=";
 */
-for (int i=0;i<CRows;i++)
+for (int r=0;r<CRows;r++)
 {
-   for (int j=0;j<CCols;j++)
+   for (int k=0;k<CCols;k++)
    {
      // std::cout << hostC[i*CCols+j] << " ";
-      netin[i](i,j) =  hostC[i*CCols+j] / (double) actuation[i].n_cols;
+      netin[i](r,k) =  hostC[r*CCols+k] / (double) actuation[i].n_cols;
    }
  //std::cout << std::endl;
 }
@@ -274,11 +292,11 @@ for (int i=0;i<m_nr*m_nc ;i++)
 }
 }
 
-rowvec sigmoid(rowvec & net)
+void sigmoid(rowvec & net, rowvec & out)
 {
-     rowvec out = 1 / (1 + exp(-net));
+     out = 1 / (1 + exp(-net));
      out(out.n_cols - 1) = 1.0;	// add bias signal value
-     return out;
+     //return out;
 }
 
 /////////////////////////////////////////////
@@ -487,15 +505,6 @@ int backprop(rowvec tgt, int y0)
      return 0;
 }
 
-void checkError(cudaError_t e)
-{
-     if (e != cudaSuccess)
-     {
-          std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) <<
-               '\n';
-          abort();
-     }
-}
 
 void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
      int samples)
@@ -552,7 +561,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                     netin[i] = (actuation[i] *layer_weights[i].t()) / actuation[i].n_cols;
 #else
                    netin[i].zeros();
-                   c = layer_weights[i].t();
+                   mat c = layer_weights[i].t();
                    MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(),
                          c.n_rows, c.n_cols);
 
@@ -575,7 +584,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                          ")= " << netin[i] << endl << flush;
 
 #endif
-                    actuation[i + 1] = sigmoid(netin[i]);
+                    sigmoid(netin[i], actuation[i + 1]);
                }
 #ifdef SAMPLEFREQ
                if ((y + 1) % SAMPLEFREQ == 0)
