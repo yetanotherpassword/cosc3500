@@ -21,12 +21,12 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 1
+#define EPOCHS 512
 
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
 #define SAMPLEFREQ 1
-//#undef SAMPLEFREQ
+#undef SAMPLEFREQ
 
 
 /*
@@ -543,8 +543,10 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                    //c = layer_weights[i].t();
                    domult(i);
 
+#ifdef SAMPLEFREQ
                          cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
                          ")= " << netin[i] << endl << flush;
+#endif
 
 #endif
                     sigmoid(netin[i], actuation[i + 1]);
@@ -1007,10 +1009,6 @@ int main(int argc, char *argv[])
 
                weight_updates.push_back(tmpwgt00);
                weight_updates_ptr.push_back(tmpptr00);
-               cout << "***********Y(" << netin[i].n_rows << "x" << netin[i].n_cols <<
-                    ") = X(" << actuation[i].n_rows << "x" << actuation[i].n_cols <<
-                    ") TIMES M(" << layer_weights[i].n_rows << "x" <<
-                    layer_weights[i].n_cols << ")" << endl;
           }
      }
      // Save initial starting weights if required for later
