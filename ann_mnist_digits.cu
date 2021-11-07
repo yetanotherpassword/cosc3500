@@ -24,12 +24,14 @@
 #define SAMPLEFREQ 1
 #undef SAMPLEFREQ
 
-#define EPOCHS 512
+#define EPOCHS 1
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
 #define BLOCK_HEIGHT 1024
 #define BLOCK_WIDTH 64
+
+
 // nvcc --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets -std=c++11 -g
 // -Iarmadillo-10.6.2/include/ -DSERIAL_ONLY  -L armadillo-10.6.2/build/
 // -larmadillo  -l lapack_static  -o ann_mnist_digits_cuda_ser
@@ -117,6 +119,104 @@ int nd2[100];
 int lays;
 int t = 0;
 int x = 0;
+mat c;
+__global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols, int TILE_DIM) {
+
+    double CValue = 0;
+
+    int Row = blockIdx.y*TILE_DIM + threadIdx.y;
+    int Col = blockIdx.x*TILE_DIM + threadIdx.x;
+
+    for (int k = 0; k < (TILE_DIM + ACols - 1)/TILE_DIM; k++) {
+
+        for (int n = 0; n < TILE_DIM; ++n) 
+            if ((k*TILE_DIM + n < ACols && Row < ARows) && (k*TILE_DIM + n < BRows && Col < BCols))
+                CValue += A[Row*ACols + k*TILE_DIM + n] * B[(k*TILE_DIM + n)*BCols + Col];
+
+    }
+
+    if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y)*CCols)+(blockIdx.x*blockDim.x)+threadIdx.x]=CValue;
+}
+
+int domult(int i) {
+
+mat c=layer_weights[i].t();
+int DIMX=1;
+int DIMY=c.n_rows;
+int DIMZ=c.n_cols;
+int TILE_DIM=16; 
+
+    int CRows=DIMX;    //1 x 31 (output)
+    int CCols = DIMZ;
+
+    int ARows=DIMX;   // 1 x 785 (sample)
+    int ACols=DIMY;
+
+    int BRows=DIMY;   // 785 x 31 (weights)
+    int BCols=DIMZ;
+
+
+cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRows << " x " << BCols << " ) =  ( " << CRows << " x " << CCols << " ) "<<endl;
+
+    dim3 dimBlock(TILE_DIM, TILE_DIM, 1);
+    dim3 dimGrid;
+
+    dimGrid.x = (CCols + dimBlock.x - 1)/dimBlock.x;
+    dimGrid.y = (CRows + dimBlock.y - 1)/dimBlock.y;
+
+    double *deviceA, *deviceB, *deviceC;
+
+    double* hostA    = (double*)malloc(DIMX*DIMY*sizeof(double)); // 1x785 actuation
+    double* hostB    = (double*)malloc(DIMY*DIMZ*sizeof(double)); // 785x31 layer_weights
+    double* hostC    = (double*)malloc(DIMX*DIMZ*sizeof(double)); // 1x31  netin
+
+    memcpy(hostA, actuation[i].memptr(), DIMX*DIMY*sizeof(double));
+    memcpy(hostB, c.memptr(), DIMY*DIMZ*sizeof(double));
+    memcpy(hostC, netin[i].memptr(), DIMX*DIMZ*sizeof(double));
+
+
+    cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double));
+    cudaMalloc((void **)&deviceB, DIMY*DIMZ*sizeof(double));
+    cudaMalloc((void **)&deviceC, DIMX*DIMZ*sizeof(double));
+
+    cudaMemcpy(deviceA, hostA, DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(deviceB, hostB, DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice);
+
+    MatMulNoShared<<<dimGrid , dimBlock>>>(deviceA , deviceB , deviceC , ARows , ACols, BRows ,BCols , CRows , CCols, TILE_DIM);
+    cudaMemcpy(hostC, deviceC, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost);
+ /*  
+std::cout << "A=";
+for (int i=0;i<ARows;i++)
+{
+   for (int j=0;j<ACols;j++)
+   {
+      std::cout << hostA[i*ACols+j] << " ";
+   }
+ std::cout << std::endl;
+}
+
+std::cout << "B=";
+for (int i=0;i<BRows;i++)
+{
+   for (int j=0;j<BCols;j++)
+   {
+      std::cout << hostB[i*BCols+j] << " ";
+   }
+ std::cout << std::endl;
+}
+std::cout << "C=";
+*/
+for (int i=0;i<CRows;i++)
+{
+   for (int j=0;j<CCols;j++)
+   {
+     // std::cout << hostC[i*CCols+j] << " ";
+      netin[i](i,j) =  hostC[i*CCols+j] / (double) actuation[i].n_cols;
+   }
+ //std::cout << std::endl;
+}
+    return 0;
+}
 void MultArmVM(double *V, double *M, double *R, int m_nr, int m_nc)
 {
      double sum;
@@ -452,7 +552,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                     netin[i] = (actuation[i] *layer_weights[i].t()) / actuation[i].n_cols;
 #else
                    netin[i].zeros();
-                   mat c = layer_weights[i].t();
+                   c = layer_weights[i].t();
                    MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(),
                          c.n_rows, c.n_cols);
 
@@ -466,6 +566,14 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                          cout << "Netin serial (" << netin[i].n_rows << "," << netin[i].n_cols <<
                          ")= " << netin[i] << endl << flush;
 #endif
+#else
+                   netin[i].zeros();
+                   //c = layer_weights[i].t();
+                   domult(i);
+
+                         cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
+                         ")= " << netin[i] << endl << flush;
+
 #endif
                     actuation[i + 1] = sigmoid(netin[i]);
                }
