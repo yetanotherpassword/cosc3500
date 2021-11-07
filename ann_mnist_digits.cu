@@ -24,7 +24,7 @@
 #define SAMPLEFREQ 1
 //#undef SAMPLEFREQ
 
-#define EPOCHS 1
+#define EPOCHS 512
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
@@ -160,7 +160,7 @@ mat c=layer_weights[i].t();
 int DIMX=1;
 int DIMY=c.n_rows;
 int DIMZ=c.n_cols;
-int TILE_DIM=16; 
+int TILE_DIM=64; 
 
     int CRows=DIMX;    //1 x 31 (output)
     int CCols = DIMZ;
@@ -172,7 +172,7 @@ int TILE_DIM=16;
     int BCols=DIMZ;
 
 
-//cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRows << " x " << BCols << " ) =  ( " << CRows << " x " << CCols << " ) "<<endl;
+cout << "Multiplying vector ( " << ARows << " x " << ACols << " ) *  ( " << BRows << " x " << BCols << " ) =  ( " << CRows << " x " << CCols << " ) "<<endl;
 
     dim3 dimBlock(TILE_DIM, TILE_DIM, 1);
     dim3 dimGrid;
@@ -180,15 +180,11 @@ int TILE_DIM=16;
     dimGrid.x = (CCols + dimBlock.x - 1)/dimBlock.x;
     dimGrid.y = (CRows + dimBlock.y - 1)/dimBlock.y;
 
-    double *deviceA, *deviceB, *deviceC;
-
-    double* hostA    = (double*)malloc(DIMX*DIMY*sizeof(double)); // 1x785 actuation
-    double* hostB    = (double*)malloc(DIMY*DIMZ*sizeof(double)); // 785x31 layer_weights
-    double* hostC    = (double*)malloc(DIMX*DIMZ*sizeof(double)); // 1x31  netin
+  double* hostC   = (double*)malloc(DIMX*DIMZ*sizeof(double)); // 1x31  netin
 
  //   memcpy(hostA, actuation[i].memptr(), DIMX*DIMY*sizeof(double));
  //   memcpy(hostB, layer_weights[i].memptr(), DIMY*DIMZ*sizeof(double));
- //   memcpy(hostC, netin[i].memptr(), DIMX*DIMZ*sizeof(double));
+     memcpy(hostC, netin[i].memptr(), DIMX*DIMZ*sizeof(double));
 
 
    // checkError(cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double)));
@@ -197,11 +193,15 @@ int TILE_DIM=16;
 
    checkError(cudaMemcpy(ActuationDevice, actuation[i].memptr(), DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice));
    checkError(cudaMemcpy(LayerWeightsDevice ,  layer_weights[i].memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice));
+//   checkError(cudaMemcpy(LayerWeightsDevice ,  c.memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice));
 
     MatMulNoShared<<<dimGrid , dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, ARows , ACols, BRows ,BCols , CRows , CCols, TILE_DIM);
     checkError(cudaDeviceSynchronize());
 
+    //checkError(cudaMemcpy(hostC, NetinDevice, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost));
     checkError(cudaMemcpy(netin[i].memptr(), NetinDevice, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost));
+    netin[i] = netin[i] / actuation[i].n_cols;
+    
  /*  
 std::cout << "A=";
 for (int i=0;i<ARows;i++)
@@ -224,6 +224,7 @@ for (int i=0;i<BRows;i++)
 }
 std::cout << "C=";
 */
+/*
 for (int r=0;r<CRows;r++)
 {
    for (int k=0;k<CCols;k++)
@@ -232,7 +233,7 @@ for (int r=0;r<CRows;r++)
       netin[i](r,k) =  hostC[r*CCols+k] / (double) actuation[i].n_cols;
    }
  //std::cout << std::endl;
-}
+}*/
     return 0;
 }
 void MultArmVM(double *V, double *M, double *R, int m_nr, int m_nc)
