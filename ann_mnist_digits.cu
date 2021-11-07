@@ -165,7 +165,7 @@ void MatrixTranspVectorMultiply(double *Y, const double *X, double *M, int m_nr,
 // implementation of the matrix-vector multiply function
 void MatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m_nc)
 {
-for (int i=0;i<m_nc;i++) Y[i]=0;
+//for (int i=0;i<m_nc;i++) Y[i]=0;
 for (int i=0;i<m_nr*m_nc ;i++)
 {
     int c1=i % m_nc;
@@ -558,9 +558,14 @@ double *nnn =  netin[i].memptr();
     //                cout << "netin[i]=" << setprecision(20) << fixed << showpoint << endl;
   //                    netin[i].raw_print(cout);
 //cout << "***************************** Now matvec ***************************************************************" << endl;
-
-                    MatrixVectorMultiply(netin_ptr[i], actuation[i].memptr(), c.memptr(),
+#if 0
+                    netin[i] = (actuation[i] *layer_weights[i].t()) / actuation[i].n_cols;
+#else
+                  netin[i].zeros();
+                  MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(),
                          c.n_rows, c.n_cols);
+
+
                    	//   MatrixTranspVectorMultiply(netin[i].memptr(),
                    	// actuation[i].memptr(), layer_weights[i].memptr(),
                    	// layer_weights[i].n_rows,  layer_weights[i].n_cols);
@@ -568,8 +573,9 @@ double *nnn =  netin[i].memptr();
                     {
                     //     cout << "net= j" << j << "  " << *(netin_ptr[i] + j) << "**" <<
                       //        netin[i](j) << "***" << *(netin_ptr[i] + j) << endl;
-                        	      netin[i](j) = netin_ptr[i][j]/actuation[i].n_cols;
+                        	      netin[i](j) /= actuation[i].n_cols;
                     }
+#endif
                  //   cout << "act[" << i << "]=" << actuation[i] << endl;
                  //   mat z = layer_weights[i].t();
                  //   cout << "lay_wg=" << z.col(0) << endl;
