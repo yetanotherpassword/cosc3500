@@ -22,7 +22,7 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 1
+#define EPOCHS 512
 
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
@@ -36,25 +36,27 @@
  *
  * To perform a full build and run from scratch, do the following
  *
- *    git clone git://github.com/yetanotherpassword/cosc3500
- *    cd ~/cosc3500/
- *    unzip mnist.zip
- *    unxz armadillo-10.6.2.tar.xz
- *    tar xvf armadillo-10.6.2.tar
- *    cd armadillo-10.6.2/
- *      #Made lib static and issue with MKL on Centos
- *      #Below changes done in my git, but may need to do if download from
- *      #http://sourceforge.net/projects/arma/files/armadillo-10.6.2.tar.xz
- *      #sed -i "s/add_library( armadillo/add_library( armadillo STATIC/"
- *CMakeLists.txt
- *      #sed -i "s/include(ARMA_FindMKL)/#include(ARMA_FindMKL)/" CMakeLists.txt
- *    mkdir build
- *    cd build
- *    cmake ..
- *    make
- *    cd ../..
- *    make
- *    sbatch ./goslurm.sh ann_mnist_digits
+     unzip Project_AC.zip
+     cd ~/cosc3500/
+     unzip mnist.zip
+     unxz armadillo-10.6.2.tar.xz
+     tar xvf armadillo-10.6.2.tar
+     cd armadillo-10.6.2/
+     mkdir build
+     cd build
+     cmake ..
+     make
+     cd ../..
+     make
+     sbatch ./goslurm.sh ann_mnist_digits_cuda    #Run parallel version (with default settings)
+     sbatch ./goslurm.sh ann_mnist_digits_serial  #Run serial version for comparison 
+
+       #Note for armadillo build
+       #Made lib static and issue with MKL on Centos
+       #Below changes done in my git, but may need to do if download from
+       #http://sourceforge.net/projects/arma/files/armadillo-10.6.2.tar.xz
+       #sed -i "s/add_library( armadillo/add_library( armadillo STATIC/" CMakeLists.txt
+      #sed -i "s/include(ARMA_FindMKL)/#include(ARMA_FindMKL)/" CMakeLists.txt
  */
 
 
@@ -73,7 +75,7 @@ double *LayerWeightsDevice;
 double *ActuationDevice;
 double *NetinDevice;
 cudaEvent_t start, stop;
-int tile_dimension = 8; 
+int tile_dimension = 64; 
 #endif
 
 std::time_t result = std::time(nullptr);
