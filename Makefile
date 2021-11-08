@@ -10,9 +10,7 @@ TARGETS=ann_mnist_digits_cuda ann_mnist_digits_serial
 LIB= -Larmadillo-10.6.2/build/ -larmadillo -llapack_static
 INC= -Iarmadillo-10.6.2/include/
 
-ann_mnist_digits_serial: ann_mnist_digits.cu
-	$(NVCC) $(INC) $(NVFLAGS) $(NVFLAGS_$@) $(filter %.o %.cu, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
-ann_mnist_digits_cuda: ann_mnist_digits.cu
+ann_mnist_digits_cuda ann_mnist_digits_serial: ann_mnist_digits.cu
 	$(NVCC) $(INC) $(NVFLAGS) $(NVFLAGS_$@) $(filter %.o %.cu, $^) $(LDFLAGS) $(LIBS_$@) $(LIB) -o $@
 
 # The first rule in the Makefile is the default target that is made if 'make' is invoked with
