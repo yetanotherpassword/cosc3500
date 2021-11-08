@@ -7,6 +7,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <vector>
+#include <limits>
 
 // Application Parameters
 #define DEFTHREADS 256
@@ -21,7 +22,7 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 512
+#define EPOCHS 1
 
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
@@ -61,13 +62,19 @@ int thrds = DEFTHREADS;
 using namespace arma;
 using namespace std;
 
+float mintime = std::numeric_limits<float>::max();
+float maxtime = std::numeric_limits<float>::min();
+
+std::chrono::microseconds Process_MaxTime = std::chrono::microseconds::min();
+std::chrono::microseconds Process_MinTime = std::chrono::microseconds::max();
+
+#ifndef SERIAL_ONLY
 double *LayerWeightsDevice;
 double *ActuationDevice;
 double *NetinDevice;
-float mintime = 1000000;
-float maxtime = -10;
-std::chrono::microseconds CUDA_Max = std::chrono::microseconds::min();
-std::chrono::microseconds CUDA_Min = std::chrono::microseconds::max();
+cudaEvent_t start, stop;
+int tile_dimension = 8; 
+#endif
 
 std::time_t result = std::time(nullptr);
 string fid = to_string(result);
@@ -91,13 +98,11 @@ vector<double*> actuation_ptr;
 vector<double*> deltafn_ptr;
 vector<double*> ftick_ptr;
 
-cudaEvent_t start, stop;
 
 ios init(NULL);
 stringstream confusion_matrix;
 rowvec err_summary = ones<rowvec> (OUTPUT_LINES) *(-1);
 
-int tile_dimension = 8; 
 
 #ifdef WANT_TO_LOAD_WEIGHTS
 // Used for loading weights from file (if ever required)
@@ -107,6 +112,12 @@ int nd2[100];
 int lays;
 int t = 0;
 int x = 0;
+#endif
+
+#ifdef SERIAL_ONLY
+string build_type = "Serial";
+#else
+string build_type = "Parallel";
 #endif
 
 void checkError(cudaError_t e)
@@ -138,10 +149,13 @@ void VectorMatrixMultiply(double* act, double* lwgts, double* net, int actuation
           net[((blockIdx.y * blockDim.y + threadIdx.y)*netin_cols)+(blockIdx.x*blockDim.x)+threadIdx.x]=netin_accum;
 }
 
-int domult(int i) {
+#ifndef SERIAL_ONLY
+int InitiateCUDAVectorMatrixMultiply(int i) 
+{
 
     float time;
     int x_dimension = 1;
+    // CUDA Grid is based on Matrix Dimensions
     int y_dimension = layer_weights[i].n_cols;
     int z_dimension = layer_weights[i].n_rows;
 
@@ -154,8 +168,6 @@ int domult(int i) {
     int layer_weights_rows = y_dimension;
     int layer_weights_cols = z_dimension;
 
-//    cout << "Multiplying vector ( " << actuation_rows << " x " << actuation_cols << " ) *  ( " << layer_weights_rows << " x " << layer_weights_cols << " ) =  ( " << netin_rows << " x " << netin_cols << " ) "<<endl;
-
     dim3 dimBlock(tile_dimension, tile_dimension, 1);
     dim3 dimGrid;
 
@@ -166,21 +178,22 @@ int domult(int i) {
     checkError(cudaMemcpy(LayerWeightsDevice,  layer_weights[i].memptr(), y_dimension*z_dimension*sizeof(double), cudaMemcpyHostToDevice));
 
     cudaEventRecord(start,0);
-    auto StartCUDATime = std::chrono::high_resolution_clock::now();
+    auto StartChronoTime = std::chrono::high_resolution_clock::now();
 
-
+    // CUDA Call to GPU /////////////////////////////////////////////////////////
     VectorMatrixMultiply<<<dimGrid, dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, actuation_rows, actuation_cols, layer_weights_rows, layer_weights_cols, netin_rows, netin_cols, tile_dimension);
+    // CUDA Call to GPU /////////////////////////////////////////////////////////
 
     checkError(cudaDeviceSynchronize());
 
-    auto EndCUDATime = std::chrono::high_resolution_clock::now();
-    auto TotalCUDATime = std::chrono::duration_cast<std::chrono::microseconds > (          EndCUDATime - StartCUDATime);
+    auto EndChronoTime = std::chrono::high_resolution_clock::now();
+    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
 
-    if (TotalCUDATime > CUDA_Max)
-       CUDA_Max = TotalCUDATime;
+    if (TotalChronoTime > Process_MaxTime)
+       Process_MaxTime = TotalChronoTime;
 
-    if (TotalCUDATime < CUDA_Min)
-       CUDA_Min = TotalCUDATime;
+    if (TotalChronoTime < Process_MinTime)
+       Process_MinTime = TotalChronoTime;
 
 
     cudaEventRecord(stop,0);
@@ -196,6 +209,7 @@ int domult(int i) {
     
     return 0;
 }
+#endif
 
 void MultArmVM(double *V, double *M, double *R, int m_nr, int m_nc)
 {
@@ -243,15 +257,25 @@ void MatrixTranspVectorMultiply(double *Y, const double *X, double *M, int m_nr,
      }
 }
 // implementation of the matrix-vector multiply function
-void MatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m_nc)
+void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m_nc)
 {
+    auto StartChronoTime = std::chrono::high_resolution_clock::now();
+
   // Need to ensure Y vector passed has been zeroised
-for (int i=0;i<m_nr*m_nc ;i++)
-{
-    int c1=i % m_nc;
-    int r1=i / m_nc;
-    Y[c1] += X[r1] * M[c1 *m_nr + r1];
-}
+    for (int i=0;i<m_nr*m_nc ;i++)
+    {
+        int c1=i % m_nc;
+        int r1=i / m_nc;
+        Y[c1] += X[r1] * M[c1 *m_nr + r1];
+    }
+    auto EndChronoTime = std::chrono::high_resolution_clock::now();
+    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
+
+    if (TotalChronoTime > Process_MaxTime)
+       Process_MaxTime = TotalChronoTime;
+
+    if (TotalChronoTime < Process_MinTime)
+       Process_MinTime = TotalChronoTime;
 }
 
 void sigmoid(rowvec & net, rowvec & out)
@@ -263,7 +287,7 @@ void sigmoid(rowvec & net, rowvec & out)
 
 /////////////////////////////////////////////
 //
-// DEBUGGING ROUTINES
+// PRINT ROUTINES
 //
 void print_an_image_vals(unsigned char *c, int i)
 {
@@ -406,7 +430,9 @@ void load_an_image(int seq, unsigned char* &mptr, rowvec &img, rowvec &t,
      t(img_is_digit) = 1;	// set the target 'bit'
 }
 
-
+////////////////////////
+//
+// DEBUG ROUTINES
 // For use with gdb
 void output(mat t)
 {
@@ -525,7 +551,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
 #else
                    netin[i].zeros();
                    mat c = layer_weights[i].t();
-                   MatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(),
+                   SerialMatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(),
                          c.n_rows, c.n_cols);
 
                     for (int j = 0; j < netin[i].n_cols; j++)
@@ -540,8 +566,8 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
 #endif
 #else
                    netin[i].zeros();
-                   //c = layer_weights[i].t();
-                   domult(i);
+
+                   InitiateCUDAVectorMatrixMultiply(i);
 
 #ifdef SAMPLEFREQ
                          cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
@@ -919,9 +945,11 @@ int main(int argc, char *argv[])
           }
      }
 
+#ifndef SERIAL_ONLY
  // set up CUDA timing structs
      cudaEventCreate(&start);
      cudaEventCreate(&stop);
+#endif
 
      OutputLayer = NumberOfLayers - 1;
      unsigned char *trainlabels;
@@ -1021,17 +1049,19 @@ int main(int argc, char *argv[])
 #ifdef WANT_TO_LOAD_WEIGHTS
      // this is a function to load previously saved weights, to either ensure constant initial values
      // if say moving platforms with different psudeo RNG, or to load post weights after training
-     // This works, but only implemented, so far, by direct code changes, no UI currently implemented
+     // This works, but only implemented atm, by direct code changes, no UI implemented
+     // But note used in this project anyway
      load_weights(y);
 #endif
+
+#ifndef SERIAL_ONLY
      checkError(cudaMalloc(&ActuationDevice, max_vec* sizeof(double)));
      checkError(cudaMalloc(&NetinDevice, max_vec* sizeof(double)));
      checkError(cudaMalloc(&LayerWeightsDevice, max_mat* sizeof(double)));
-
 #ifdef __CUDA_ARCH__
      cout << "Built for CUDA ARCH == " << __CUDA_ARCH__ << endl;
 #endif
-
+#endif
     	///////////////////////////////////////////////
     	//
     	// TRAIN THE DATA
@@ -1095,22 +1125,40 @@ int main(int argc, char *argv[])
      confusion_matrix << "Eta      : " << eta << endl << flush;
      confusion_matrix << "Build ver: " << bldver << endl << flush;
      save_weights("post_training_weights");
+
      delete[] traindata;
      delete[] trainlabels;
      delete[] testdata;
      delete[] testlabels;
+
+     if (mintime == std::numeric_limits<float>::max())
+        cout << "Problem recording min time for " << build_type << endl;
+     else
+     {
+        cout << "Min time for " <<  build_type << " call : " << mintime  << " us" << endl;
+        cout << "Min time for " <<  build_type << " call : " << mintime/1000000  << " s" << endl;
+        cout << "Min time for " <<  build_type << " call : " << mintime/60000000  << " min" << endl;
+     }
+     if (maxtime == std::numeric_limits<float>::min())
+        cout << "Problem recording max time for " << build_type << endl;
+     else
+     {
+        cout << "Max time for " <<  build_type << " call : " << mintime  << " us" << endl;
+        cout << "Max time for " <<  build_type << " call : " << mintime/1000000  << " s" << endl;
+        cout << "Max time for " <<  build_type << " call : " << mintime/60000000  << " min" << endl;
+     }
+#ifndef SERIAL_ONLY
+     cout << "Max time for CUDA call : " << Process_MaxTime.count() << " us (Measured by CUDA API)" << endl;
+     cout << "Min time for CUDA call : " << Process_MinTime.count() << " us (Measured by CUDA API)" << endl;
+     cout << "Used Tile Dimension of " << tile_dimension << endl;
+
      checkError(cudaFree(LayerWeightsDevice));
      checkError(cudaFree(ActuationDevice));
      checkError(cudaFree(NetinDevice));
+
      checkError(cudaEventDestroy(start));
      checkError(cudaEventDestroy(stop));
-#ifndef SERIAL_ONLY
-     cout << "Max time for CUDA call : " << maxtime << endl;
-     cout << "Min time for CUDA call : " << mintime << endl;
-     cout << "Max time for CUDA call2 : " << CUDA_Max.count()<< endl;
-     cout << "Min time for CUDA call2 : " << CUDA_Min.count()<< endl;
 #endif
-    cout << "Used Tile Dimension of " << tile_dimension << endl;
 
 
 }
