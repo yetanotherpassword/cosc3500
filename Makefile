@@ -3,7 +3,7 @@ CXX?=g++
 CXXFLAGS?=-std=c++11 -g
 
 NVCC?=nvcc
-NVFLAGS?=-g --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets
+NVFLAGS?= -std=c++11 --gpu-architecture=sm_35 -Wno-deprecated-gpu-targets
 NVFLAGS_ann_mnist_digits_serial= -DSERIAL_ONLY
 # all targets
 TARGETS=ann_mnist_digits_cuda ann_mnist_digits_serial
