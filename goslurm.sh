@@ -4,10 +4,16 @@
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --constraint=FC430
-#SBATCH --mem-per-cpu=1000 # memory (MB)
+##SBATCH --constraint=FC430
+##SBATCH --mem-per-cpu=1000 # memory (MB)
 #SBATCH --time=0-10:01 # time (D-HH:MM)
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+date
+module load cuda/10.1 gcc
+echo $HOSTNAME
 lscpu
+echo "---------------------------------------------------1"
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 export MKL_NUM_THREADS=${SLURM_CPUS_PER_TASK}
 echo 'running with OMP_NUM_THREADS =' $OMP_NUM_THREADS
@@ -19,14 +25,10 @@ echo "running with SLURM_TASKS_PER_NODE= $SLURM_TASKS_PER_NODE "
 
 if [[ "$1" == "mpiexec" ]]; then
    module load gnu/7.2.0 gnutools mpi/openmpi3_eth
-
 elif [ ! -f "$1" ] ; then
    echo "unable to find $1"
    echo "you probably need to compile code"
    exit 2
 fi
-#set
-#shift
-#gdb -x ann_dbg $@
 echo "Running: '$@'"
-"$@"
+time "$@"
