@@ -122,7 +122,7 @@ class Matrix {
    {
         int idx=0;
         double max=  std::numeric_limits<double>::min();
-        if (((r<rows) && (r>0)) && (start>0) && (start < cols) && (stop >0) && (stop<cols) && (start<=stop))
+        if (((r<rows) && (r>=0)) && (start>=0) && (start < cols) && (stop >=0) && (stop<cols) && (start<=stop))
           for (int i =r; i<=r;i++)
              for (int j =start; j<=stop;j++)
                if (index[i*cols+j] > max)
@@ -159,9 +159,27 @@ class Matrix {
        else
           cout << "Error: Non-Zero Positive numbers only: Passed row=" << r << " and col=" << c <<endl;
    };
+/*
    ~Matrix()
    {
       if (index != NULL)
+           delete[] index;
+   };
+*/
+   void prt(string s)
+   {
+       cout << s << endl;
+       if (index !=NULL)
+          for (int i=0;i<rows;i++)
+          {
+             for (int j=0;j < cols;j++)
+                  cout << "   " << index[i*cols+j] ;
+             cout << endl;
+          }
+   }
+   void free_ele()
+   {
+       if (index != NULL)
            delete[] index;
    };
    Matrix& operator= (const rowvec & rv)
@@ -362,6 +380,69 @@ cout << dimGrid.x << "," << dimGrid.y << "==Grid, Block==" << dimBlock.x << "," 
        maxtime = time;
     checkError(cudaMemcpy(netin[i].memptr(), NetinDevice, x_dimension*z_dimension*sizeof(double), cudaMemcpyDeviceToHost));
     netin[i] = netin[i] / actuation[i].n_cols;
+    
+    return 0;
+}
+int InitiateCUDAVectorMatrixMultiply3(int i) 
+{
+
+    float time;
+    int x_dimension = 1;
+    // CUDA Grid is based on Matrix Dimensions
+    int y_dimension = layer_weights3[i].rows;
+    int z_dimension = layer_weights3[i].cols;
+
+    int netin_rows = x_dimension;
+    int netin_cols = z_dimension;
+
+    int actuation_rows = x_dimension;
+    int actuation_cols = y_dimension;
+
+    int layer_weights_rows = y_dimension;
+    int layer_weights_cols = z_dimension;
+
+    dim3 dimBlock(tile_dimension, tile_dimension, 1);
+    dim3 dimGrid;
+
+cout <<    "i=" << i << " dimGrid.x = ("<<netin_cols<<" + "<<dimBlock.x <<"- 1)/ "<<dimBlock.x<<endl;
+cout <<    "i=" << i << " dimGrid.y = ("<<netin_rows<<" + "<<dimBlock.y <<"- 1)/ "<<dimBlock.y<<endl;
+
+    dimGrid.x = (netin_cols + dimBlock.x - 1)/dimBlock.x;
+    dimGrid.y = (netin_rows + dimBlock.y - 1)/dimBlock.y;
+    
+    checkError(cudaMemcpy(ActuationDevice, actuation3[i].index, x_dimension*y_dimension*sizeof(double), cudaMemcpyHostToDevice));
+    checkError(cudaMemcpy(LayerWeightsDevice,  layer_weights3[i].index, y_dimension*z_dimension*sizeof(double), cudaMemcpyHostToDevice));
+
+    cudaEventRecord(start,0);
+    auto StartChronoTime = std::chrono::high_resolution_clock::now();
+cout << dimGrid.x << "," << dimGrid.y << "==Grid, Block==" << dimBlock.x << "," << dimBlock.y << " and tile_dimension="<< tile_dimension << endl;
+    // CUDA Call to GPU /////////////////////////////////////////////////////////
+    VectorMatrixMultiply<<<dimGrid, dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, actuation_rows, actuation_cols, layer_weights_rows, layer_weights_cols, netin_rows, netin_cols, tile_dimension);
+    // CUDA Call to GPU /////////////////////////////////////////////////////////
+
+    checkError(cudaDeviceSynchronize());
+
+    auto EndChronoTime = std::chrono::high_resolution_clock::now();
+    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
+
+    if (TotalChronoTime > Process_MaxTime)
+       Process_MaxTime = TotalChronoTime;
+
+    if (TotalChronoTime < Process_MinTime)
+       Process_MinTime = TotalChronoTime;
+
+
+    cudaEventRecord(stop,0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&time, start, stop);
+
+    if (time < mintime)
+       mintime = time;
+    if (time > maxtime)
+       maxtime = time;
+    checkError(cudaMemcpy(netin3[i].index, NetinDevice, x_dimension*z_dimension*sizeof(double), cudaMemcpyDeviceToHost));
+    for (int j=0;j<netin3[i].cols;j++)
+       netin3[i].index[j] = netin3[i].index[j] / actuation3[i].cols;
     
     return 0;
 }
@@ -693,6 +774,10 @@ void output(rowvec t)
 {
      cout << t << endl;
 }
+void output(Matrix t)
+{
+     t.prt("Test");
+}
          
 int backprop(rowvec tgt, int y0)
 {
@@ -802,12 +887,16 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
 #else
                    netin[i].zeros();
                    mat c = layer_weights[i].t();
-                   SerialMatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(),
-                         c.n_rows, c.n_cols);
+                   SerialMatrixVectorMultiply(netin[i].memptr(), actuation[i].memptr(), c.memptr(), c.n_rows, c.n_cols);
+                   SerialMatrixVectorMultiply(netin3[i].index, 
+                                               actuation3[i].index, 
+                                               layer_weights3[i].index,  layer_weights3[i].rows,  layer_weights3[i].cols);
+
 
                     for (int j = 0; j < netin[i].n_cols; j++)
                     {
                         	      netin[i](j) /= actuation[i].n_cols;
+                        	      netin3[i].index[j] /= actuation3[i].cols;
                     }
 #endif
 #ifdef SAMPLEFREQ
@@ -819,10 +908,12 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                    netin[i].zeros();
 
                    InitiateCUDAVectorMatrixMultiply(i);
+                   InitiateCUDAVectorMatrixMultiply3(i);
 
 #ifdef SAMPLEFREQ
                          cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
                          ")= " << netin[i] << endl << flush;
+                         netin3[i].prt("Netin3");
 #endif
 
 #endif
@@ -1419,6 +1510,10 @@ tmpwgt300 = rmpwgt00;
      cout << "Max time for CUDA call : " << Process_MaxTime.count() << " us (Measured by CUDA API)" << endl;
      cout << "Min time for CUDA call : " << Process_MinTime.count() << " us (Measured by CUDA API)" << endl;
      cout << "Used Tile Dimension of " << tile_dimension << endl;
+
+     for (int i=0;i<netin3.size();i++)
+         netin3[i].free_ele();
+
 
      checkError(cudaFree(LayerWeightsDevice));
      checkError(cudaFree(ActuationDevice));
