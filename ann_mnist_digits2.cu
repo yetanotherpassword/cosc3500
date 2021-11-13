@@ -182,19 +182,45 @@ class Matrix {
        if (index != NULL)
            delete[] index;
    };
-   Matrix& operator= (const rowvec & rv)
+
+
+const Matrix operator* (const Matrix & m2)
+   {
+     
+              Matrix tmp(rows,m2.cols);
+           if (cols == m2.rows) 
+           {
+     for (int i = 0; i < m2.cols; ++i)	// m_nc == y_nc
+     {
+          tmp.index[i] = 0;
+cout << "y["<<i<<"]=0" << endl;
+          for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
+          {
+cout << "y["<<i<<"] += M["<<j<<"*"<<m2.cols<<"+"<<i<<"] * x["<<j<<"] ===="<<  m2.index[j *m2.cols + i] << "*" << index[j] << endl;
+               tmp.index[i] += m2.index[j *m2.cols + i] *index[j];
+          }
+     }
+           }
+          return tmp;
+  };
+
+
+
+
+
+   Matrix& operator= (const Matrix m2)
    {
     // do the copy
        if (rows==0 && cols==0 && index==NULL)
        {
-            index = new double[rv.n_rows*rv.n_cols];
-            rows = rv.n_cols;
-            cols = 1;
+            index = new double[m2.rows*m2.cols];
+            cols = m2.cols;
+            rows = m2.rows;
        }
-       if ((rv.n_rows == rows) && (rv.n_cols == cols))
-          for (int r=0;r<rv.n_rows;r++)
-              for (int c=0;c<rv.n_cols;c++)
-                 index[r*rv.n_cols+c] = rv(r,c);
+       if ((m2.rows == rows) && (m2.cols == cols))
+          for (int r=0;r<m2.rows;r++)
+              for (int c=0;c<m2.cols;c++)
+                 index[r*m2.cols+c] = m2.index[r*m2.cols+c];
       // else
       //    cout << "Error: Non Matching elements in assignment : Tried to put ("<<rv.rows<<" , " << rv.n_cols << ") into ("<<rows<<","<<cols<<")"<<endl;
 
@@ -539,6 +565,21 @@ void MatrixTranspVectorMultiply2(double *Y, const double *X, double *M,
           {
 
                Y[i] += M[i *t_c + j] *X[t++];
+          }
+     }
+}
+// implementation of the matrix-vector multiply function
+void MatrixVectorMultiply(double *Y, const double *X, double *M, int m_nr,
+          int m_nc)
+{
+     for (int i = 0; i < m_nc; ++i)	// m_nc == y_nc
+     {
+          Y[i] = 0;
+cout << "y["<<i<<"]=0" << endl;
+          for (int j = 0; j < m_nr; ++j)	// m_nr == x_nc
+          {
+cout << "y["<<i<<"] += M["<<j<<"*"<<m_nc<<"+"<<i<<"] * x["<<j<<"] ===="<<  M[j *m_nc + i] << "*" << X[j] << endl;
+               Y[i] += M[j *m_nc + i] *X[j];
           }
      }
 }
@@ -892,6 +933,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                                                actuation3[i].index, 
                                                layer_weights3[i].index,  layer_weights3[i].rows,  layer_weights3[i].cols);
 
+                    netin3[i] = (actuation3[i] *layer_weights3[i].t()) / actuation3[i].cols;
 
                     for (int j = 0; j < netin[i].n_cols; j++)
                     {
@@ -1191,6 +1233,35 @@ void save_weights(string hdr)
 
 int main(int argc, char *argv[])
 {
+
+
+
+    Matrix a(1,4);
+    Matrix b(4,5);
+    Matrix c(1,5);
+
+    for (int i=0;i<4;i++)
+    {
+         a.index[i]=2+i;
+    }
+a.prt("This is A");
+    for (int i=0;i<4;i++)
+    {
+      for (int j=0;j<5;j++)
+      {
+           b.index[i*5+j] = a.index[i]*2;
+      }
+    }
+b.prt("This is B");
+c=a*b;
+// MatrixVectorMultiply(c.index, a.index, b.index, b.rows, b.cols);
+
+
+
+c.prt("This is C");
+cout << endl;
+exit(1);
+
      extern char **environ;
      string hname = "";
      //string y="initial_random_values_weights_11337071.txt";
