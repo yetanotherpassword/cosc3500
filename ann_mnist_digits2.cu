@@ -83,6 +83,31 @@ class Matrix {
    double * index;
    int rows;
    int cols;
+   Matrix * tmp1;
+   void free_ele()
+   {
+       if (index != NULL)
+       {
+           delete[] index;
+           index = NULL;
+       }
+   };
+   void set_tmp(int r, int c)
+   {
+       if (tmp1==NULL)
+          tmp1=new Matrix(r,c);
+      
+       else if ((r>0) && (c>0))
+       {
+          tmp1->free_ele();
+          tmp1->rows = r;
+          tmp1->cols = c;
+          tmp1->index = new double[r*c];
+       }
+       else
+          cout << "Error: Non-Zero Positive numbers only: Passed row=" << r << " and col=" << c <<endl;
+   
+   };
    Matrix(colvec cv)
    {
        cols = 1;
@@ -149,6 +174,7 @@ class Matrix {
    };
    Matrix(int r, int c) 
    {
+       tmp1=NULL;
        index=NULL;
        if ((r>0) && (c>0))
        {
@@ -177,32 +203,25 @@ class Matrix {
              cout << endl;
           }
    }
-   void free_ele()
-   {
-       if (index != NULL)
-           delete[] index;
-   };
 
 
 const Matrix operator* (const Matrix & m2)
-   {
+{
      
-              Matrix tmp(rows,m2.cols);
-           if (cols == m2.rows) 
-           {
+ if (cols == m2.rows) 
+ {
+     set_tmp(rows,m2.cols);
      for (int i = 0; i < m2.cols; ++i)	// m_nc == y_nc
      {
-          tmp.index[i] = 0;
-cout << "y["<<i<<"]=0" << endl;
+          tmp1->index[i] = 0;
           for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
           {
-cout << "y["<<i<<"] += M["<<j<<"*"<<m2.cols<<"+"<<i<<"] * x["<<j<<"] ===="<<  m2.index[j *m2.cols + i] << "*" << index[j] << endl;
-               tmp.index[i] += m2.index[j *m2.cols + i] *index[j];
+               tmp1->index[i] += m2.index[j *m2.cols + i] *index[j];
           }
      }
-           }
-          return tmp;
-  };
+ }
+ return *tmp1;
+};
 
 
 
@@ -211,16 +230,14 @@ cout << "y["<<i<<"] += M["<<j<<"*"<<m2.cols<<"+"<<i<<"] * x["<<j<<"] ===="<<  m2
    Matrix& operator= (const Matrix m2)
    {
     // do the copy
-       if (rows==0 && cols==0 && index==NULL)
-       {
-            index = new double[m2.rows*m2.cols];
-            cols = m2.cols;
-            rows = m2.rows;
-       }
-       if ((m2.rows == rows) && (m2.cols == cols))
-          for (int r=0;r<m2.rows;r++)
-              for (int c=0;c<m2.cols;c++)
-                 index[r*m2.cols+c] = m2.index[r*m2.cols+c];
+       free_ele();
+       index = new double[m2.rows*m2.cols];
+       cols = m2.cols;
+       rows = m2.rows;
+
+       for (int r=0;r<m2.rows;r++)
+           for (int c=0;c<m2.cols;c++)
+              index[r*m2.cols+c] = m2.index[r*m2.cols+c];
       // else
       //    cout << "Error: Non Matching elements in assignment : Tried to put ("<<rv.rows<<" , " << rv.n_cols << ") into ("<<rows<<","<<cols<<")"<<endl;
 
@@ -1238,7 +1255,9 @@ int main(int argc, char *argv[])
 
     Matrix a(1,4);
     Matrix b(4,5);
+    Matrix c1(5,5);
     Matrix c(1,5);
+    Matrix d(1,5);
 
     for (int i=0;i<4;i++)
     {
@@ -1249,6 +1268,7 @@ a.prt("This is A");
     {
       for (int j=0;j<5;j++)
       {
+c1.index[i*5+j]=i*i+j;
            b.index[i*5+j] = a.index[i]*2;
       }
     }
@@ -1260,6 +1280,10 @@ c=a*b;
 
 c.prt("This is C");
 cout << endl;
+d=a*b;
+d.prt("This is D");
+c=c*c1;
+c.prt("This is C");
 exit(1);
 
      extern char **environ;
