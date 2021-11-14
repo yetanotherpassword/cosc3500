@@ -246,20 +246,47 @@ const Matrix operator* (double d)
  return *tmp1;
 };
 
-
 const Matrix operator- (const int d)
 {
- return (*this - (double) d);
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] - (double) d;
+          }
+     }
+ return *tmp1;
 };
-const Matrix operator+ (const int d)
+const Matrix operator+ (int d)
 {
- return (*this + (double) d);
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] + (double) d;
+          }
+     }
+ return *tmp1;
 };
 
-const Matrix operator* (const int d)
+const Matrix operator* (int d)
 {
- return ((*this)*(double) (d ));
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] *(double) d;
+          }
+     }
+ return *tmp1;
 };
+
 
 
 const Matrix operator- (const Matrix & m2)
@@ -1371,7 +1398,7 @@ c=a*b;
 c.prt("This is C");
 cout << endl;
 d=(a*b);
-d=d+10.0;
+d=d+11;
 d.prt("This is D");
 c=c*c1;
 c.prt("This is C");
