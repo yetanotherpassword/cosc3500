@@ -205,6 +205,96 @@ class Matrix {
    }
 
 
+const Matrix operator- (const double d)
+{
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] - d;
+          }
+     }
+ return *tmp1;
+};
+const Matrix operator+ (double d)
+{
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] + d;
+          }
+     }
+ return *tmp1;
+};
+
+const Matrix operator* (double d)
+{
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] *d;
+          }
+     }
+ return *tmp1;
+};
+
+
+const Matrix operator- (const int d)
+{
+ return (*this - (double) d);
+};
+const Matrix operator+ (const int d)
+{
+ return (*this + (double) d);
+};
+
+const Matrix operator* (const int d)
+{
+ return ((*this)*(double) (d ));
+};
+
+
+const Matrix operator- (const Matrix & m2)
+{
+     
+ if ((cols == m2.cols) && (rows == m2.rows))
+ {
+     set_tmp(rows,cols);
+     for (int i = 0; i < m2.cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *m2.cols + i] = index[j *m2.cols + i] - m2.index[j *m2.cols + i];
+          }
+     }
+ }
+ return *tmp1;
+};
+const Matrix operator+ (const Matrix & m2)
+{
+     
+ if ((cols == m2.cols) && (rows == m2.rows))
+ {
+     set_tmp(rows,cols);
+     for (int i = 0; i < m2.cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *m2.cols + i] = index[j *m2.cols + i] + m2.index[j *m2.cols + i];
+          }
+     }
+ }
+ return *tmp1;
+};
+
 const Matrix operator* (const Matrix & m2)
 {
      
@@ -1280,7 +1370,8 @@ c=a*b;
 
 c.prt("This is C");
 cout << endl;
-d=a*b;
+d=(a*b);
+d=d+10.0;
 d.prt("This is D");
 c=c*c1;
 c.prt("This is C");
