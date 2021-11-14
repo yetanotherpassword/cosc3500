@@ -232,6 +232,21 @@ const Matrix operator+ (double d)
  return *tmp1;
 };
 
+const Matrix operator/ (double d)
+{
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] /d;
+          }
+     }
+ return *tmp1;
+};
+
+
 const Matrix operator* (double d)
 {
      
@@ -287,6 +302,20 @@ const Matrix operator* (int d)
  return *tmp1;
 };
 
+const Matrix operator/ (int d)
+{
+     
+     set_tmp(rows,cols);
+     for (int i = 0; i < cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *cols + i] = index[j *cols + i] /(double) d;
+          }
+     }
+ return *tmp1;
+};
+
 
 
 const Matrix operator- (const Matrix & m2)
@@ -322,6 +351,25 @@ const Matrix operator+ (const Matrix & m2)
  return *tmp1;
 };
 
+const Matrix operator/ (const Matrix & m2)
+{
+     
+ if (cols == m2.rows) 
+ {
+     set_tmp(rows,m2.cols);
+     for (int i = 0; i < m2.cols; ++i)	// m_nc == y_nc
+     {
+          tmp1->index[i] = 0;
+          for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[i] += m2.index[j *m2.cols + i] /index[j];
+          }
+     }
+ }
+ return *tmp1;
+};
+
+
 const Matrix operator* (const Matrix & m2)
 {
      
@@ -334,6 +382,24 @@ const Matrix operator* (const Matrix & m2)
           for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
           {
                tmp1->index[i] += m2.index[j *m2.cols + i] *index[j];
+          }
+     }
+ }
+ return *tmp1;
+};
+
+//element wise multiply is %
+const Matrix operator% (const Matrix & m2)
+{
+     
+ if ((cols == m2.cols)  && (rows == m2.rows))
+ {
+     set_tmp(rows,cols);
+     for (int i = 0; i < m2.cols; ++i)	// m_nc == y_nc
+     {
+          for (int j = 0; j < m2.rows; ++j)	// m_nr == x_nc
+          {
+               tmp1->index[j *m2.cols + i] = m2.index[j *m2.cols + i] *index[j *m2.cols + i];
           }
      }
  }
