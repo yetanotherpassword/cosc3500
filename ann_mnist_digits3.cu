@@ -1,4 +1,3 @@
-#include <iostream>
 #include <iomanip>
 #include <cmath>
 #include <chrono>
@@ -6,7 +5,9 @@
 #include <boost/algorithm/string/split.hpp>
 #include <vector>
 #include <limits>
-
+#include <sstream>
+#include <fstream>
+#include <iostream>
 // Application Parameters
 #define DEFTHREADS 256
 #define INPUT_LINES 784
@@ -80,36 +81,7 @@ class Matrix {
    double * index;
    int rows;
    int cols;
-/*
-   Matrix(colvec cv)
-   {
-       cols = 1;
-       rows = cv.n_rows;
-       index=NULL;
-       if ((cv.n_rows == rows) && (cv.n_cols == cols))
-       {
-          index = new double[rows];
-          for (int c=0;c<cv.n_rows;c++)
-             index[c] = cv(1,c);
-       }
-       else
-          cout << "Error: Non-Zero Positive numbers only: Passed cols=" << cv.n_rows  <<endl;
-   };
-   Matrix(rowvec rv)
-   {
-       rows = 1;
-       cols = rv.n_cols;
-       index=NULL;
-       if ((rv.n_rows == rows) && (rv.n_cols == cols))
-       {
-          index = new double[cols];
-          for (int r=0;r<rv.n_cols;r++)
-             index[r] = rv(r,1);
-       }
-       else
-          cout << "Error: Non-Zero Positive numbers only: Passed rows=" << rv.n_rows  <<endl;
-   };
-*/
+   string name;
    void zeroize()
    {
         if ((index != NULL) && (rows>0) && (cols>0))
@@ -131,25 +103,10 @@ class Matrix {
                }
         return idx;
    };
-/*
-   Matrix(mat& m) 
+
+   Matrix(int r, int c, char *s="") 
    {
-       index=NULL;
-       rows = m.n_rows;
-       cols = m.n_cols;
-       if ((m.n_rows > 0) && (m.n_cols>0))
-       {
-          index = new double[rows*cols];
-          for (int r=0;r<m.n_rows;r++)
-            for (int c=0;c<m.n_cols;c++)
-             index[r*m.n_cols+c] = m(r,c);
-       }
-       else
-          cout << "Error: Non-Zero Positive numbers only: Passed rows=" << m.n_rows << " and cols=" << m.n_cols <<endl;
-   };
-*/
-   Matrix(int r, int c) 
-   {
+       name=string(s);
        index=NULL;
        if ((r>0) && (c>0))
        {
@@ -167,6 +124,19 @@ class Matrix {
            delete[] index;
    };
 */
+   string prtstr(string s="")
+   {
+       stringstream ss;
+       ss << s << endl;
+       if (index !=NULL)
+          for (int i=0;i<rows;i++)
+          {
+             for (int j=0;j < cols;j++)
+                  ss << "   " << index[i*cols+j] ;
+             ss << endl;
+          }
+       return ss.str();
+   }
    void prt(string s)
    {
        cout << s << endl;
@@ -184,15 +154,188 @@ class Matrix {
            delete[] index;
    };
 
-
-const Matrix operator* (const Matrix & m2)
+const Matrix operator+ (int d)
    {
 
-              Matrix tmp(rows,m2.cols);
-           if (cols == m2.rows)
-           {
-     for (int i = 0; i < m2.cols; ++i)  // m_nc == y_nc
+     Matrix tmp(rows,cols,"tmp");
+         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*cols+j] + (double)  d;
+             }
+         }
+     if (name=="tmp")
+           delete [] index;
+     return tmp;
+  };
+
+Matrix operator+ (double d)
+const    {
+
+     Matrix tmp(rows,cols,"tmp");
+         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*cols+j] +  d;
+             }
+         }
+     if (name=="tmp")
+           delete [] index;
+     return tmp;
+  };
+
+
+const Matrix operator+ (const Matrix  m2)
+ const  {
+
+     Matrix tmp(rows,cols,"tmp");
+     if ((cols == m2.cols) && (rows==m2.rows))
      {
+         for (int i = 0; i < m2.rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < m2.cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*m2.cols+j] +  m2.index[i*m2.cols+j];
+             }
+         }
+     }
+     if (m2.name=="tmp")
+           delete [] m2.index;
+     return tmp;
+  };
+Matrix operator+ (Matrix  m2)
+   {
+
+     Matrix tmp(rows,cols,"tmp");
+     if ((cols == m2.cols) && (rows==m2.rows))
+     {
+         for (int i = 0; i < m2.rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < m2.cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*m2.cols+j] +  m2.index[i*m2.cols+j];
+             }
+         }
+     }
+     if (m2.name=="tmp")
+           delete [] m2.index;
+     return tmp;
+  };
+
+Matrix operator- (int d)
+   {
+
+     Matrix tmp(rows,cols,"tmp");
+         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*cols+j] - (double)  d;
+             }
+         }
+     if (name=="tmp")
+           delete [] index;
+     return tmp;
+  };
+
+Matrix operator- (double d)
+   {
+
+     Matrix tmp(rows,cols,"tmp");
+         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*cols+j] -  d;
+             }
+         }
+     if (name=="tmp")
+           delete [] index;
+     return tmp;
+  };
+
+const Matrix operator* (const int d)
+   {
+
+     Matrix tmp(rows,cols,"tmp");
+         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*cols+j] * (double) d;
+             }
+         }
+     if (name=="tmp")
+           delete [] index;
+     return tmp;
+  };
+const Matrix operator* (const double d)
+   {
+
+     Matrix tmp(rows,cols,"tmp");
+         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*cols+j] *  d;
+             }
+         }
+     if (name=="tmp")
+           delete [] index;
+     return tmp;
+  };
+
+Matrix operator- (Matrix  m2)
+   {
+
+     Matrix tmp(rows,cols,"tmp");
+     if ((cols == m2.cols) && (rows==m2.rows))
+     {
+         for (int i = 0; i < m2.rows; ++i)  // m_nc == y_nc
+         {
+             for (int j = 0; j < m2.cols; ++j)     // m_nr == x_nc
+             {
+                  tmp.index[i] = index[i*m2.cols+j] -  m2.index[i*m2.cols+j];
+             }
+         }
+     }
+     if (m2.name=="tmp")
+           delete [] m2.index;
+     return tmp;
+  };
+//element wise multiply is %
+const Matrix operator% (const Matrix  m2)
+{
+
+     Matrix tmp(rows,cols,"tmp");
+ if ((cols == m2.cols)  && (rows == m2.rows))
+ {
+     for (int i = 0; i < m2.cols; ++i)     // m_nc == y_nc
+     {
+          for (int j = 0; j < m2.rows; ++j)        // m_nr == x_nc
+          {
+               tmp.index[j *m2.cols + i] = m2.index[j *m2.cols + i] *index[j *m2.cols + i];
+          }
+     }
+ }
+     if (name == "tmp")
+          delete [] index;
+     if (m2.name == "tmp")
+          delete [] m2.index;
+     return tmp;
+};
+
+
+const Matrix operator* (const Matrix m2)
+   {
+
+     Matrix tmp(rows,m2.cols,"tmp");
+     if (cols == m2.rows)
+     {
+       for (int i = 0; i < m2.cols; ++i)  // m_nc == y_nc
+       {
           tmp.index[i] = 0;
 cout << "y["<<i<<"]=0" << endl;
           for (int j = 0; j < m2.rows; ++j)     // m_nr == x_nc
@@ -200,9 +343,11 @@ cout << "y["<<i<<"]=0" << endl;
 cout << "y["<<i<<"] += M["<<j<<"*"<<m2.cols<<"+"<<i<<"] * x["<<j<<"] ===="<<  m2.index[j *m2.cols + i] << "*" << index[j] << endl;
                tmp.index[i] += m2.index[j *m2.cols + i] *index[j];
           }
+       }
      }
-           }
-          return tmp;
+     if (m2.name == "tmp")
+          delete [] m2.index;
+     return tmp;
   };
 
 
@@ -222,70 +367,11 @@ cout << "y["<<i<<"] += M["<<j<<"*"<<m2.cols<<"+"<<i<<"] * x["<<j<<"] ===="<<  m2
           for (int r=0;r<m2.rows;r++)
               for (int c=0;c<m2.cols;c++)
                  index[r*m2.cols+c] = m2.index[r*m2.cols+c];
-      // else
-      //    cout << "Error: Non Matching elements in assignment : Tried to put ("<<rv.rows<<" , " << rv.n_cols << ") into ("<<rows<<","<<cols<<")"<<endl;
-
-       // return the existing object so we can chain this operator
+       if (m2.name=="tmp")
+          delete [] m2.index;
        return *this;
    };
 
-/*
-   Matrix& operator= (const rowvec & rv)
-   {
-    // do the copy
-       if (rows==0 && cols==0 && index==NULL)
-       {
-            index = new double[rv.n_rows*rv.n_cols];
-            rows = rv.n_cols;
-            cols = 1;
-       }
-       if ((rv.n_rows == rows) && (rv.n_cols == cols))
-          for (int r=0;r<rv.n_rows;r++)
-              for (int c=0;c<rv.n_cols;c++)
-                 index[r*rv.n_cols+c] = rv(r,c);
-      // else
-      //    cout << "Error: Non Matching elements in assignment : Tried to put ("<<rv.rows<<" , " << rv.n_cols << ") into ("<<rows<<","<<cols<<")"<<endl;
-
-       // return the existing object so we can chain this operator
-       return *this;
-   };
-   Matrix& operator= (const colvec & cv)
-   {
-    // do the copy
-       if (rows==0 && cols==0 && index==NULL)
-       {
-            index = new double[cv.n_rows*cv.n_cols];
-            rows = 1;
-            cols = cv.n_cols;
-       }
-       if ((cv.n_rows == rows) && (cv.n_cols == cols))
-          for (int r=0;r<cv.n_rows;r++)
-              for (int c=0;c<cv.n_cols;c++)
-                 index[r*cv.n_cols+c] = cv(r,c);
-
-       // return the existing object so we can chain this operator
-       return *this;
-   };
-*/
-/*
-   Matrix& operator= (const mat & m)
-   {
-    // do the copy
-       if (rows==0 && cols==0 && index==NULL)
-       {
-            index = new double[m.n_rows*m.n_cols];
-            rows = m.n_rows;
-            cols = m.n_cols;
-       }
-       if ((m.n_rows == rows) && (m.n_cols == cols))
-          for (int r=0;r<m.n_rows;r++)
-              for (int c=0;c<m.n_cols;c++)
-                 index[r*m.n_cols+c] = m(r,c);
-
-       // return the existing object so we can chain this operator
-       return *this;
-   };
-*/
 };
 
 std::time_t result = std::time(nullptr);
@@ -295,15 +381,13 @@ unsigned int OutputLayer;
 unsigned int *nodes;
 double eta;	// Learning factor
 
-vector<Matrix> netin3;
-vector<Matrix> actuation3;
-vector<Matrix> deltafn3;
-vector<Matrix> ftick3;
-vector<Matrix> layer_weights3;
-vector<Matrix> weight_updates3;
-vector<Matrix> new_layer_weights3;
-
-
+vector<Matrix> netin;
+vector<Matrix> actuation;
+vector<Matrix> deltafn;
+vector<Matrix> ftick;
+vector<Matrix> layer_weights;
+vector<Matrix> weight_updates;
+vector<Matrix> new_layer_weights;
 
 
 ios init(NULL);
@@ -364,8 +448,8 @@ int InitiateCUDAVectorMatrixMultiply3(int i)
     float time;
     int x_dimension = 1;
     // CUDA Grid is based on Matrix Dimensions
-    int y_dimension = layer_weights3[i].rows;
-    int z_dimension = layer_weights3[i].cols;
+    int y_dimension = layer_weights[i].rows;
+    int z_dimension = layer_weights[i].cols;
 
     int netin_rows = x_dimension;
     int netin_cols = z_dimension;
@@ -385,14 +469,14 @@ cout <<    "i=" << i << " dimGrid.y = ("<<netin_rows<<" + "<<dimBlock.y <<"- 1)/
     dimGrid.x = (netin_cols + dimBlock.x - 1)/dimBlock.x;
     dimGrid.y = (netin_rows + dimBlock.y - 1)/dimBlock.y;
     
-    checkError(cudaMemcpy(ActuationDevice, actuation3[i].index, x_dimension*y_dimension*sizeof(double), cudaMemcpyHostToDevice));
-    checkError(cudaMemcpy(LayerWeightsDevice,  layer_weights3[i].index, y_dimension*z_dimension*sizeof(double), cudaMemcpyHostToDevice));
+    checkError(cudaMemcpy(ActuationDevice, actuation[i].index, x_dimension*y_dimension*sizeof(double), cudaMemcpyHostToDevice));
+    checkError(cudaMemcpy(LayerWeightsDevice,  layer_weights[i].index, y_dimension*z_dimension*sizeof(double), cudaMemcpyHostToDevice));
 
-    cudaEventRecord(start,0);
+//    cudaEventRecord(start,0);
     auto StartChronoTime = std::chrono::high_resolution_clock::now();
 cout << dimGrid.x << "," << dimGrid.y << "==Grid, Block==" << dimBlock.x << "," << dimBlock.y << " and tile_dimension="<< tile_dimension << endl;
     // CUDA Call to GPU /////////////////////////////////////////////////////////
-    VectorMatrixMultiply<<<dimGrid, dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, actuation_rows, actuation_cols, layer_weights_rows, layer_weights_cols, netin_rows, netin_cols, tile_dimension);
+    VectorMatrixMultiply<<<dimGrid, dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, actuation_rows, actuation_cols, layer_weights_cols, layer_weights_rows, netin_rows, netin_cols, tile_dimension);
     // CUDA Call to GPU /////////////////////////////////////////////////////////
 
     checkError(cudaDeviceSynchronize());
@@ -407,17 +491,17 @@ cout << dimGrid.x << "," << dimGrid.y << "==Grid, Block==" << dimBlock.x << "," 
        Process_MinTime = TotalChronoTime;
 
 
-    cudaEventRecord(stop,0);
-    cudaEventSynchronize(stop);
-    cudaEventElapsedTime(&time, start, stop);
+//    cudaEventRecord(stop,0);
+//    cudaEventSynchronize(stop);
+//    cudaEventElapsedTime(&time, start, stop);
 
     if (time < mintime)
        mintime = time;
     if (time > maxtime)
        maxtime = time;
-    checkError(cudaMemcpy(netin3[i].index, NetinDevice, x_dimension*z_dimension*sizeof(double), cudaMemcpyDeviceToHost));
-    for (int j=0;j<netin3[i].cols;j++)
-       netin3[i].index[j] = netin3[i].index[j] / actuation3[i].cols;
+    checkError(cudaMemcpy(netin[i].index, NetinDevice, x_dimension*z_dimension*sizeof(double), cudaMemcpyDeviceToHost));
+    for (int j=0;j<netin[i].cols;j++)
+       netin[i].index[j] = netin[i].index[j] / actuation[i].cols;
     
     return 0;
 }
@@ -490,8 +574,9 @@ void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m
        Process_MinTime = TotalChronoTime;
 }
 
-void sigmoid3(Matrix & net, Matrix & out, int c)
+void sigmoid3(Matrix & net, Matrix & out)
 {
+   int c=net.cols;
    for (int i=0;i<c;i++)
      out.index[i] = 1 / (1 + exp(-net.index[i]));
    out.index[c] = 1.0;	// add bias signal value
@@ -612,7 +697,7 @@ unsigned char *load_file(string filename, string labels, unsigned char **labs)
      return memblock;
 }
 
-void load_an_image3(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
+void load_an_image(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
      unsigned char* &lp)
 {
      int start = (INPUT_LINES *seq) + IMAGE_OFFSET;
@@ -623,8 +708,8 @@ void load_an_image3(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
           img.index[i] = ((double) mptr[start + i]) / greyval;
      }
 
-     img.index[nodes[0]] = 1;	// set bias signal, so can multiply with[node weights |
-    	// bias weights] augmented matrix
+     img.index[nodes[0]] = 1;      // set bias signal, so can multiply with[node weights |
+        // bias weights] augmented matrix
 
      int img_is_digit = (int) lp[8 + seq];
 #ifdef SAMPLEFREQ
@@ -634,45 +719,15 @@ void load_an_image3(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
           print_an_image(&mptr[start], img_is_digit);
      }
 #endif
-     t.zeroize();	// create the target vector (plus one for 'bias' bit)
+     t.zeroize();  // create the target vector (plus one for 'bias' bit)
      if (img_is_digit > 9)
      {
           cout << "Error: img_is_digit=" << img_is_digit << "seq=" << seq << endl;
           exit(1);
      }
-     t.index[img_is_digit] = 1;	// set the target 'bit'
+     t.index[img_is_digit] = 1;    // set the target 'bit'
 }
 
-void load_an_image(int seq, unsigned char* &mptr, rowvec &img, rowvec &t,
-     unsigned char* &lp)
-{
-     int start = (INPUT_LINES *seq) + IMAGE_OFFSET;
-     double greyval = MAX_PIXEL_VAL;
-
-     for (int i = 0; i < INPUT_LINES; i++)
-     {
-          img(i) = ((double) mptr[start + i]) / greyval;
-     }
-
-     img(nodes[0]) = 1;	// set bias signal, so can multiply with[node weights |
-    	// bias weights] augmented matrix
-
-     int img_is_digit = (int) lp[8 + seq];
-#ifdef SAMPLEFREQ
-     if ((seq + 1) % SAMPLEFREQ == 0)
-     {
-          cout << "For sample :" << seq + 1 << endl << flush;
-          print_an_image(&mptr[start], img_is_digit);
-     }
-#endif
-     t = zeros<rowvec> (          OUTPUT_LINES);	// create the target vector (plus one for 'bias' bit)
-     if (img_is_digit > 9)
-     {
-          cout << "Error: img_is_digit=" << img_is_digit << "seq=" << seq << endl;
-          exit(1);
-     }
-     t(img_is_digit) = 1;	// set the target 'bit'
-}
 
 ////////////////////////
 //
@@ -694,7 +749,15 @@ void output(Matrix t)
 {
      t.prt("Test");
 }
-         
+     
+double accu(Matrix m1)
+{
+  double tmp=0;
+    for (int i=0;i<m1.rows;i++)
+      for (int j=0; i<m1.cols;j++)
+         tmp += m1.index[i*m1.cols+j];
+  return tmp;
+}    
 int backprop(Matrix & tgt, int y0)
 {
 
@@ -721,32 +784,24 @@ int backprop(Matrix & tgt, int y0)
           cout << "------------------------------------ BACK PROPAGATION sample=" <<
           y0 + 1 << endl << flush;
 #endif
-     ftick[OutputLayer] = -actuation[OutputLayer] + 1;
+     ftick[OutputLayer] = (actuation[OutputLayer]* (-1))  + 1;
      ftick[OutputLayer] =
           ftick[OutputLayer] % (actuation[OutputLayer]);	// element wise multiply
      deltafn[OutputLayer] = (tgt0 - actuation[OutputLayer]) % (ftick[OutputLayer]);
 
      for (int i = OutputLayer - 1; i >= 0; i--)
      {
-        for (j=0;j<weight_updates3[i].rows;j++)
-         for (k=0;k<weight_updates3[i].cols;j++)
-         {
-          weight_updates3[i].index[j*weight_updates3[i].cols+k] =  (deltafn3[i + 1].index[k] *actuation3[i].index[j]);
-          new_layer_weights3[i].index[j*weight_updates3[i].cols+k]  = layer_weights3[i].index[j*weight_updates3[i].cols+k]  + (eta *weight_updates3[i].index[j*weight_updates3[i].cols+k] );
-         }
-          ftick3[i] = -actuation3[i] + 1;
-          ftick3[i] = ftick3[i] % (actuation3[i]);	// element wise multiply
-          deltafn3[i] = deltafn3[i + 1] *layer_weights3[i];
-          deltafn3[i] = deltafn3[i] % ftick3[i];
+          weight_updates[i] =  (deltafn[i + 1]*actuation[i]);
+          new_layer_weights[i]  = layer_weights[i]*weight_updates[i]  + (weight_updates[i]*eta );
+          ftick[i] = (actuation[i] *(-1)) + 1;
+          ftick[i] = ftick[i] % (actuation[i]);	// element wise multiply
+          deltafn[i] = deltafn[i + 1] *layer_weights[i];
+          deltafn[i] = deltafn[i] % ftick[i];
      }
      for (int i = 0; i < OutputLayer; i++)
      {
-       for (j=0;j<weight_updates3[i].rows;j++)
-         for (k=0;k<weight_updates3[i].cols;j++)
-         {
 
-          layer_weights3[i].index[j*weight_updates3[i].cols+k]  = new_layer_weights3[i].index[j*weight_updates3[i].cols+k];
-          }
+          layer_weights[i] = new_layer_weights[i];
      }
      return 0;
 }
@@ -755,8 +810,7 @@ int backprop(Matrix & tgt, int y0)
 void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
      int samples)
 {
-     rowvec tgt;
-     Matrix tgt3(1,OUTPUT_LINES+1);
+     Matrix tgt(1,OUTPUT_LINES+1);
      int tot_correct = 0;
      int tot_wrong = 0;
      int correct_num = -1;
@@ -796,48 +850,46 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                " SAMPLE # " << y + 1 << endl << flush;
 #endif
           load_an_image(y, imgdata, actuation[0], tgt, labdata);
-          load_an_image3(y, imgdata, actuation3[0], tgt3, labdata);
 
-          int tgtval = tgt.subvec(0, 9).index_max();
-          int tgtval3 = tgt3.index_max_row(0, 0, 9);
+          int tgtval = tgt.index_max_row(0, 0, 9);
           for (int e = 0; e < epochs; e++)
           {
                for (int i = 0; i < OutputLayer; i++)	// only n-1 transitions between n layers
                {
 #ifdef SERIAL_ONLY
-                   SerialMatrixVectorMultiply(netin3[i].index, 
-                                               actuation3[i].index, 
-                                               layer_weights3[i].index,  layer_weights3[i].rows,  layer_weights3[i].cols);
+                   SerialMatrixVectorMultiply(netin[i].index, 
+                                               actuation[i].index, 
+                                               layer_weights[i].index,  layer_weights[i].rows,  layer_weights[i].cols);
 
 
-                    for (int j = 0; j < netin3[i].cols; j++)
+                    for (int j = 0; j < netin[i].cols; j++)
                     {
-                        	      netin3[i].index[j] /= actuation3[i].cols;
+                        	      netin[i].index[j] /= actuation[i].cols;
                     }
 #ifdef SAMPLEFREQ
                     if ((y + 1) % SAMPLEFREQ == 0)
-                         cout << "Netin serial (" << netin3[i].rows << "," << netin3[i].cols <<
-                         ")= " << netin3[i].prt("NetIn Serial") << endl << flush;
+                         cout << "Netin serial (" << netin[i].rows << "," << netin[i].cols <<
+                         ")= " << netin[i].prtstr("NetIn Serial") << endl << flush;
 #endif
 #else
                    InitiateCUDAVectorMatrixMultiply3(i);
 
 #ifdef SAMPLEFREQ
-                         cout << "Netin Parallel " << netin3[i].rows << "," << netin3[i].cols <<
-                         ")= " << netin3[i].prt("Net In Parallel") << endl << flush;
+                         cout << "Netin Parallel " << netin[i].rows << "," << netin[i].cols <<
+                         ")= " << netin[i].prtstr("Net In Parallel") << endl << flush;
 #endif
 
 #endif
-                    sigmoid3(netin3[i].index, actuation[i + 1].index, (netin3[i].cols);
+                    sigmoid3(netin[i], actuation[i + 1]);
                }
 #ifdef SAMPLEFREQ
                if ((y + 1) % SAMPLEFREQ == 0)
                {
                     std::cout << "Final output : " << endl << std::setw(7) << fixed <<
-                         showpoint << actuation3[OutputLayer].prt("Final Out") <<
+                         showpoint << actuation[OutputLayer].prtstr("Final Out") <<
                          " Sample: " << y + 1 << std::endl << flush;
                     std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                         showpoint << tgt3.prt("Tgt3") << " Sample: " << y + 1 <<
+                         showpoint << tgt.prtstr("Tgt3") << " Sample: " << y + 1 <<
                          std::endl << flush;
                }
 #endif
@@ -846,12 +898,12 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                {
                    	// printout intermediate result
                //     int outval = actuation[OutputLayer].subvec(0, 9).index_max();
-                    int outval =  actuation3[OutputLayer].index_max_row(0, 0, 9);
+                    int outval =  actuation[OutputLayer].index_max_row(0, 0, 9);
 #ifdef SAMPLEFREQ
                     if ((y + 1) % SAMPLEFREQ == 0)
                     {
                          std::cout << "Train output : " << endl << std::setw(7) << fixed <<
-                              showpoint << actuation3[OutputLayer].prt("") <<
+                              showpoint << actuation[OutputLayer].prtstr("") <<
                               " Sample: " << y + 1 << std::endl << flush;
                         	// Below just figures out the order in which to print the "A"ctal
                         	// result and "O"bjective result
@@ -885,8 +937,8 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
 
           if (!train)
           {
-               correct_num = tgt3.index_max_row(0, 0, 9);
-               best_guess = actuation3[OutputLayer].index_max_row(0, 0, 9);
+               correct_num = tgt.index_max_row(0, 0, 9);
+               best_guess = actuation[OutputLayer].index_max_row(0, 0, 9);
 
                if (best_guess == correct_num)
                {
@@ -904,13 +956,13 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
           if (!train)
           {
                std::cout << "Final output : " << endl << std::setw(7) << fixed <<
-                    showpoint << actuation3[OutputLayer].prt("B") <<
+                    showpoint << actuation[OutputLayer].prtstr("B") <<
                     " Sample: " << y + 1 << std::endl << flush;
-               for (int z1 = 0; z1 < actuation[OutputLayer].subvec(0, 9).index_max(); z1++)
+               for (int z1 = 0; z1 < actuation[OutputLayer].index_max_row(0, 0, 9); z1++)
                     cout << "         ";
                cout << "       ^" << endl << flush;
                std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                    showpoint << tgt3.prt("") << " Sample: " << y + 1 <<
+                    showpoint << tgt.prtstr("") << " Sample: " << y + 1 <<
                     std::endl << flush;
           }
      }
@@ -1081,12 +1133,8 @@ void save_weights(string hdr)
      {
 
           oFile << "NodesInLayer" << i << "=" << nodes[i] << endl << setprecision(20) << fixed << showpoint << flush;
-          for (int r=0;r< layer_weights3[i].rows;r++)
-          {
-            for (int c=0;c< layer_weights3[i].cols;c++)
-                oFile << "    " << layer_weights[i].raw_print(oFile);
-            oFile << endl;
-          }
+          oFile << "    " << layer_weights[i].prtstr();
+          oFile << endl;
           // ALTERNATIVELY
           //for (int j=0; j<layer_weights[i].n_rows ;j++)
           //{
@@ -1097,7 +1145,7 @@ void save_weights(string hdr)
      }
      oFile << "Error Summary" << endl << flush;
 
-     oFile << err_summary << endl << flush;
+     oFile << err_summary.prtstr() << endl << flush;
 
      oFile << "EndFile" << endl << flush;
      oFile.close();
@@ -1117,7 +1165,7 @@ int main(int argc, char *argv[])
      cout << "--------------------------------  Build done on " << bldver << endl <<
           flush;
      init.copyfmt(cout);
-     for (int i=0;i<err_summary.cols)
+     for (int i=0;i<err_summary.cols;i++)
         err_summary.index[i] = -1.0;
      if (argc < 2)
      {
@@ -1229,20 +1277,17 @@ int main(int argc, char *argv[])
      int max_vec = 0;
      int bias_field = 1;
 
-     vector<mat> layer_weights;
-     vector<mat> weight_updates;
-     vector<mat> new_layer_weights;
      for (int i = 0; i <= OutputLayer; i++)
      {
           max_vec = max(max_vec, (nodes[i] + bias_field));
           Matrix rb3a(1, nodes[i] + bias_field);
-          actuation3.push_back(rb3a);
+          actuation.push_back(rb3a);
 
           Matrix drb3(1, nodes[i] + bias_field);
-          deltafn3.push_back(drb3);
+          deltafn.push_back(drb3);
 
           Matrix frb3(1, nodes[i] + bias_field);
-          ftick3.push_back(frb3);
+          ftick.push_back(frb3);
 
           if (i < OutputLayer)
           {
@@ -1256,22 +1301,22 @@ int main(int argc, char *argv[])
                // Create an array of matrices (one element for each layer) for the netin value
                // This holds the sum of weighted signals, for each node, that gets squashed to 
                // produce the nodes output for next layer
-               netin3.push_back(rb3);
+               netin.push_back(rb3);
                // Create a buffer of required size for weights, in each layer
                // (plus two more, one for delta updates, and one for holding new weight to be
                // applied after backprop. These maybe consolidated later
                Matrix tmpwgt3((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
-               for (int p=0;p<(nodes[i + 1] + bias_field)*( nodes[i] + bias_field))
+               for (int p=0;p<(nodes[i + 1] + bias_field)*( nodes[i] + bias_field);p++)
                   tmpwgt3.index[p] = rand()/RAND_MAX;
                Matrix tmpwgt30((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                Matrix tmpwgt300((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                // create an array of three matrices (weights for forward prop)
                // and deltas and new values, for back propagation
-               layer_weights3.push_back(tmpwgt3);
+               layer_weights.push_back(tmpwgt3);
 
-               new_layer_weights3.push_back(tmpwgt30);
+               new_layer_weights.push_back(tmpwgt30);
 
-               weight_updates3.push_back(tmpwgt300);
+               weight_updates.push_back(tmpwgt300);
           }
      }
      // Save initial starting weights if required for later
@@ -1387,8 +1432,8 @@ int main(int argc, char *argv[])
      cout << "Min time for CUDA call : " << Process_MinTime.count() << " us (Measured by CUDA API)" << endl;
      cout << "Used Tile Dimension of " << tile_dimension << endl;
 
-     for (int i=0;i<netin3.size();i++)
-         netin3[i].free_ele();
+     for (int i=0;i<netin.size();i++)
+         netin[i].free_ele();
 
 
      checkError(cudaFree(LayerWeightsDevice));
