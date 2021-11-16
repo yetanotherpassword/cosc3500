@@ -1,13 +1,14 @@
 #include <iomanip>
 #include <cmath>
 #include <chrono>
-#include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/split.hpp>
+//#include <boost/algorithm/string.hpp>
+//#include <boost/algorithm/string/split.hpp>
 #include <vector>
 #include <limits>
 #include <sstream>
 #include <fstream>
 #include <iostream>
+#include <string>
 // Application Parameters
 #define DEFTHREADS 256
 #define INPUT_LINES 784
@@ -26,6 +27,18 @@
 // Undefine or define to very large number to remove output
 #define SAMPLEFREQ 1
 #undef SAMPLEFREQ
+
+
+
+void checkError(cudaError_t e)
+{
+     if (e != cudaSuccess)
+     {
+          std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) <<
+               '\n';
+          abort();
+     }
+}
 
 
 /*
@@ -76,303 +89,164 @@ cudaEvent_t start, stop;
 int tile_dimension = 8; 
 #endif
 
-class Matrix {
-  public:
-   double * index;
-   int rows;
-   int cols;
-   string name;
-   void zeroize()
-   {
-        if ((index != NULL) && (rows>0) && (cols>0))
-           for (int i=0;i<rows;i++)
-             for (int j=0;j<cols;j++)
-                  index[i*cols+j]=0;
-   };
-   int index_max_row(int r, int start, int stop)
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+#define TILE_DIM 16                     // Tile dimension
+
+
+class newmat {
+public:
+ double * ptr;
+ int n_rows;
+ int n_cols;
+ newmat(int r, int c)
+ {
+     n_rows=r;
+	 n_cols=c;
+	 ptr=new double [r*c];
+ };
+ string prtstr()
+ { string s="";
+     for (int i=0;i<n_rows;i++)
+	 {
+        for (int j=0;j<n_cols;j++)
+		   s+= "   " + to_string(ptr[i*n_cols+j]);
+		s+= '\n';
+	}
+	return s;
+ };
+ void free_ele()
+ {
+     if (ptr != NULL)
+	    delete [] ptr;
+ };
+  void zeroize()
+ {
+     for (int i=0;i<n_rows;i++)
+	 {
+        for (int j=0;j<n_cols;j++)
+		  ptr[i*n_cols+j]=0.0;
+	}
+ };
+ double * memptr()
+ {
+     return ptr;
+ };
+    int index_max_row(int r, int start, int stop)
    {
         int idx=0;
         double max=  std::numeric_limits<double>::min();
-        if (((r<rows) && (r>=0)) && (start>=0) && (start < cols) && (stop >=0) && (stop<cols) && (start<=stop))
+        if (((r<n_rows) && (r>=0)) && (start>=0) && (start < n_cols) && (stop >=0) && (stop<n_cols) && (start<=stop))
           for (int i =r; i<=r;i++)
              for (int j =start; j<=stop;j++)
-               if (index[i*cols+j] > max)
+               if (ptr[i*n_cols+j] > max)
                {
-                  idx=i*cols+j; 
-                  max =  index[i*cols+j];
+                  idx=i*n_cols+j;
+                  max =  ptr[i*n_cols+j];
                }
         return idx;
    };
 
-   Matrix(int r, int c, char *s="") 
-   {
-       name=string(s);
-       index=NULL;
-       if ((r>0) && (c>0))
-       {
-          rows = r;
-          cols = c;
-          index = new double[r*c];
-       }
-       else
-          cout << "Error: Non-Zero Positive numbers only: Passed row=" << r << " and col=" << c <<endl;
-   };
-/*
-   ~Matrix()
-   {
-      if (index != NULL)
-           delete[] index;
-   };
-*/
-   string prtstr(string s="")
-   {
-       stringstream ss;
-       ss << s << endl;
-       if (index !=NULL)
-          for (int i=0;i<rows;i++)
-          {
-             for (int j=0;j < cols;j++)
-                  ss << "   " << index[i*cols+j] ;
-             ss << endl;
-          }
-       return ss.str();
-   }
-   void prt(string s)
-   {
-       cout << s << endl;
-       if (index !=NULL)
-          for (int i=0;i<rows;i++)
-          {
-             for (int j=0;j < cols;j++)
-                  cout << "   " << index[i*cols+j] ;
-             cout << endl;
-          }
-   }
-   void free_ele()
-   {
-       if (index != NULL)
-           delete[] index;
-   };
+ } ;
+ 
+__global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols) {
 
-const Matrix operator+ (int d)
-   {
+    double CValue = 0;
 
-     Matrix tmp(rows,cols,"tmp");
-         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*cols+j] + (double)  d;
-             }
-         }
-     if (name=="tmp")
-           delete [] index;
-     return tmp;
-  };
+    int Row = blockIdx.y*TILE_DIM + threadIdx.y;
+    int Col = blockIdx.x*TILE_DIM + threadIdx.x;
 
-Matrix operator+ (double d)
-const    {
+    for (int k = 0; k < (TILE_DIM + ACols - 1)/TILE_DIM; k++) {
 
-     Matrix tmp(rows,cols,"tmp");
-         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*cols+j] +  d;
-             }
-         }
-     if (name=="tmp")
-           delete [] index;
-     return tmp;
-  };
+        for (int n = 0; n < TILE_DIM; ++n) 
+            if ((k*TILE_DIM + n < ACols && Row < ARows) && (k*TILE_DIM + n < BRows && Col < BCols))
+                CValue += A[Row*ACols + k*TILE_DIM + n] * B[(k*TILE_DIM + n)*BCols + Col];
 
+    }
 
-const Matrix operator+ (const Matrix  m2)
- const  {
+    if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y)*CCols)+(blockIdx.x*blockDim.x)+threadIdx.x]=CValue;
+}
 
-     Matrix tmp(rows,cols,"tmp");
-     if ((cols == m2.cols) && (rows==m2.rows))
-     {
-         for (int i = 0; i < m2.rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < m2.cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*m2.cols+j] +  m2.index[i*m2.cols+j];
-             }
-         }
-     }
-     if (m2.name=="tmp")
-           delete [] m2.index;
-     return tmp;
-  };
-Matrix operator+ (Matrix  m2)
-   {
-
-     Matrix tmp(rows,cols,"tmp");
-     if ((cols == m2.cols) && (rows==m2.rows))
-     {
-         for (int i = 0; i < m2.rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < m2.cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*m2.cols+j] +  m2.index[i*m2.cols+j];
-             }
-         }
-     }
-     if (m2.name=="tmp")
-           delete [] m2.index;
-     return tmp;
-  };
-
-Matrix operator- (int d)
-   {
-
-     Matrix tmp(rows,cols,"tmp");
-         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*cols+j] - (double)  d;
-             }
-         }
-     if (name=="tmp")
-           delete [] index;
-     return tmp;
-  };
-
-Matrix operator- (double d)
-   {
-
-     Matrix tmp(rows,cols,"tmp");
-         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*cols+j] -  d;
-             }
-         }
-     if (name=="tmp")
-           delete [] index;
-     return tmp;
-  };
-
-const Matrix operator* (const int d)
-   {
-
-     Matrix tmp(rows,cols,"tmp");
-         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*cols+j] * (double) d;
-             }
-         }
-     if (name=="tmp")
-           delete [] index;
-     return tmp;
-  };
-const Matrix operator* (const double d)
-   {
-
-     Matrix tmp(rows,cols,"tmp");
-         for (int i = 0; i < rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*cols+j] *  d;
-             }
-         }
-     if (name=="tmp")
-           delete [] index;
-     return tmp;
-  };
-
-Matrix operator- (Matrix  m2)
-   {
-
-     Matrix tmp(rows,cols,"tmp");
-     if ((cols == m2.cols) && (rows==m2.rows))
-     {
-         for (int i = 0; i < m2.rows; ++i)  // m_nc == y_nc
-         {
-             for (int j = 0; j < m2.cols; ++j)     // m_nr == x_nc
-             {
-                  tmp.index[i] = index[i*m2.cols+j] -  m2.index[i*m2.cols+j];
-             }
-         }
-     }
-     if (m2.name=="tmp")
-           delete [] m2.index;
-     return tmp;
-  };
-//element wise multiply is %
-const Matrix operator% (const Matrix  m2)
+void PreMatMul(newmat & a, newmat & b, newmat & c)
 {
+    int DIMZ = c.n_cols;
+    int DIMX = c.n_rows;
+    int DIMY = a.n_cols;
+    if ((DIMX != a.n_rows) || (DIMY != b.n_rows) || (DIMZ != b.n_cols))
+    {
+       cout << "Incorrect dimensions passed to PreMatMul" << endl;
+       exit(1);
+    }
 
-     Matrix tmp(rows,cols,"tmp");
- if ((cols == m2.cols)  && (rows == m2.rows))
- {
-     for (int i = 0; i < m2.cols; ++i)     // m_nc == y_nc
-     {
-          for (int j = 0; j < m2.rows; ++j)        // m_nr == x_nc
-          {
-               tmp.index[j *m2.cols + i] = m2.index[j *m2.cols + i] *index[j *m2.cols + i];
-          }
-     }
- }
-     if (name == "tmp")
-          delete [] index;
-     if (m2.name == "tmp")
-          delete [] m2.index;
-     return tmp;
-};
+    int CCols = DIMZ, CRows=DIMX, ACols=DIMY, ARows=DIMX, BCols=DIMZ, BRows=DIMY;
 
+    dim3 dimBlock(TILE_DIM, TILE_DIM, 1);
+    dim3 dimGrid;
 
-const Matrix operator* (const Matrix m2)
-   {
+    dimGrid.x = (CCols + dimBlock.x - 1)/dimBlock.x;
+    dimGrid.y = (CRows + dimBlock.y - 1)/dimBlock.y;
+cout << " dimGrid.x = ("<< CCols << " + " << dimBlock.x << " - 1)/" << dimBlock.x<<endl;
+cout << " dimGrid.y = ("<< CRows << " + " << dimBlock.y << " - 1)/" << dimBlock.y<<endl;
+    double *deviceA, *deviceB, *deviceC;
+    //hostC = 
+    double* hostC    = (double*)malloc(DIMX*DIMZ*sizeof(double));
 
-     Matrix tmp(rows,m2.cols,"tmp");
-     if (cols == m2.rows)
-     {
-       for (int i = 0; i < m2.cols; ++i)  // m_nc == y_nc
-       {
-          tmp.index[i] = 0;
-cout << "y["<<i<<"]=0" << endl;
-          for (int j = 0; j < m2.rows; ++j)     // m_nr == x_nc
-          {
-cout << "y["<<i<<"] += M["<<j<<"*"<<m2.cols<<"+"<<i<<"] * x["<<j<<"] ===="<<  m2.index[j *m2.cols + i] << "*" << index[j] << endl;
-               tmp.index[i] += m2.index[j *m2.cols + i] *index[j];
-          }
-       }
-     }
-     if (m2.name == "tmp")
-          delete [] m2.index;
-     return tmp;
-  };
+    cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double));
+    cudaMalloc((void **)&deviceB, DIMY*DIMZ*sizeof(double));
+    cudaMalloc((void **)&deviceC, DIMX*DIMZ*sizeof(double));
+
+    cudaMemcpy(deviceA, a.memptr(), DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(deviceB, b.memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice);
 
 
 
 
 
-   Matrix& operator= (const Matrix m2)
-   {
-    // do the copy
-       if (rows==0 && cols==0 && index==NULL)
-       {
-            index = new double[m2.rows*m2.cols];
-            cols = m2.cols;
-            rows = m2.rows;
-       }
-       if ((m2.rows == rows) && (m2.cols == cols))
-          for (int r=0;r<m2.rows;r++)
-              for (int c=0;c<m2.cols;c++)
-                 index[r*m2.cols+c] = m2.index[r*m2.cols+c];
-       if (m2.name=="tmp")
-          delete [] m2.index;
-       return *this;
-   };
 
-};
+
+
+  auto StartChronoTime = std::chrono::high_resolution_clock::now();
+
+  
+ 
+
+
+
+
+
+    MatMulNoShared<<<dimGrid , dimBlock>>>(deviceA , deviceB , deviceC , ARows , ACols, BRows ,BCols , CRows , CCols);
+	
+	
+ 
+ 
+    checkError(cudaDeviceSynchronize());
+
+    auto EndChronoTime = std::chrono::high_resolution_clock::now();
+    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
+
+    if (TotalChronoTime > Process_MaxTime)
+       Process_MaxTime = TotalChronoTime;
+
+    if (TotalChronoTime < Process_MinTime)
+       Process_MinTime = TotalChronoTime;
+
+
+
+    cudaMemcpy(hostC, deviceC, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost);
+    for (int j=0;j<31;j++)
+      cout << hostC[j] << " " ;
+    cout << endl;
+
+    memcpy(c.memptr(), hostC, 32*sizeof(double));
+
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
 
 std::time_t result = std::time(nullptr);
 string fid = to_string(result);
@@ -381,18 +255,18 @@ unsigned int OutputLayer;
 unsigned int *nodes;
 double eta;	// Learning factor
 
-vector<Matrix> netin;
-vector<Matrix> actuation;
-vector<Matrix> deltafn;
-vector<Matrix> ftick;
-vector<Matrix> layer_weights;
-vector<Matrix> weight_updates;
-vector<Matrix> new_layer_weights;
+vector<newmat> netin;
+vector<newmat> actuation;
+vector<newmat> deltafn;
+vector<newmat> ftick;
+vector<newmat> layer_weights;
+vector<newmat> weight_updates;
+vector<newmat> new_layer_weights;
 
 
 ios init(NULL);
 stringstream confusion_matrix;
-Matrix err_summary(1,OUTPUT_LINES);
+newmat err_summary(1,OUTPUT_LINES);
 
 
 #ifdef WANT_TO_LOAD_WEIGHTS
@@ -411,147 +285,9 @@ string build_type = "Serial";
 string build_type = "Parallel";
 #endif
 
-void checkError(cudaError_t e)
-{
-     if (e != cudaSuccess)
-     {
-          std::cerr << "CUDA error: " << int(e) << " : " << cudaGetErrorString(e) <<
-               '\n';
-          abort();
-     }
-}
-__global__ 
-void VectorMatrixMultiply(double* act, double* lwgts, double* net, int actuation_rows, int actuation_cols, int layer_weights_rows, int layer_weights_cols, int netin_rows, int netin_cols, int tile_dimension) 
-{
-
-    double netin_accum = 0;
-
-    int row = blockIdx.y*tile_dimension + threadIdx.y;
-    int col = blockIdx.x*tile_dimension + threadIdx.x;
-
-    for (int i = 0; i < (tile_dimension + actuation_cols - 1)/tile_dimension; i++) 
-    {
-        for (int j = 0; j < tile_dimension; ++j) 
-            if ((i*tile_dimension + j < actuation_cols && row < actuation_rows) && (i*tile_dimension + j < layer_weights_rows && col < layer_weights_cols))
-                netin_accum += act[row*actuation_cols + i*tile_dimension + j] * lwgts[(i*tile_dimension + j)*layer_weights_cols + col];
-    }
-
-    if (row < netin_rows && col < netin_cols) 
-    //      net[((blockIdx.y * blockDim.y + threadIdx.y)*netin_cols)+(blockIdx.x*blockDim.x)+threadIdx.x]=netin_accum;
-       net[((blockIdx.y * blockDim.y + threadIdx.y)*netin_cols)+(blockIdx.x*blockDim.x)+threadIdx.x]= 5;
-}
-
-#ifndef SERIAL_ONLY
-int InitiateCUDAVectorMatrixMultiply3(int i) 
-{
-
-    float time;
-    int x_dimension = 1;
-    // CUDA Grid is based on Matrix Dimensions
-    int y_dimension = layer_weights[i].rows;
-    int z_dimension = layer_weights[i].cols;
-
-    int netin_rows = x_dimension;
-    int netin_cols = z_dimension;
-
-    int actuation_rows = x_dimension;
-    int actuation_cols = y_dimension;
-
-    int layer_weights_rows = y_dimension;
-    int layer_weights_cols = z_dimension;
-
-    dim3 dimBlock(tile_dimension, tile_dimension, 1);
-    dim3 dimGrid;
-
-cout <<    "i=" << i << " dimGrid.x = ("<<netin_cols<<" + "<<dimBlock.x <<"- 1)/ "<<dimBlock.x<<endl;
-cout <<    "i=" << i << " dimGrid.y = ("<<netin_rows<<" + "<<dimBlock.y <<"- 1)/ "<<dimBlock.y<<endl;
-
-    dimGrid.x = (netin_cols + dimBlock.x - 1)/dimBlock.x;
-    dimGrid.y = (netin_rows + dimBlock.y - 1)/dimBlock.y;
-    
-    checkError(cudaMemcpy(ActuationDevice, actuation[i].index, x_dimension*y_dimension*sizeof(double), cudaMemcpyHostToDevice));
-    checkError(cudaMemcpy(LayerWeightsDevice,  layer_weights[i].index, y_dimension*z_dimension*sizeof(double), cudaMemcpyHostToDevice));
-
-//    cudaEventRecord(start,0);
-    auto StartChronoTime = std::chrono::high_resolution_clock::now();
-cout << dimGrid.x << "," << dimGrid.y << "==Grid, Block==" << dimBlock.x << "," << dimBlock.y << " and tile_dimension="<< tile_dimension << endl;
-    // CUDA Call to GPU /////////////////////////////////////////////////////////
-    VectorMatrixMultiply<<<dimGrid, dimBlock>>>(ActuationDevice, LayerWeightsDevice, NetinDevice, actuation_rows, actuation_cols, layer_weights_cols, layer_weights_rows, netin_rows, netin_cols, tile_dimension);
-    // CUDA Call to GPU /////////////////////////////////////////////////////////
-
-    checkError(cudaDeviceSynchronize());
-
-    auto EndChronoTime = std::chrono::high_resolution_clock::now();
-    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
-
-    if (TotalChronoTime > Process_MaxTime)
-       Process_MaxTime = TotalChronoTime;
-
-    if (TotalChronoTime < Process_MinTime)
-       Process_MinTime = TotalChronoTime;
 
 
-//    cudaEventRecord(stop,0);
-//    cudaEventSynchronize(stop);
-//    cudaEventElapsedTime(&time, start, stop);
 
-    if (time < mintime)
-       mintime = time;
-    if (time > maxtime)
-       maxtime = time;
-    checkError(cudaMemcpy(netin[i].index, NetinDevice, x_dimension*z_dimension*sizeof(double), cudaMemcpyDeviceToHost));
-    for (int j=0;j<netin[i].cols;j++)
-       netin[i].index[j] = netin[i].index[j] / actuation[i].cols;
-    
-    return 0;
-}
-#endif
-
-void MultArmVM(double *V, double *M, double *R, int m_nr, int m_nc)
-{
-     double sum;
-     for (int c = 0; c < m_nc; c++)
-     {
-          sum = 0;
-          for (int r = 0; r < m_nr; r++)	// m_nr == v_nc &m_nc=r_nc
-               sum += M[c *m_nr + r] *V[r];
-          R[c] = sum;
-     }
-}
-
-// implementation of the matrix-vector multiply function
-void MatrixTranspVectorMultiply2(double *Y, const double *X, double *M,
-          int m_nr, int m_nc)
-{
-     int t_r = m_nc;	// same as x_nc
-     int t_c = m_nr;	// same as y_nc
-    	// matrix passed in is m_nr x m_nc, need to transpose it to m_nr x m_nc
-    	// and its stored in as columns so can maniuplate indexes
-     for (int i = 0; i < t_r; ++i)
-     {
-         	// cout << "i="<<i<<" m_nc="<<m_nr<<" m_nr="<<m_nr<<endl;
-          Y[i] = 0;
-          int t = 0;
-          for (int j = i; j < t_c * t_r; j += t_c)
-          {
-
-               Y[i] += M[i *t_c + j] *X[t++];
-          }
-     }
-}
-// implementation of the matrix-vector multiply function
-void MatrixTranspVectorMultiply(double *Y, const double *X, double *M, int m_nr,
-          int m_nc)
-{
-     for (int i = 0; i < m_nr; ++i)	// m_nc == y_nc
-     {
-          Y[i] = 0;
-          for (int j = 0; j < m_nc; ++j)	// m_nr == x_nc
-          {
-               Y[i] += M[i *m_nc + j] *X[j];
-          }
-     }
-}
 // implementation of the matrix-vector multiply function
 void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m_nc)
 {
@@ -574,12 +310,12 @@ void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m
        Process_MinTime = TotalChronoTime;
 }
 
-void sigmoid3(Matrix & net, Matrix & out)
+void sigmoid3(newmat & net, newmat & out)
 {
-   int c=net.cols;
+   int c=net.n_cols;
    for (int i=0;i<c;i++)
-     out.index[i] = 1 / (1 + exp(-net.index[i]));
-   out.index[c] = 1.0;	// add bias signal value
+     out.ptr[i] = 1 / (1 + exp(-net.ptr[i]));
+   out.ptr[c] = 1.0;	// add bias signal value
      //return out;
 }
 
@@ -697,7 +433,7 @@ unsigned char *load_file(string filename, string labels, unsigned char **labs)
      return memblock;
 }
 
-void load_an_image(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
+void load_an_image(int seq, unsigned char* &mptr, newmat &img, newmat &t,
      unsigned char* &lp)
 {
      int start = (INPUT_LINES *seq) + IMAGE_OFFSET;
@@ -705,10 +441,10 @@ void load_an_image(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
 
      for (int i = 0; i < INPUT_LINES; i++)
      {
-          img.index[i] = ((double) mptr[start + i]) / greyval;
+          img.ptr[i] = ((double) mptr[start + i]) / greyval;
      }
 
-     img.index[nodes[0]] = 1;      // set bias signal, so can multiply with[node weights |
+     img.ptr[nodes[0]] = 1;      // set bias signal, so can multiply with[node weights |
         // bias weights] augmented matrix
 
      int img_is_digit = (int) lp[8 + seq];
@@ -725,7 +461,7 @@ void load_an_image(int seq, unsigned char* &mptr, Matrix &img, Matrix &t,
           cout << "Error: img_is_digit=" << img_is_digit << "seq=" << seq << endl;
           exit(1);
      }
-     t.index[img_is_digit] = 1;    // set the target 'bit'
+     t.ptr[img_is_digit] = 1;    // set the target 'bit'
 }
 
 
@@ -745,27 +481,90 @@ void output(rowvec t)
      cout << t << endl;
 }
 */
-void output(Matrix t)
+void output(newmat t)
 {
-     t.prt("Test");
+     cout << t.prtstr();
 }
      
-double accu(Matrix m1)
+double accu(newmat m1)
 {
   double tmp=0;
-    for (int i=0;i<m1.rows;i++)
-      for (int j=0; i<m1.cols;j++)
-         tmp += m1.index[i*m1.cols+j];
+    for (int i=0;i<m1.n_rows;i++)
+      for (int j=0; i<m1.n_cols;j++)
+         tmp += m1.ptr[i*m1.n_cols+j];
   return tmp;
 }    
-int backprop(Matrix & tgt, int y0)
+newmat diff (newmat p1, newmat p2)
+{
+  newmat tmp(p1.n_rows, p1.n_cols);
+  for (int i=0;i<p1.n_rows;i++)
+	 {
+        for (int j=0;j<p1.n_cols;j++)
+		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] - p2.ptr[i*p1.n_cols+j];
+	}
+	return tmp;
+}
+newmat piecewisemult (newmat p1, newmat p2)
+{
+  newmat tmp(p1.n_rows, p1.n_cols);
+  for (int i=0;i<p1.n_rows;i++)
+	 {
+        for (int j=0;j<p1.n_cols;j++)
+		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] * p2.ptr[i*p1.n_cols+j];
+	}
+	return tmp;
+}
+newmat matmult (newmat p1, newmat p2)
+{
+  newmat tmp(p1.n_rows, p2.n_cols);
+  if (p1.n_cols == p2.n_rows)
+  {
+     for (int i=0;i<p1.n_rows;i++)
+	 {
+        for (int j=0;j<p1.n_cols;j++)
+		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] * p2.ptr[i*p1.n_cols+j];
+	 }
+  }
+  return tmp;
+}
+newmat mult (newmat p1, double p2)
+{
+  newmat tmp(p1.n_rows, p1.n_cols);
+  for (int i=0;i<p1.n_rows;i++)
+	 {
+        for (int j=0;j<p1.n_cols;j++)
+		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] * p2;
+	}
+	return tmp;
+}
+newmat add (newmat p1, double p2)
+{
+  newmat tmp(p1.n_rows, p1.n_cols);
+  for (int i=0;i<p1.n_rows;i++)
+	 {
+        for (int j=0;j<p1.n_cols;j++)
+		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] + p2;
+	}
+	return tmp;
+}
+newmat matadd (newmat p1, newmat p2)
+{
+  newmat tmp(p1.n_rows, p1.n_cols);
+  for (int i=0;i<p1.n_rows;i++)
+	 {
+        for (int j=0;j<p1.n_cols;j++)
+		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] + p2.ptr[i*p1.n_cols+j];
+	}
+	return tmp;
+}
+int backprop(newmat & tgt, int y0)
 {
 
-     Matrix final = actuation[OutputLayer];
-     final.cols--;
-     Matrix tgt0 = tgt;
+     newmat final = actuation[OutputLayer];
+     final.n_cols--;
+     newmat tgt0 = tgt;
      //tgt0.insert_cols(nodes[OutputLayer], 1);
-     double err = accu((tgt - final) % (tgt - final)) *0.5;
+     double err = accu(piecewisemult(diff(tgt , final) , diff(tgt , final))) *0.5;
      if (abs(err) < EPSILON)
      {
           int val = tgt0.index_max_row(0,0,9);
@@ -775,7 +574,7 @@ int backprop(Matrix & tgt, int y0)
                y0 + 1 << " err=" << err << "<epsilon, for tgt '" << val <<
                "' so error is acceptable, returning" << endl << flush;
 #endif
-          err_summary.index[val] = err;
+          err_summary.ptr[val] = err;
           return 1;
      }
 
@@ -784,19 +583,19 @@ int backprop(Matrix & tgt, int y0)
           cout << "------------------------------------ BACK PROPAGATION sample=" <<
           y0 + 1 << endl << flush;
 #endif
-     ftick[OutputLayer] = (actuation[OutputLayer]* (-1))  + 1;
+     ftick[OutputLayer] = add( mult(actuation[OutputLayer], -1.0)  , 1.0);
      ftick[OutputLayer] =
-          ftick[OutputLayer] % (actuation[OutputLayer]);	// element wise multiply
-     deltafn[OutputLayer] = (tgt0 - actuation[OutputLayer]) % (ftick[OutputLayer]);
+          piecewisemult(ftick[OutputLayer] , actuation[OutputLayer]);	// element wise multiply
+     deltafn[OutputLayer] = piecewisemult(diff(tgt0 , actuation[OutputLayer]) , ftick[OutputLayer]);
 
      for (int i = OutputLayer - 1; i >= 0; i--)
      {
-          weight_updates[i] =  (deltafn[i + 1]*actuation[i]);
-          new_layer_weights[i]  = layer_weights[i]*weight_updates[i]  + (weight_updates[i]*eta );
-          ftick[i] = (actuation[i] *(-1)) + 1;
-          ftick[i] = ftick[i] % (actuation[i]);	// element wise multiply
-          deltafn[i] = deltafn[i + 1] *layer_weights[i];
-          deltafn[i] = deltafn[i] % ftick[i];
+          weight_updates[i] =  matmult(deltafn[i + 1], actuation[i]);
+          new_layer_weights[i]  = matadd( matmult(layer_weights[i], weight_updates[i]),  mult(weight_updates[i], eta) );
+          ftick[i] = add(mult(actuation[i] ,(-1.0)) , 1.0);
+          ftick[i] = piecewisemult(ftick[i] , actuation[i]);	// element wise multiply
+          deltafn[i] = matmult(deltafn[i + 1] ,layer_weights[i]);
+          deltafn[i] = piecewisemult(deltafn[i] , ftick[i]);
      }
      for (int i = 0; i < OutputLayer; i++)
      {
@@ -810,7 +609,7 @@ int backprop(Matrix & tgt, int y0)
 void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
      int samples)
 {
-     Matrix tgt(1,OUTPUT_LINES+1);
+     newmat tgt(1,OUTPUT_LINES+1);
      int tot_correct = 0;
      int tot_wrong = 0;
      int correct_num = -1;
@@ -857,25 +656,25 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                for (int i = 0; i < OutputLayer; i++)	// only n-1 transitions between n layers
                {
 #ifdef SERIAL_ONLY
-                   SerialMatrixVectorMultiply(netin[i].index, 
-                                               actuation[i].index, 
-                                               layer_weights[i].index,  layer_weights[i].rows,  layer_weights[i].cols);
+                   SerialMatrixVectorMultiply(netin[i].ptr, 
+                                               actuation[i].ptr, 
+                                               layer_weights[i].ptr,  layer_weights[i].n_rows,  layer_weights[i].n_cols);
 
 
-                    for (int j = 0; j < netin[i].cols; j++)
+                    for (int j = 0; j < netin[i].n_cols; j++)
                     {
-                        	      netin[i].index[j] /= actuation[i].cols;
+                        	      netin[i].ptr[j] /= actuation[i].n_cols;
                     }
 #ifdef SAMPLEFREQ
                     if ((y + 1) % SAMPLEFREQ == 0)
-                         cout << "Netin serial (" << netin[i].rows << "," << netin[i].cols <<
+                         cout << "Netin serial (" << netin[i].n_rows << "," << netin[i].n_cols <<
                          ")= " << netin[i].prtstr("NetIn Serial") << endl << flush;
 #endif
 #else
-                   InitiateCUDAVectorMatrixMultiply3(i);
+                   PreMatMul(actuation[i], layer_weights[i], netin[i]);
 
 #ifdef SAMPLEFREQ
-                         cout << "Netin Parallel " << netin[i].rows << "," << netin[i].cols <<
+                         cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
                          ")= " << netin[i].prtstr("Net In Parallel") << endl << flush;
 #endif
 
@@ -956,13 +755,13 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
           if (!train)
           {
                std::cout << "Final output : " << endl << std::setw(7) << fixed <<
-                    showpoint << actuation[OutputLayer].prtstr("B") <<
+                    showpoint << actuation[OutputLayer].prtstr() <<
                     " Sample: " << y + 1 << std::endl << flush;
                for (int z1 = 0; z1 < actuation[OutputLayer].index_max_row(0, 0, 9); z1++)
                     cout << "         ";
                cout << "       ^" << endl << flush;
                std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                    showpoint << tgt.prtstr("") << " Sample: " << y + 1 <<
+                    showpoint << tgt.prtstr() << " Sample: " << y + 1 <<
                     std::endl << flush;
           }
      }
@@ -1165,8 +964,8 @@ int main(int argc, char *argv[])
      cout << "--------------------------------  Build done on " << bldver << endl <<
           flush;
      init.copyfmt(cout);
-     for (int i=0;i<err_summary.cols;i++)
-        err_summary.index[i] = -1.0;
+     for (int i=0;i<err_summary.n_cols;i++)
+        err_summary.ptr[i] = -1.0;
      if (argc < 2)
      {
           NumberOfLayers = 3;
@@ -1229,7 +1028,7 @@ int main(int argc, char *argv[])
      }
      cout << "Threads chosen is " << thrds << endl << flush;
      cout << "Number of Layers is " << NumberOfLayers << endl << flush;
-
+/*
     	// netptrs = new double *[NumberOfLayers];
     	// Use slurm job number if avaiable (else defaults to epoch time) for file ids
     	// created
@@ -1252,6 +1051,7 @@ int main(int argc, char *argv[])
                }
           }
      }
+	 */
 
 #ifndef SERIAL_ONLY
  // set up CUDA timing structs
@@ -1280,13 +1080,13 @@ int main(int argc, char *argv[])
      for (int i = 0; i <= OutputLayer; i++)
      {
           max_vec = max(max_vec, (nodes[i] + bias_field));
-          Matrix rb3a(1, nodes[i] + bias_field);
+          newmat rb3a(1, nodes[i] + bias_field);
           actuation.push_back(rb3a);
 
-          Matrix drb3(1, nodes[i] + bias_field);
+          newmat drb3(1, nodes[i] + bias_field);
           deltafn.push_back(drb3);
 
-          Matrix frb3(1, nodes[i] + bias_field);
+          newmat frb3(1, nodes[i] + bias_field);
           ftick.push_back(frb3);
 
           if (i < OutputLayer)
@@ -1296,7 +1096,7 @@ int main(int argc, char *argv[])
                // These buffers for the rowvec and mat structures below are done to ensure
                // the Armadillo matrix can be accessed directly and the library doesnt move
                // the memory around
-               Matrix rb3(1,( nodes[i+1] + bias_field));
+               newmat rb3(1,( nodes[i+1] + bias_field));
 
                // Create an array of matrices (one element for each layer) for the netin value
                // This holds the sum of weighted signals, for each node, that gets squashed to 
@@ -1305,11 +1105,11 @@ int main(int argc, char *argv[])
                // Create a buffer of required size for weights, in each layer
                // (plus two more, one for delta updates, and one for holding new weight to be
                // applied after backprop. These maybe consolidated later
-               Matrix tmpwgt3((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
+               newmat tmpwgt3((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                for (int p=0;p<(nodes[i + 1] + bias_field)*( nodes[i] + bias_field);p++)
-                  tmpwgt3.index[p] = rand()/RAND_MAX;
-               Matrix tmpwgt30((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
-               Matrix tmpwgt300((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
+                  tmpwgt3.ptr[p] = rand()/RAND_MAX;
+               newmat tmpwgt30((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
+               newmat tmpwgt300((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                // create an array of three matrices (weights for forward prop)
                // and deltas and new values, for back propagation
                layer_weights.push_back(tmpwgt3);
@@ -1335,9 +1135,13 @@ int main(int argc, char *argv[])
 #endif
 
 #ifndef SERIAL_ONLY
+ cout << "CudaMalloc1" << endl << flush;
      checkError(cudaMalloc(&ActuationDevice, max_vec* sizeof(double)));
+	 cout << "CudaMalloc2" << endl << flush;
      checkError(cudaMalloc(&NetinDevice, max_vec* sizeof(double)));
+	 cout << "CudaMalloc3" << endl << flush;
      checkError(cudaMalloc(&LayerWeightsDevice, max_mat* sizeof(double)));
+	 cout << "CudaMalloc4" << endl << flush;
 #ifdef __CUDA_ARCH__
      cout << "Built for CUDA ARCH == " << __CUDA_ARCH__ << endl;
 #endif
@@ -1446,3 +1250,4 @@ int main(int argc, char *argv[])
 
 
 }
+
