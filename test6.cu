@@ -78,12 +78,26 @@ double q[500];
 
     for (int i=0;i<784;i++)
        a(i)=33.0;
+
     for (int i=0;i<784;i++)
        for (int j=0;j<31;j++)
           w(i,j)=77.0;
 
 
     PreMatMul(a,w, n);
-    for (int j=0;j<31;j++)
       cout << n << endl;
+for (int z=0;z<10;z++)
+{
+
+    for (int i=0;i<784;i++)
+       a(i)+=33.0/(double) (1+i);
+    for (int i=0;i<784;i++)
+       for (int j=0;j<31;j++)
+          w(i,j)+=77.0/(double)(1+j);
+      cout << "a=" <<a << endl;
+      cout << "w=" << w << endl;
+    PreMatMul(a,w, n);
+      cout << n << endl;
+}
+
 }
