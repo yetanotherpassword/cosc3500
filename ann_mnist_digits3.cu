@@ -50,24 +50,10 @@ void checkError(cudaError_t e)
      unzip Project_AC.zip
      cd ~/cosc3500/
      unzip mnist.zip
-     unxz armadillo-10.6.2.tar.xz
-     tar xvf armadillo-10.6.2.tar
-     cd armadillo-10.6.2/
-     mkdir build
-     cd build
-     cmake ..
-     make
-     cd ../..
      make
      sbatch ./goslurm.sh ann_mnist_digits_cuda    #Run parallel version (with default settings)
      sbatch ./goslurm.sh ann_mnist_digits_serial  #Run serial version for comparison 
 
-       #Note for armadillo build
-       #Made lib static and issue with MKL on Centos
-       #Below changes done in my git, but may need to do if download from
-       #http://sourceforge.net/projects/arma/files/armadillo-10.6.2.tar.xz
-       #sed -i "s/add_library( armadillo/add_library( armadillo STATIC/" CMakeLists.txt
-      #sed -i "s/include(ARMA_FindMKL)/#include(ARMA_FindMKL)/" CMakeLists.txt
  */
 
 
@@ -80,6 +66,10 @@ float maxtime = std::numeric_limits<float>::min();
 
 std::chrono::microseconds Process_MaxTime = std::chrono::microseconds::min();
 std::chrono::microseconds Process_MinTime = std::chrono::microseconds::max();
+std::chrono::microseconds Call_MaxTime = std::chrono::microseconds::min();
+std::chrono::microseconds Call_MinTime = std::chrono::microseconds::max();
+std::chrono::microseconds Avg_Time;
+int avgcnt=0;
 
 #ifndef SERIAL_ONLY
 double *LayerWeightsDevice;
@@ -97,43 +87,44 @@ int tile_dimension = 8;
 
 class newmat {
 public:
- double * ptr;
- int n_rows;
- int n_cols;
- newmat(int r, int c)
- {
-     n_rows=r;
-	 n_cols=c;
-	 ptr=new double [r*c];
- };
- string prtstr()
- { string s="";
-     for (int i=0;i<n_rows;i++)
-	 {
-        for (int j=0;j<n_cols;j++)
+   double * ptr;
+   int n_rows;
+   int n_cols;
+   newmat(int r, int c)
+   {
+       n_rows=r;
+       n_cols=c;
+       ptr=new double [r*c];
+   };
+   string prtstr()
+   { 
+       string s="";
+       for (int i=0;i<n_rows;i++)
+       {
+          for (int j=0;j<n_cols;j++)
 		   s+= "   " + to_string(ptr[i*n_cols+j]);
-		s+= '\n';
-	}
-	return s;
- };
- void free_ele()
- {
-     if (ptr != NULL)
-	    delete [] ptr;
- };
-  void zeroize()
- {
-     for (int i=0;i<n_rows;i++)
-	 {
-        for (int j=0;j<n_cols;j++)
+	  s+= '\n';
+       }
+       return s;
+   };
+   void free_ele()
+   {
+       if (ptr != NULL)
+          delete [] ptr;
+   };
+   void zeroize()
+   {
+       for (int i=0;i<n_rows;i++)
+       {
+           for (int j=0;j<n_cols;j++)
 		  ptr[i*n_cols+j]=0.0;
-	}
- };
- double * memptr()
- {
-     return ptr;
- };
-    int index_max_row(int r, int start, int stop)
+       }
+   };
+   double * memptr()
+   {
+       return ptr;
+   };
+   int index_max_row(int r, int start, int stop)
    {
         int idx=0;
         double max=  std::numeric_limits<double>::min();
@@ -199,38 +190,24 @@ cout << " dimGrid.y = ("<< CRows << " + " << dimBlock.y << " - 1)/" << dimBlock.
     cudaMemcpy(deviceA, a.memptr(), DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(deviceB, b.memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice);
 
+    auto StartChronoTime = std::chrono::high_resolution_clock::now();
 
-
-
-
-
-
-
-  auto StartChronoTime = std::chrono::high_resolution_clock::now();
-
-  
- 
-
-
-
-
+                   auto StartCallTime = std::chrono::high_resolution_clock::now();
 
     MatMulNoShared<<<dimGrid , dimBlock>>>(deviceA , deviceB , deviceC , ARows , ACols, BRows ,BCols , CRows , CCols);
 	
-	
- 
- 
     checkError(cudaDeviceSynchronize());
 
-    auto EndChronoTime = std::chrono::high_resolution_clock::now();
-    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
 
-    if (TotalChronoTime > Process_MaxTime)
-       Process_MaxTime = TotalChronoTime;
+    auto EndCallTime = std::chrono::high_resolution_clock::now();
+    auto TotalCallTime = std::chrono::duration_cast<std::chrono::microseconds > (EndCallTime - StartCallTime);
 
-    if (TotalChronoTime < Process_MinTime)
-       Process_MinTime = TotalChronoTime;
 
+    if (TotalCallTime > Call_MaxTime)
+        Call_MaxTime = TotalCallTime;
+
+    if (TotalCallTime < Call_MinTime)
+        Call_MinTime = TotalCallTime;
 
 
     cudaMemcpy(hostC, deviceC, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost);
@@ -238,7 +215,7 @@ cout << " dimGrid.y = ("<< CRows << " + " << dimBlock.y << " - 1)/" << dimBlock.
       cout << hostC[j] << " " ;
     cout << endl;
 
-    memcpy(c.memptr(), hostC, 32*sizeof(double));
+    memcpy(c.memptr(), hostC, DIMX*DIMZ*sizeof(double));
 
 }
 
@@ -291,8 +268,6 @@ string build_type = "Parallel";
 // implementation of the matrix-vector multiply function
 void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m_nc)
 {
-    auto StartChronoTime = std::chrono::high_resolution_clock::now();
-
   // Need to ensure Y vector passed has been zeroised
     for (int i=0;i<m_nr*m_nc ;i++)
     {
@@ -300,14 +275,6 @@ void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m
         int r1=i / m_nc;
         Y[c1] += X[r1] * M[c1 *m_nr + r1];
     }
-    auto EndChronoTime = std::chrono::high_resolution_clock::now();
-    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (          EndChronoTime - StartChronoTime);
-
-    if (TotalChronoTime > Process_MaxTime)
-       Process_MaxTime = TotalChronoTime;
-
-    if (TotalChronoTime < Process_MinTime)
-       Process_MinTime = TotalChronoTime;
 }
 
 void sigmoid3(newmat & net, newmat & out)
@@ -656,14 +623,30 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                for (int i = 0; i < OutputLayer; i++)	// only n-1 transitions between n layers
                {
 #ifdef SERIAL_ONLY
+                   auto StartCallTime = std::chrono::high_resolution_clock::now();
+
+
+
                    SerialMatrixVectorMultiply(netin[i].ptr, 
                                                actuation[i].ptr, 
                                                layer_weights[i].ptr,  layer_weights[i].n_rows,  layer_weights[i].n_cols);
 
+                   auto EndCallTime = std::chrono::high_resolution_clock::now();
+                   auto TotalCallTime = std::chrono::duration_cast<std::chrono::microseconds > 
+                                                                       (EndCallTime - StartCallTime);
+
+                   if (TotalCallTime > Call_MaxTime)
+                      Call_MaxTime = TotalCallTime;
+
+                   if (TotalCallTime < Call_MinTime)
+                      Call_MinTime = TotalCallTime;
+
+                   Avg_Time += TotalCallTime;
+                   avgcnt++;
 
                     for (int j = 0; j < netin[i].n_cols; j++)
                     {
-                        	      netin[i].ptr[j] /= actuation[i].n_cols;
+                          netin[i].ptr[j] /= actuation[i].n_cols;
                     }
 #ifdef SAMPLEFREQ
                     if ((y + 1) % SAMPLEFREQ == 0)
@@ -958,6 +941,7 @@ int main(int argc, char *argv[])
      string hname = "";
      //string y="initial_random_values_weights_11337071.txt";
      string y = "initial_random_values_weights_1636260202.txt";
+    auto StartChronoTime = std::chrono::high_resolution_clock::now();
 
      vector<string> strs;
      string bldver = string(__DATE__) + " at time " + string(__TIME__);
@@ -1215,31 +1199,26 @@ int main(int argc, char *argv[])
      delete[] testdata;
      delete[] testlabels;
 
-     if (mintime == std::numeric_limits<float>::max())
-        cout << "Problem recording min time for " << build_type << endl;
-     else
-     {
-        cout << "Min time for " <<  build_type << " call : " << mintime  << " us" << endl;
-        cout << "Min time for " <<  build_type << " call : " << mintime/1000000  << " s" << endl;
-        cout << "Min time for " <<  build_type << " call : " << mintime/60000000  << " min" << endl;
-     }
-     if (maxtime == std::numeric_limits<float>::min())
-        cout << "Problem recording max time for " << build_type << endl;
-     else
-     {
-        cout << "Max time for " <<  build_type << " call : " << mintime  << " us" << endl;
-        cout << "Max time for " <<  build_type << " call : " << mintime/1000000  << " s" << endl;
-        cout << "Max time for " <<  build_type << " call : " << mintime/60000000  << " min" << endl;
-     }
-#ifndef SERIAL_ONLY
-     cout << "Max time for CUDA call : " << Process_MaxTime.count() << " us (Measured by CUDA API)" << endl;
-     cout << "Min time for CUDA call : " << Process_MinTime.count() << " us (Measured by CUDA API)" << endl;
+     cout << "Min time for " <<  build_type << " call : " << Call_MinTime.count() << " us" << endl;
+     cout << "Min time for " <<  build_type << " call : " << Call_MinTime.count()/1000000  << " s" << endl;
+     cout << "Min time for " <<  build_type << " call : " << Call_MinTime.count()/60000000  << " min" << endl;
+     cout << "Avg time for " <<  build_type << " call : " << (double) Avg_Time.count()/(double) avgcnt << " us" << endl;
+     cout << "Avg time for " <<  build_type << " call : " << (double) Avg_Time.count()/(double) (avgcnt *1000000)  << " s" << endl;
+     cout << "Avg time for " <<  build_type << " call : " << (double) Avg_Time.count()/(double) (avgcnt * 60000000)  << " min" << endl;
+     cout << "Max time for " <<  build_type << " call : " << Call_MaxTime.count() << " us" << endl;
+     cout << "Max time for " <<  build_type << " call : " << Call_MaxTime.count()/1000000  << " s" << endl;
+     cout << "Max time for " <<  build_type << " call : " << Call_MaxTime.count()/60000000  << " min" << endl;
+     auto EndChronoTime = std::chrono::high_resolution_clock::now();
+     auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (EndChronoTime - StartChronoTime);
+
+     cout << "Time for  Total Program : " << TotalChronoTime.count() << " us " << endl;
      cout << "Used Tile Dimension of " << tile_dimension << endl;
 
      for (int i=0;i<netin.size();i++)
          netin[i].free_ele();
 
 
+#ifndef SERIAL_ONLY
      checkError(cudaFree(LayerWeightsDevice));
      checkError(cudaFree(ActuationDevice));
      checkError(cudaFree(NetinDevice));
