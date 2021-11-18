@@ -1138,6 +1138,10 @@ void save_weights(string hdr)
 
 int main(int argc, char *argv[])
 {
+
+size_t available, total;
+cudaMemGetInfo(&available, &total);
+cout << "avail="<< available<< " total=" << total<<endl;
      extern char **environ;
      string hname = "";
      //string y="initial_random_values_weights_11337071.txt";
