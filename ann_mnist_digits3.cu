@@ -1,8 +1,8 @@
 #include <iomanip>
 #include <cmath>
 #include <chrono>
-//#include <boost/algorithm/string.hpp>
-//#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/split.hpp>
 #include <vector>
 #include <limits>
 #include <sstream>
@@ -91,33 +91,38 @@ public:
    double * ptr;
    int n_rows;
    int n_cols;
-   double * transptr;
+   char ss[600000];
+   newmat (int r, int c, double * p)
+   {
+      n_rows = r;
+      n_cols = c;
+      ptr = new double [n_rows*n_cols];
+      for (int i=0;i<n_rows;i++)
+         for (int j=0;j<n_cols;j++)
+            ptr[i*n_cols+j] = p[i*n_cols+j];
+   };
    newmat ()
    {
       n_rows = 0;
       n_cols = 0;
       ptr = NULL;
-      transptr=NULL;
    };
    newmat(int r, int c)
    {
        n_rows=r;
        n_cols=c;
        ptr=new double [r*c];
-       transptr=NULL;
    };
-   newmat transpose()
+   void set_transpose(newmat tmp)
    {
-       if ((n_rows > 0) && (n_cols > 0) && (ptr != NULL))
+       if (n_rows == tmp.n_cols && n_cols == tmp.n_rows)
        {
-           newmat tmp(n_cols, n_rows);
-           for (int i=0;i<n_rows;i++)
-              for (int j=0;j<n_cols;j++)
-                tmp.ptr[j*n_rows+i] = ptr[i*n_cols+j]; 
-           return tmp; 
+              for (int i=0;i<tmp.n_rows;i++)
+                 for (int j=0;j<tmp.n_cols;j++)
+                   ptr[j*tmp.n_rows+i] = tmp.ptr[i*tmp.n_cols+j]; 
        }
-       newmat tmp2;
-       return tmp2;
+       else
+          exit(1);
    };
 
   void add_mat(newmat m1)
@@ -185,17 +190,29 @@ public:
           n_cols= p2.n_cols;
           ptr = new double [n_rows*  n_cols];
        }
-
-          for (int i=0;i<p1.n_rows;i++)
-             for (int j=0;j<p2.n_cols;j++)
-                 for (int k=0;k<p1.n_cols;k++)
-                   ptr[i*p2.n_cols+j]=p1.ptr[i*p1.n_cols+k] * p2.ptr[k*p2.n_cols+j];
-    }
-    else
+#if 0
+ for (int i=0;i<m_nr*m_nc ;i++)
     {
-      cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols <<"] by p2["  << p2.n_rows << "," << p2.n_cols <<"]" << endl;
-      exit(1);
+        int c1=i % m_nc;
+        int r1=i / m_nc;
+        Y[c1] += X[r1] * M[c1 *m_nr + r1];
     }
+#endif
+       for(int i = 0; i < p1.n_rows; ++i)
+         for(int j = 0; j < p2.n_cols; ++j)
+         {
+            ptr[i*p2.n_cols+j]=0;
+            for(int k = 0; k < p1.n_cols; ++k) // c1==r2
+            {
+                ptr[i*p2.n_cols+j] += p1.ptr[i*p1.n_cols+k] * p2.ptr[k*p2.n_cols+j];
+            }
+         }
+     }
+     else
+     {
+       cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols <<"] by p2["  << p2.n_rows << "," << p2.n_cols <<"]" << endl;
+       exit(1);
+     }
  };
 
   void piecewisemult(newmat p1)
@@ -230,16 +247,23 @@ public:
        piecewisemult(p3);
   };
 
-   string prtstr()
+   char * prtstr()
    { 
-       string s="";
+      // string s="";
+     //  char ss[100000];
+       ss[0]='\0';
        for (int i=0;i<n_rows;i++)
        {
           for (int j=0;j<n_cols;j++)
-		   s+= "   " + to_string(ptr[i*n_cols+j]);
-	  s+= '\n';
+          {
+                   int len=strlen(ss);
+                   sprintf(&ss[len],"   %20.10g",ptr[i*n_cols+j]);
+	//	   s = s + "   " + to_string(ptr[i*n_cols+j]);
+          }
+	//  s+= '\n';
+          sprintf(&ss[strlen(ss)],"\n");
        }
-       return s;
+       return ss;
    };
    void free_ele()
    {
@@ -274,7 +298,8 @@ public:
    };
 
  } ;
- 
+
+#ifndef SERIAL_ONLY 
 __global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols) {
 
     double CValue = 0;
@@ -360,7 +385,7 @@ void PreMatMul(newmat & a, newmat & b, newmat & c, int norm)
     memcpy(c.memptr(), hostC, DIMX*DIMZ*sizeof(double));
 
 }
-
+#endif
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -377,10 +402,13 @@ double eta;	// Learning factor
 vector<newmat> netin;
 vector<newmat> actuation;
 vector<newmat> deltafn;
+vector<newmat> deltafn_t;
 vector<newmat> ftick;
 vector<newmat> layer_weights;
+vector<newmat> layer_weights_t;
 vector<newmat> weight_updates;
 vector<newmat> new_layer_weights;
+newmat tgt(1,OUTPUT_LINES+1);
 
 
 ios init(NULL);
@@ -408,21 +436,30 @@ string build_type = "Parallel";
 
 
 // implementation of the matrix-vector multiply function
-void SerialMatrixVectorMultiply(double *Y, double *X, double *M, int m_nr, int m_nc)
+void SerialMatrixVectorMultiply(double *Y, double *X, int r1, double *M, int m_nr, int m_nc)
 {
   // Need to ensure Y vector passed has been zeroised
-    for (int i=0;i<m_nr*m_nc ;i++)
+
+
+    for(int i = 0; i < r1; ++i)
     {
-        int c1=i % m_nc;
-        int r1=i / m_nc;
-        Y[c1] += X[r1] * M[c1 *m_nr + r1];
+        for(int j = 0; j < m_nc; ++j)
+        {
+            Y[i*m_nc+j] = 0;
+            for(int k = 0; k < m_nr; ++k) // c1==r2
+            {
+                Y[i*m_nc+j] += X[i*m_nr+k] * M[k*m_nc+j];
+//                cout << "Y["<<i*m_nc+j<<"] += "<<X[i*m_nr+k] * M[k*m_nc+j] << endl;
+            }
+        }
     }
+
 }
 
 void sigmoid3(newmat & net, newmat & out)
 {
-   int c=net.n_cols;
-   for (int i=0;i<c;i++)
+   int c=net.n_cols-1;
+   for (int i=0;i<=c;i++)
      out.ptr[i] = 1 / (1 + exp(-net.ptr[i]));
    out.ptr[c] = 1.0;	// add bias signal value
      //return out;
@@ -603,6 +640,8 @@ double accu0(newmat m1)
          tmp += m1.ptr[i*m1.n_cols+j];
   return tmp;
 }    
+
+#if 0
 newmat diff0 (newmat p1, newmat p2)
 {
   newmat tmp(p1.n_rows, p1.n_cols);
@@ -677,14 +716,15 @@ newmat matadd (newmat p1, newmat p2)
 	}
 	return tmp;
 }
-int backprop(newmat & tgt, int y0)
+#endif
+int backprop(int y0)
 {
 
      //tgt0.insert_cols(nodes[OutputLayer], 1);
      //  double err = accu((tgt - final) % (tgt - final)) *0.5;
      double err=0;
      for (int i=0;i<tgt.n_rows;i++)
-        for (int j=0;j<tgt.n_cols;j++)
+        for (int j=0;j<tgt.n_cols-1;j++) // last ele in tgt is bias so dont include in err function
         {
            err += (tgt.ptr[i*tgt.n_cols+j] - actuation[OutputLayer].ptr[i*tgt.n_cols+j])*(tgt.ptr[i*tgt.n_cols+j] - actuation[OutputLayer].ptr[i*tgt.n_cols+j]);
         }
@@ -714,7 +754,8 @@ int backprop(newmat & tgt, int y0)
 
      for (int i = OutputLayer - 1; i >= 0; i--)
      {
-          weight_updates[i].set_matmult(deltafn[i + 1].transpose(), actuation[i]);            // weight_updates[i] = deltafn[i + 1].t() *actuation[i];
+          deltafn_t[i + 1].set_transpose(deltafn[i + 1]);
+          weight_updates[i].set_matmult(deltafn_t[i + 1], actuation[i]);            // weight_updates[i] = deltafn[i + 1].t() *actuation[i];
           new_layer_weights[i].set_mult1_add2( weight_updates[i], eta, layer_weights[i] );// new_layer_weights[i] = layer_weights[i] + (eta *weight_updates[i]);
           ftick[i].set_mult1_add2(actuation[i] ,-1.0 , 1.0);                              //  ftick[i] = -actuation[i] + 1;
           ftick[i].piecewisemult( actuation[i]);	// element wise multiply          //  ftick[i] = ftick[i] % (actuation[i]); 
@@ -723,8 +764,9 @@ int backprop(newmat & tgt, int y0)
      }
      for (int i = 0; i < OutputLayer; i++)
      {
-
-          layer_weights[i] = new_layer_weights[i];
+       for (int j=0; j < layer_weights[i].n_rows; j++)
+          for (int k=0; k < layer_weights[i].n_cols; k++)
+          layer_weights[i].ptr[j*layer_weights[i].n_cols+k] = new_layer_weights[i].ptr[j*layer_weights[i].n_cols+k];
      }
      return 0;
 }
@@ -733,7 +775,6 @@ int backprop(newmat & tgt, int y0)
 void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
      int samples)
 {
-     newmat tgt(1,OUTPUT_LINES+1);
      int tot_correct = 0;
      int tot_wrong = 0;
      int correct_num = -1;
@@ -754,23 +795,25 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
      };
      int num_tested = 0;
      int epochs;
-     string intype;
      if (train)
      {
-          intype = "TRAINING";
           epochs = EPOCHS;
      }
      else
      {
           epochs = 1;
-          intype = "TEST    ";
      }
      for (int y = 0; y < samples; y++)
      {
 #ifdef SAMPLEFREQ
           if ((y + 1) % SAMPLEFREQ == 0)
-               cout << "------------------------------------ FORWARD FEED OF " << intype <<
-               " SAMPLE # " << y + 1 << endl << flush;
+          {
+               cout << "------------------------------------ FORWARD FEED OF ";
+               if (train)
+                   cout << "TRAINING";
+                else cout <<"TEST    ";
+               cout << " SAMPLE # " << y + 1 << endl << flush;
+          }
 #endif
           load_an_image(y, imgdata, actuation[0], tgt, labdata);
 
@@ -782,12 +825,11 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
 #ifdef SERIAL_ONLY
                    auto StartCallTime = std::chrono::high_resolution_clock::now();
 
-
-
+ 
+                   layer_weights_t[i].set_transpose( layer_weights[i] );
                    SerialMatrixVectorMultiply(netin[i].ptr, 
-                                               actuation[i].ptr, 
-                                               layer_weights[i].ptr,  layer_weights[i].n_rows,  layer_weights[i].n_cols);
-
+                                               actuation[i].ptr, actuation[i].n_rows,
+                                               layer_weights_t[i].ptr,  layer_weights_t[i].n_rows,  layer_weights_t[i].n_cols);
                    auto EndCallTime = std::chrono::high_resolution_clock::now();
                    auto TotalCallTime = std::chrono::duration_cast<std::chrono::microseconds > 
                                                                        (EndCallTime - StartCallTime);
@@ -811,8 +853,8 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                          ")= " << netin[i].prtstr() << endl << flush;
 #endif
 #else
-                   newmat a= layer_weights[i].transpose();
-                   PreMatMul(actuation[i], a, netin[i], actuation[i].n_cols);
+                   layer_weights_t[i].set_transpose( layer_weights[i] );
+                   PreMatMul(actuation[i], layer_weights_t[i], netin[i], actuation[i].n_cols);
 
 #ifdef SAMPLEFREQ
                          cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
@@ -869,7 +911,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                          cout << endl << flush;
                     }
 #endif
-                    if (backprop(tgt, y) == 1)
+                    if (backprop( y) == 1)
                          break;	// exit i/epoch loop and goto next sample (as error function is
                    	// within limits for this tgt)
                }
@@ -1002,6 +1044,7 @@ void load_weights(string fname)
      cout << "Loading weights from file : " << fname << endl << flush;
      iFile.open(fname, ios:: in);
      string aline;
+     int olaycnt=0;
 
      vector<string> strs;
 
@@ -1011,7 +1054,7 @@ void load_weights(string fname)
      boost::split(strs, aline, boost::is_any_of("="));
      if (strs.size() > 1)
           lays = stoi(strs[1]);
-     cout << " Has " << lays << "layers" << endl;
+     cout << "Layer # " << ++olaycnt <<" Has " << lays << " nodes" << endl;
      while (iFile.good())
      {
           getline(iFile, aline);
@@ -1024,7 +1067,7 @@ void load_weights(string fname)
                boost::split(strs, aline, boost::is_any_of("="));
                if (strs.size() > 1)
                     nd[t] = stoi(strs[1]);
-               cout << " Has " << nd[t] << "layers" << endl;
+               cout <<  "Layer # " << ++olaycnt <<" Has " << nd[t] << "layers" << endl;
           }
           else if ((aline.find("Error Summary") != std::string::npos))
           {
@@ -1054,7 +1097,7 @@ void load_weights(string fname)
           {
                int r = (j) / (nd[i + 1] + 1);
                int c = (j) % (nd[i + 1] + 1);
-               layer_weights[i](r, c) = l2[i + 1][j];
+               layer_weights[i].ptr[r* (nd[i + 1] + 1)+c] = l2[i + 1][j];
           }
      }
 }
@@ -1098,7 +1141,7 @@ int main(int argc, char *argv[])
      extern char **environ;
      string hname = "";
      //string y="initial_random_values_weights_11337071.txt";
-     string y = "initial_random_values_weights_1636260202.txt";
+     string weight_file_to_preload = "initial_random_values_weights_1637223695.txt";
     auto StartChronoTime = std::chrono::high_resolution_clock::now();
 
      vector<string> strs;
@@ -1228,6 +1271,9 @@ int main(int argc, char *argv[])
           newmat drb3(1, nodes[i] + bias_field);
           deltafn.push_back(drb3);
 
+          newmat drb3_t(nodes[i] + bias_field, 1);
+          deltafn_t.push_back(drb3_t);
+
           newmat frb3(1, nodes[i] + bias_field);
           ftick.push_back(frb3);
 
@@ -1248,6 +1294,7 @@ int main(int argc, char *argv[])
                // (plus two more, one for delta updates, and one for holding new weight to be
                // applied after backprop. These maybe consolidated later
                newmat tmpwgt3((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
+               newmat tmpwgt3_t((nodes[i] + bias_field),( nodes[i+1] + bias_field));
                for (int p=0;p<(nodes[i + 1] + bias_field)*( nodes[i] + bias_field);p++)
                   tmpwgt3.ptr[p] = (double) rand()/(double) RAND_MAX;
                newmat tmpwgt30((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
@@ -1255,14 +1302,13 @@ int main(int argc, char *argv[])
                // create an array of three matrices (weights for forward prop)
                // and deltas and new values, for back propagation
                layer_weights.push_back(tmpwgt3);
+               layer_weights_t.push_back(tmpwgt3_t);
 
                new_layer_weights.push_back(tmpwgt30);
 
                weight_updates.push_back(tmpwgt300);
           }
      }
-     // Save initial starting weights if required for later
-     save_weights("initial_random_values");
 
     // Informational, the max value of matrix and vectors are record and used to reserve CUDA memory 
      cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec <<
@@ -1273,7 +1319,11 @@ int main(int argc, char *argv[])
      // if say moving platforms with different psudeo RNG, or to load post weights after training
      // This works, but only implemented atm, by direct code changes, no UI implemented
      // But note used in this project anyway
-     load_weights(y);
+     cout << "Chosen to load saved weight file '" << weight_file_to_preload << "' , so loading it ....." << endl;
+     load_weights(weight_file_to_preload);
+#else
+     // Save initial starting weights if required for later
+     save_weights("initial_random_values");
 #endif
 
 #ifndef SERIAL_ONLY
@@ -1367,13 +1417,13 @@ int main(int argc, char *argv[])
      auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds > (EndChronoTime - StartChronoTime);
 
      cout << "Time for  Total Program : " << TotalChronoTime.count() << " us " << endl;
-     cout << "Used Tile Dimension of " << tile_dimension << endl;
 
      for (int i=0;i<netin.size();i++)
          netin[i].free_ele();
 
 
 #ifndef SERIAL_ONLY
+     cout << "Used Tile Dimension of " << tile_dimension << endl;
      checkError(cudaFree(deviceA));
      checkError(cudaFree(deviceB));
      checkError(cudaFree(deviceC));
