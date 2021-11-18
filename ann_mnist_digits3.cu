@@ -26,7 +26,7 @@
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
 #define SAMPLEFREQ 1
-#undef SAMPLEFREQ
+//#undef SAMPLEFREQ
 
 
 
@@ -75,6 +75,7 @@ int avgcnt=0;
 double *LayerWeightsDevice;
 double *ActuationDevice;
 double *NetinDevice;
+double *deviceA, *deviceB, *deviceC;
 cudaEvent_t start, stop;
 int tile_dimension = 8; 
 #endif
@@ -90,12 +91,145 @@ public:
    double * ptr;
    int n_rows;
    int n_cols;
+   double * transptr;
+   newmat ()
+   {
+      n_rows = 0;
+      n_cols = 0;
+      ptr = NULL;
+      transptr=NULL;
+   };
    newmat(int r, int c)
    {
        n_rows=r;
        n_cols=c;
        ptr=new double [r*c];
+       transptr=NULL;
    };
+   newmat transpose()
+   {
+       if ((n_rows > 0) && (n_cols > 0) && (ptr != NULL))
+       {
+           newmat tmp(n_cols, n_rows);
+           for (int i=0;i<n_rows;i++)
+              for (int j=0;j<n_cols;j++)
+                tmp.ptr[j*n_rows+i] = ptr[i*n_cols+j]; 
+           return tmp; 
+       }
+       newmat tmp2;
+       return tmp2;
+   };
+
+  void add_mat(newmat m1)
+  {
+    if (m1.n_rows != n_rows || m1.n_cols != n_cols)
+    {
+          cout << "Cant addmat m1[" << m1.n_rows << "," << m1.n_cols <<"] with *this["  << n_rows << "," << n_cols <<"]" << endl;
+          exit(1);
+    }
+      for (int i=0;i<n_rows;i++)
+         for (int j=0;j<n_cols;j++)
+            ptr[i*n_cols+j] += m1.ptr[i*n_cols+j];
+  };
+  void add_scalar(double d)
+  {
+      for (int i=0;i<n_rows;i++)
+         for (int j=0;j<n_cols;j++)
+            ptr[i*n_cols+j] += d;
+  };
+  void mult_scalar(double d)
+  {
+      for (int i=0;i<n_rows;i++)
+         for (int j=0;j<n_cols;j++)
+            ptr[i*n_cols+j] *= d;
+  };
+
+  void set_mult1_add2(newmat y1, double d1, double d2)
+  {
+       if (n_rows != y1.n_rows || n_cols != y1.n_cols )
+       {
+          cout << "Cant store y1[" << y1.n_rows << "," << y1.n_cols <<" in *this["<<n_rows<<"," << n_cols <<"]" << endl;
+          exit(1);
+       }
+       //y1.mult_scalar(d1);
+       //y1.add_scalar(d2);
+       for (int i=0; i<n_rows;i++)
+          for (int j=0; j<n_cols;j++)
+             ptr[i*n_cols+j] = y1.ptr[i*n_cols+j];
+       mult_scalar(d1);
+       add_scalar(d2);
+  };
+  void set_mult1_add2(newmat y1, double d1, newmat y2)
+  {
+       if (n_rows != y1.n_rows || n_rows != y2.n_rows || n_cols != y1.n_cols || n_cols != y2.n_cols)
+       {
+          cout << "Cant add y1[" << y1.n_rows << "," << y1.n_cols <<"] to y2["  << y2.n_rows << "," << y2.n_cols <<"] and store in *this["<<n_rows<<"," << n_cols <<"]" << endl;
+          exit(1);
+       }
+       for (int i=0; i<n_rows;i++)
+          for (int j=0; j<n_cols;j++)
+             ptr[i*n_cols+j] = y1.ptr[i*n_cols+j];
+       mult_scalar(d1);
+       add_mat(y2);
+       
+  };
+  void set_matmult(newmat p1, newmat p2)
+  {
+     if (p1.n_cols == p2.n_rows)
+     {
+       if (n_rows != p1.n_rows || n_cols != p2.n_cols)
+       {
+          cout << "Resultant matrix wont hold result, fixing by realloc in matlmult" << endl;
+          free_ele();
+          n_rows=p1.n_rows;
+          n_cols= p2.n_cols;
+          ptr = new double [n_rows*  n_cols];
+       }
+
+          for (int i=0;i<p1.n_rows;i++)
+             for (int j=0;j<p2.n_cols;j++)
+                 for (int k=0;k<p1.n_cols;k++)
+                   ptr[i*p2.n_cols+j]=p1.ptr[i*p1.n_cols+k] * p2.ptr[k*p2.n_cols+j];
+    }
+    else
+    {
+      cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols <<"] by p2["  << p2.n_rows << "," << p2.n_cols <<"]" << endl;
+      exit(1);
+    }
+ };
+
+  void piecewisemult(newmat p1)
+  {
+
+       if (p1.n_rows != n_rows || p1.n_cols != n_cols)
+       {
+          cout << "Cant piecewisemultiply p1[" << p1.n_rows << "," << p1.n_cols <<"] with *this["  << n_rows << "," << n_cols <<"]" << endl;
+          exit(1);
+       }
+
+       for (int i=0;i<p1.n_rows;i++)
+       {
+            for (int j=0;j<n_cols;j++)
+                   ptr[i*n_cols+j]=p1.ptr[i*n_cols+j] * ptr[i*n_cols+j];
+       }
+  };
+
+  void set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
+  {
+
+       if (n_rows != p1.n_rows || n_rows != p2.n_rows || n_cols != p1.n_cols ||  n_cols != p2.n_cols )
+       {
+          cout << "Cant diff p2[" << p2.n_rows << "," << p2.n_cols <<"] from p1["  << p1.n_rows << "," << p1.n_cols <<"] and store in *this["<<n_rows<<","<<n_cols<<"]" << endl;
+          exit(1);
+       }
+       for  (int i=0;i<n_rows;i++)
+       {
+            for (int j=0;j<n_cols;j++)
+                ptr[i*p1.n_cols+j] = p1.ptr[i*p1.n_cols+j] -  p2.ptr[i*p1.n_cols+j];
+       }
+       piecewisemult(p3);
+  };
+
    string prtstr()
    { 
        string s="";
@@ -159,7 +293,7 @@ __global__ void MatMulNoShared(double* A, double* B, double* C, int ARows, int A
     if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y)*CCols)+(blockIdx.x*blockDim.x)+threadIdx.x]=CValue;
 }
 
-void PreMatMul(newmat & a, newmat & b, newmat & c)
+void PreMatMul(newmat & a, newmat & b, newmat & c, int norm)
 {
     int DIMZ = c.n_cols;
     int DIMX = c.n_rows;
@@ -167,6 +301,10 @@ void PreMatMul(newmat & a, newmat & b, newmat & c)
     if ((DIMX != a.n_rows) || (DIMY != b.n_rows) || (DIMZ != b.n_cols))
     {
        cout << "Incorrect dimensions passed to PreMatMul" << endl;
+       cout << "c(" << c.n_rows << "," << c.n_cols << ") is to be set to "
+            << "a(" << a.n_rows << "," << a.n_cols << ") * "
+            << "b(" << b.n_rows << "," << b.n_cols << ")  "
+            << endl;
        exit(1);
     }
 
@@ -177,15 +315,10 @@ void PreMatMul(newmat & a, newmat & b, newmat & c)
 
     dimGrid.x = (CCols + dimBlock.x - 1)/dimBlock.x;
     dimGrid.y = (CRows + dimBlock.y - 1)/dimBlock.y;
-cout << " dimGrid.x = ("<< CCols << " + " << dimBlock.x << " - 1)/" << dimBlock.x<<endl;
-cout << " dimGrid.y = ("<< CRows << " + " << dimBlock.y << " - 1)/" << dimBlock.y<<endl;
-    double *deviceA, *deviceB, *deviceC;
+//cout << " dimGrid.x = ("<< CCols << " + " << dimBlock.x << " - 1)/" << dimBlock.x<<endl;
+//cout << " dimGrid.y = ("<< CRows << " + " << dimBlock.y << " - 1)/" << dimBlock.y<<endl;
     //hostC = 
     double* hostC    = (double*)malloc(DIMX*DIMZ*sizeof(double));
-
-    cudaMalloc((void **)&deviceA, DIMX*DIMY*sizeof(double));
-    cudaMalloc((void **)&deviceB, DIMY*DIMZ*sizeof(double));
-    cudaMalloc((void **)&deviceC, DIMX*DIMZ*sizeof(double));
 
     cudaMemcpy(deviceA, a.memptr(), DIMX*DIMY*sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(deviceB, b.memptr(), DIMY*DIMZ*sizeof(double), cudaMemcpyHostToDevice);
@@ -211,9 +344,18 @@ cout << " dimGrid.y = ("<< CRows << " + " << dimBlock.y << " - 1)/" << dimBlock.
 
 
     cudaMemcpy(hostC, deviceC, DIMX*DIMZ*sizeof(double), cudaMemcpyDeviceToHost);
-    for (int j=0;j<31;j++)
-      cout << hostC[j] << " " ;
-    cout << endl;
+    if (norm != 1)
+    {
+       for (int i=0;i<c.n_rows;i++)
+       {
+          for (int j=0;j<c.n_cols;j++)
+          {
+             hostC[i*c.n_cols+j] /= (double) norm;
+             cout << hostC[i*c.n_cols+j] << " " ;
+          }
+       cout << endl;
+       }
+    }
 
     memcpy(c.memptr(), hostC, DIMX*DIMZ*sizeof(double));
 
@@ -453,15 +595,15 @@ void output(newmat t)
      cout << t.prtstr();
 }
      
-double accu(newmat m1)
+double accu0(newmat m1)
 {
   double tmp=0;
     for (int i=0;i<m1.n_rows;i++)
-      for (int j=0; i<m1.n_cols;j++)
+      for (int j=0; j<m1.n_cols;j++)
          tmp += m1.ptr[i*m1.n_cols+j];
   return tmp;
 }    
-newmat diff (newmat p1, newmat p2)
+newmat diff0 (newmat p1, newmat p2)
 {
   newmat tmp(p1.n_rows, p1.n_cols);
   for (int i=0;i<p1.n_rows;i++)
@@ -471,28 +613,39 @@ newmat diff (newmat p1, newmat p2)
 	}
 	return tmp;
 }
-newmat piecewisemult (newmat p1, newmat p2)
+newmat matmult0 (newmat p1, newmat p2)
 {
-  newmat tmp(p1.n_rows, p1.n_cols);
-  for (int i=0;i<p1.n_rows;i++)
-	 {
-        for (int j=0;j<p1.n_cols;j++)
-		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] * p2.ptr[i*p1.n_cols+j];
-	}
-	return tmp;
-}
-newmat matmult (newmat p1, newmat p2)
-{
-  newmat tmp(p1.n_rows, p2.n_cols);
   if (p1.n_cols == p2.n_rows)
   {
-     for (int i=0;i<p1.n_rows;i++)
-	 {
-        for (int j=0;j<p1.n_cols;j++)
-		   tmp.ptr[i*p1.n_cols+j]=p1.ptr[i*p1.n_cols+j] * p2.ptr[i*p1.n_cols+j];
-	 }
+    newmat tmp(p1.n_rows, p2.n_cols);
+
+/*
+    for(i = 0; i < r1; ++i)
+        for(j = 0; j < c2; ++j)
+            for(k = 0; k < c1; ++k) // c1==r2
+            {
+                mult2[i*c2+j] += ap[i*c1+k] * bp[k*c2+j];
+            }
+*/
+
+
+
+    if (p1.n_cols == p2.n_rows)
+    {
+       for (int i=0;i<p1.n_rows;i++)
+          for (int j=0;j<p2.n_cols;j++)
+              for (int k=0;k<p1.n_cols;k++)
+		   tmp.ptr[i*p2.n_cols+j]=p1.ptr[i*p1.n_cols+k] * p2.ptr[k*p2.n_cols+j];
+    }
+    return tmp;
   }
-  return tmp;
+  else
+  {
+      cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols <<"] by p2["  << p2.n_rows << "," << p2.n_cols <<"]" << endl;
+      exit(1);
+  }
+  newmat dumy;
+  return dumy;
 }
 newmat mult (newmat p1, double p2)
 {
@@ -527,14 +680,19 @@ newmat matadd (newmat p1, newmat p2)
 int backprop(newmat & tgt, int y0)
 {
 
-     newmat final = actuation[OutputLayer];
-     final.n_cols--;
-     newmat tgt0 = tgt;
      //tgt0.insert_cols(nodes[OutputLayer], 1);
-     double err = accu(piecewisemult(diff(tgt , final) , diff(tgt , final))) *0.5;
+     //  double err = accu((tgt - final) % (tgt - final)) *0.5;
+     double err=0;
+     for (int i=0;i<tgt.n_rows;i++)
+        for (int j=0;j<tgt.n_cols;j++)
+        {
+           err += (tgt.ptr[i*tgt.n_cols+j] - actuation[OutputLayer].ptr[i*tgt.n_cols+j])*(tgt.ptr[i*tgt.n_cols+j] - actuation[OutputLayer].ptr[i*tgt.n_cols+j]);
+        }
+     err *= 0.5; 
+     
      if (abs(err) < EPSILON)
      {
-          int val = tgt0.index_max_row(0,0,9);
+          int val = tgt.index_max_row(0,0,9);
 #ifdef SAMPLEFREQ
           if ((y0 + 1) % SAMPLEFREQ == 0)
                cout << "---------------------------------- BACK PROPAGATION  sample=" <<
@@ -550,19 +708,18 @@ int backprop(newmat & tgt, int y0)
           cout << "------------------------------------ BACK PROPAGATION sample=" <<
           y0 + 1 << endl << flush;
 #endif
-     ftick[OutputLayer] = add( mult(actuation[OutputLayer], -1.0)  , 1.0);
-     ftick[OutputLayer] =
-          piecewisemult(ftick[OutputLayer] , actuation[OutputLayer]);	// element wise multiply
-     deltafn[OutputLayer] = piecewisemult(diff(tgt0 , actuation[OutputLayer]) , ftick[OutputLayer]);
+     ftick[OutputLayer].set_mult1_add2(actuation[OutputLayer], -1.0  , 1.0);                            //  ftick[OutputLayer] = -actuation[OutputLayer] + 1;
+     ftick[OutputLayer].piecewisemult( actuation[OutputLayer]);	// element wise multiply                //  ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);      
+     deltafn[OutputLayer].set_diff2_piecewisemult3(tgt , actuation[OutputLayer] , ftick[OutputLayer]);  //  deltafn[OutputLayer] = (tgt0 - actuation[OutputLayer]) % (ftick[OutputLayer]);
 
      for (int i = OutputLayer - 1; i >= 0; i--)
      {
-          weight_updates[i] =  matmult(deltafn[i + 1], actuation[i]);
-          new_layer_weights[i]  = matadd( matmult(layer_weights[i], weight_updates[i]),  mult(weight_updates[i], eta) );
-          ftick[i] = add(mult(actuation[i] ,(-1.0)) , 1.0);
-          ftick[i] = piecewisemult(ftick[i] , actuation[i]);	// element wise multiply
-          deltafn[i] = matmult(deltafn[i + 1] ,layer_weights[i]);
-          deltafn[i] = piecewisemult(deltafn[i] , ftick[i]);
+          weight_updates[i].set_matmult(deltafn[i + 1].transpose(), actuation[i]);            // weight_updates[i] = deltafn[i + 1].t() *actuation[i];
+          new_layer_weights[i].set_mult1_add2( weight_updates[i], eta, layer_weights[i] );// new_layer_weights[i] = layer_weights[i] + (eta *weight_updates[i]);
+          ftick[i].set_mult1_add2(actuation[i] ,-1.0 , 1.0);                              //  ftick[i] = -actuation[i] + 1;
+          ftick[i].piecewisemult( actuation[i]);	// element wise multiply          //  ftick[i] = ftick[i] % (actuation[i]); 
+          deltafn[i].set_matmult(deltafn[i + 1] ,layer_weights[i]);                       // deltafn[i] = deltafn[i + 1] *layer_weights[i];
+          deltafn[i].piecewisemult(ftick[i]);                                             //  deltafn[i] = deltafn[i] % ftick[i];
      }
      for (int i = 0; i < OutputLayer; i++)
      {
@@ -651,14 +808,15 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
 #ifdef SAMPLEFREQ
                     if ((y + 1) % SAMPLEFREQ == 0)
                          cout << "Netin serial (" << netin[i].n_rows << "," << netin[i].n_cols <<
-                         ")= " << netin[i].prtstr("NetIn Serial") << endl << flush;
+                         ")= " << netin[i].prtstr() << endl << flush;
 #endif
 #else
-                   PreMatMul(actuation[i], layer_weights[i], netin[i]);
+                   newmat a= layer_weights[i].transpose();
+                   PreMatMul(actuation[i], a, netin[i], actuation[i].n_cols);
 
 #ifdef SAMPLEFREQ
                          cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
-                         ")= " << netin[i].prtstr("Net In Parallel") << endl << flush;
+                         ")= " << netin[i].prtstr() << endl << flush;
 #endif
 
 #endif
@@ -668,10 +826,10 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                if ((y + 1) % SAMPLEFREQ == 0)
                {
                     std::cout << "Final output : " << endl << std::setw(7) << fixed <<
-                         showpoint << actuation[OutputLayer].prtstr("Final Out") <<
+                         showpoint << actuation[OutputLayer].prtstr() <<
                          " Sample: " << y + 1 << std::endl << flush;
                     std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                         showpoint << tgt.prtstr("Tgt3") << " Sample: " << y + 1 <<
+                         showpoint << tgt.prtstr() << " Sample: " << y + 1 <<
                          std::endl << flush;
                }
 #endif
@@ -685,7 +843,7 @@ void forward_feed(unsigned char* &imgdata, unsigned char* &labdata, bool train,
                     if ((y + 1) % SAMPLEFREQ == 0)
                     {
                          std::cout << "Train output : " << endl << std::setw(7) << fixed <<
-                              showpoint << actuation[OutputLayer].prtstr("") <<
+                              showpoint << actuation[OutputLayer].prtstr() <<
                               " Sample: " << y + 1 << std::endl << flush;
                         	// Below just figures out the order in which to print the "A"ctal
                         	// result and "O"bjective result
@@ -1091,7 +1249,7 @@ int main(int argc, char *argv[])
                // applied after backprop. These maybe consolidated later
                newmat tmpwgt3((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                for (int p=0;p<(nodes[i + 1] + bias_field)*( nodes[i] + bias_field);p++)
-                  tmpwgt3.ptr[p] = rand()/RAND_MAX;
+                  tmpwgt3.ptr[p] = (double) rand()/(double) RAND_MAX;
                newmat tmpwgt30((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                newmat tmpwgt300((nodes[i + 1] + bias_field),( nodes[i] + bias_field));
                // create an array of three matrices (weights for forward prop)
@@ -1119,13 +1277,10 @@ int main(int argc, char *argv[])
 #endif
 
 #ifndef SERIAL_ONLY
- cout << "CudaMalloc1" << endl << flush;
-     checkError(cudaMalloc(&ActuationDevice, max_vec* sizeof(double)));
-	 cout << "CudaMalloc2" << endl << flush;
-     checkError(cudaMalloc(&NetinDevice, max_vec* sizeof(double)));
-	 cout << "CudaMalloc3" << endl << flush;
-     checkError(cudaMalloc(&LayerWeightsDevice, max_mat* sizeof(double)));
-	 cout << "CudaMalloc4" << endl << flush;
+    checkError(cudaMalloc((void **)&deviceA, max_mat*sizeof(double)));
+    checkError(cudaMalloc((void **)&deviceB, max_mat*sizeof(double)));
+    checkError(cudaMalloc((void **)&deviceC, max_mat*sizeof(double)));
+
 #ifdef __CUDA_ARCH__
      cout << "Built for CUDA ARCH == " << __CUDA_ARCH__ << endl;
 #endif
@@ -1219,9 +1374,9 @@ int main(int argc, char *argv[])
 
 
 #ifndef SERIAL_ONLY
-     checkError(cudaFree(LayerWeightsDevice));
-     checkError(cudaFree(ActuationDevice));
-     checkError(cudaFree(NetinDevice));
+     checkError(cudaFree(deviceA));
+     checkError(cudaFree(deviceB));
+     checkError(cudaFree(deviceC));
 
      checkError(cudaEventDestroy(start));
      checkError(cudaEventDestroy(stop));
