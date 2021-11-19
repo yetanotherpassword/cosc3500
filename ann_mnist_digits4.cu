@@ -72,7 +72,7 @@ std::chrono::microseconds Call_MaxTime = std::chrono::microseconds::min();
 std::chrono::microseconds Call_MinTime = std::chrono::microseconds::max();
 std::chrono::microseconds Avg_Time;
 int avgcnt = 0;
-char ss[600000];
+char ss[60000000];
 
 #ifndef SERIAL_ONLY
 double* LayerWeightsDevice;
@@ -110,15 +110,57 @@ __global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols
     if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y) * CCols) + (blockIdx.x * blockDim.x) + threadIdx.x] = CValue;
 }
 
-__global__ void TransposeMat(double* A, double* C, int ARows, int ACols) {
+__global__ void TransposeMat0(double* A, double* C, int ARows, int ACols) {
 
     int Row = blockIdx.y * TILE_DIM + threadIdx.y;
     int Col = blockIdx.x * TILE_DIM + threadIdx.x;
 
+//    for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
+        for (int n = 0; n < TILE_DIM; ++n)
     if (Row < ARows && Col < ACols)
-        C[Col * ARows + Row] = A[Row * ACols + Col];
+        C[Col * ARows + (Row*n)] = A[Row * ACols + Col*n];
+
 
 }
+__global__ void  TransposeMat1(double *idata, double * odata,
+int height , int width) //, int nreps)
+{
+   unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
+   unsigned int yIndex = blockDim.y * blockIdx.y + threadIdx.y;
+   
+   if (xIndex < width && yIndex < height)
+   {
+       unsigned int index_in  = xIndex + width * yIndex;
+       unsigned int index_out = yIndex + height * xIndex;
+       odata[index_out] = idata[index_in]; 
+   }
+}
+
+__global__ void TransposeMat(double *idata, double *odata, int height, int width)
+{
+	__shared__ double block[TILE_DIM][TILE_DIM+1];
+	
+	// read the matrix tile into shared memory
+	unsigned int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
+	unsigned int yIndex = blockIdx.y * TILE_DIM + threadIdx.y;
+	if((xIndex < width) && (yIndex < height))
+	{
+		unsigned int index_in = yIndex * width + xIndex;
+		block[threadIdx.y][threadIdx.x] = idata[index_in];
+	}
+
+	__syncthreads();
+
+	// write the transposed matrix tile to global memory
+	xIndex = blockIdx.y * TILE_DIM + threadIdx.x;
+	yIndex = blockIdx.x * TILE_DIM + threadIdx.y;
+	if((xIndex < height) && (yIndex < width))
+	{
+		unsigned int index_out = yIndex * height + xIndex;
+		odata[index_out] = block[threadIdx.x][threadIdx.y];
+	}
+}
+
 __global__ void MatMultMatEleWise(double* A, double* B, double* C)
 {
     int i = threadIdx.x;
@@ -196,8 +238,10 @@ public:
 #else
             int onedLen = n_rows * n_cols;
             cudaMemcpy(deviceA, tmp.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+   dim3 grid(tmp.n_cols*tmp.n_rows/ TILE_DIM, tmp.n_cols*tmp.n_rows/ TILE_DIM, 1);
+    dim3 threads(TILE_DIM, TILE_DIM, 1);
 
-            TransposeMat <<< 1, onedLen >>> (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
+            TransposeMat <<< grid, threads >>> (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
 
 
             checkError(cudaDeviceSynchronize());
@@ -1273,6 +1317,27 @@ void save_weights(string hdr)
 
 int main()
 {
+newmat a(4,3);
+newmat b(3,5);
+newmat c(40,850);
+newmat t(850,40);
+
+    checkError(cudaMalloc((void**)&deviceA, 1000000* sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceB, 1000000* sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceC, 1000000* sizeof(double)));
+
+for (int i=0;i<c.n_rows;i++)
+   for (int j=0;j<c.n_cols;j++)
+       c.ptr[i*c.n_cols+j]=i*2+j*3;
+cout << "C=" << endl;
+output(c);
+
+t.set_transpose(c);
+
+cout << "T=" << endl;
+output(t);
+
+exit (1);
 
     size_t available, total;
     cudaMemGetInfo(&available, &total);
