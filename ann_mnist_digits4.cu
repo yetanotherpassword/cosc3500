@@ -1,4 +1,10 @@
 #include <iomanip>
+#ifdef USE_CUBLAS
+#include <cstdlib>
+#include <ctime>
+#include <cublas_v2.h>
+#include <curand.h>
+#endif
 #include <cmath>
 #include <chrono>
 #ifdef WANT_TO_LOAD_WEIGHTS
@@ -19,6 +25,8 @@
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 #define DEFAULT_HIDDEN 30
+#define DEFAULT_HIDDEN1 500
+#define DEFAULT_HIDDEN2 300
 #define ETA_DEFAULT 0.5f
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
@@ -27,8 +35,24 @@
 
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
-#define SAMPLEFREQ 1
-//#undef SAMPLEFREQ
+#define SAMPLEFREQ 100
+#undef SAMPLEFREQ
+#ifdef USE_CUBLAS
+cublasHandle_t handle;
+void gpu_blas_mmul(const double *A, const double *B, double *C, const int m, const int k, const int n) {
+	int lda=m,ldb=k,ldc=m;
+	const double alf = 1;
+	const double bet = 0;
+	const double *alpha = &alf;
+	const double *beta = &bet;
+
+
+	// Do the actual multiplication
+	cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
+
+}
+#endif
+
 
 
 
@@ -110,31 +134,6 @@ __global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols
     if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y) * CCols) + (blockIdx.x * blockDim.x) + threadIdx.x] = CValue;
 }
 
-__global__ void TransposeMat0(double* A, double* C, int ARows, int ACols) {
-
-    int Row = blockIdx.y * TILE_DIM + threadIdx.y;
-    int Col = blockIdx.x * TILE_DIM + threadIdx.x;
-
-//    for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
-        for (int n = 0; n < TILE_DIM; ++n)
-    if (Row < ARows && Col < ACols)
-        C[Col * ARows + (Row*n)] = A[Row * ACols + Col*n];
-
-
-}
-__global__ void  TransposeMat1(double *idata, double * odata,
-int height , int width) //, int nreps)
-{
-   unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
-   unsigned int yIndex = blockDim.y * blockIdx.y + threadIdx.y;
-   
-   if (xIndex < width && yIndex < height)
-   {
-       unsigned int index_in  = xIndex + width * yIndex;
-       unsigned int index_out = yIndex + height * xIndex;
-       odata[index_out] = idata[index_in]; 
-   }
-}
 
 __global__ void TransposeMat(double *idata, double *odata, int height, int width)
 {
@@ -185,6 +184,13 @@ __global__ void MatAddScalar(double scalar, double* C)
     int i = threadIdx.x;
     C[i] = C[i] + scalar;
 }
+
+__global__ void MatDivScalar(double scalar, double* C)
+{
+    int i = threadIdx.x;
+    C[i] = C[i] / scalar;
+}
+
 
 __global__ void MatMultScalar(double scalar, double* C)
 {
@@ -297,6 +303,25 @@ public:
         cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 #endif
     };
+    void div_scalar(double d)
+    {
+
+#ifdef SERIAL_ONLY
+for (int i = 0; i < n_rows; i++)
+    for (int j = 0; j < n_cols; j++)
+        ptr[i * n_cols + j] /= d; 
+#else
+        int onedLen = n_rows * n_cols;
+        cudaMemcpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+        
+        MatDivScalar <<< 1, onedLen >>> (d, deviceC);
+
+        checkError(cudaDeviceSynchronize());
+
+        cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
+#endif
+
+    };
     void mult_scalar(double d)
     {
 
@@ -348,7 +373,7 @@ for (int i = 0; i < n_rows; i++)
             for (int j = 0; j < n_cols; j++)
                 ptr[i * n_cols + j] = y1.ptr[i * n_cols + j];
 #else
-         memcpy(ptr, y1.ptr, n_cols * n_rows * sizeof(double));
+         memcpy(ptr, y1.ptr, y1.n_cols * y1.n_rows * sizeof(double));
 #endif
         mult_scalar(d1);
         add_mat(y2);
@@ -536,9 +561,11 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
     auto StartChronoTime = std::chrono::high_resolution_clock::now();
 
     auto StartCallTime = std::chrono::high_resolution_clock::now();
-
+#ifndef USE_CUBLAS
     MatMultMat << <dimGrid, dimBlock >> > (deviceA, deviceB, deviceC, ARows, ACols, BRows, BCols, CRows, CCols);
-
+#else
+    gpu_blas_mmul(deviceA, deviceB, deviceC, ARows, ACols, BRows);
+#endif
     checkError(cudaDeviceSynchronize());
 
 
@@ -553,21 +580,15 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
         Call_MinTime = TotalCallTime;
 
 
-    cudaMemcpy(hostC, deviceC, DIMX * DIMZ * sizeof(double), cudaMemcpyDeviceToHost);
     if (norm != 1)
     {
-        for (int i = 0; i < c.n_rows; i++)
-        {
-            for (int j = 0; j < c.n_cols; j++)
-            {
-                hostC[i * c.n_cols + j] /= (double)norm;
-                cout << hostC[i * c.n_cols + j] << " ";
-            }
-            cout << endl;
-        }
+        MatDivScalar <<< 1, DIMX * DIMZ>>> ((double)norm, deviceC);
+
+        checkError(cudaDeviceSynchronize());
+
     }
 
-    memcpy(c.memptr(), hostC, DIMX * DIMZ * sizeof(double));
+    cudaMemcpy(c.memptr(), deviceC, DIMX * DIMZ * sizeof(double), cudaMemcpyDeviceToHost);
 
 }
 #endif
@@ -806,8 +827,9 @@ void output(rowvec t)
      cout << t << endl;
 }
 */
-void output(newmat t)
+void output(newmat t, string g="")
 {
+    cout << g << endl;
     cout << t.prtstr();
 }
 
@@ -928,18 +950,28 @@ int backprop(int y0)
         y0 + 1 << endl << flush;
 #endif
     ftick[OutputLayer].set_mult1_add2(actuation[OutputLayer], -1.0, 1.0);                            //  ftick[OutputLayer] = -actuation[OutputLayer] + 1;
+//output( ftick[OutputLayer], " ftick[OutputLayer] 1");
     ftick[OutputLayer].piecewisemult(actuation[OutputLayer]);	// element wise multiply                //  ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);      
+//output( ftick[OutputLayer], " ftick[OutputLayer] 2");
     deltafn[OutputLayer].set_diff2_piecewisemult3(tgt, actuation[OutputLayer], ftick[OutputLayer]);  //  deltafn[OutputLayer] = (tgt0 - actuation[OutputLayer]) % (ftick[OutputLayer]);
+//output( deltafn[OutputLayer], " deltafn[OutputLayer] ");
 
     for (int i = OutputLayer - 1; i >= 0; i--)
     {
         deltafn_t[i + 1].set_transpose(deltafn[i + 1]);
+//output( deltafn_t[i + 1], " deltafn_t[i + 1]");
         weight_updates[i].set_matmult(deltafn_t[i + 1], actuation[i]);            // weight_updates[i] = deltafn[i + 1].t() *actuation[i];
+//output( weight_updates[i], "weight_updates[i]");
         new_layer_weights[i].set_mult1_add2(weight_updates[i], eta, layer_weights[i]);// new_layer_weights[i] = layer_weights[i] + (eta *weight_updates[i]);
+//output( new_layer_weights[i], "new_layer_weights[i]");
         ftick[i].set_mult1_add2(actuation[i], -1.0, 1.0);                              //  ftick[i] = -actuation[i] + 1;
+//output( ftick[i], "ftick[i]");
         ftick[i].piecewisemult(actuation[i]);	// element wise multiply          //  ftick[i] = ftick[i] % (actuation[i]); 
+//output( ftick[i], "ftick[i]2");
         deltafn[i].set_matmult(deltafn[i + 1], layer_weights[i]);                       // deltafn[i] = deltafn[i + 1] *layer_weights[i];
+//output( deltafn[i], "deltafn[i]1");
         deltafn[i].piecewisemult(ftick[i]);                                             //  deltafn[i] = deltafn[i] % ftick[i];
+//output( deltafn[i], "deltafn[i]2");
     }
     for (int i = 0; i < OutputLayer; i++)
     {
@@ -1317,28 +1349,23 @@ void save_weights(string hdr)
 
 int main()
 {
+#if 0
 newmat a(4,3);
-newmat b(3,5);
-newmat c(40,850);
-newmat t(850,40);
+for (int i =0;i<a.n_rows;i++)
+   for (int j=0;j<a.n_cols;j++)
+     a.ptr[i*a.n_cols+j] = i+j;
 
-    checkError(cudaMalloc((void**)&deviceA, 1000000* sizeof(double)));
-    checkError(cudaMalloc((void**)&deviceB, 1000000* sizeof(double)));
-    checkError(cudaMalloc((void**)&deviceC, 1000000* sizeof(double)));
+output(a);
+cout << " And div by 10.0 we get:"<<endl;
+a.div_scalar(10.0);
 
-for (int i=0;i<c.n_rows;i++)
-   for (int j=0;j<c.n_cols;j++)
-       c.ptr[i*c.n_cols+j]=i*2+j*3;
-cout << "C=" << endl;
-output(c);
-
-t.set_transpose(c);
-
-cout << "T=" << endl;
-output(t);
-
-exit (1);
-
+output(a);
+exit(1);
+#endif
+#ifdef USE_CUBLAS
+	// Create a handle for CUBLAS
+	cublasCreate(&handle);
+#endif
     size_t available, total;
     cudaMemGetInfo(&available, &total);
     cout << "avail=" << available << " total=" << total << endl;
@@ -1371,11 +1398,12 @@ exit (1);
     for (int i = 0; i < err_summary.n_cols; i++)
         err_summary.ptr[i] = -1.0;
    
-        NumberOfLayers = 3;
+        NumberOfLayers = 4;
         nodes = new unsigned int[NumberOfLayers];
         nodes[0] = INPUT_LINES;
-        nodes[1] = DEFAULT_HIDDEN;
-        nodes[2] = OUTPUT_LINES;
+        nodes[1] = DEFAULT_HIDDEN1;
+        nodes[2] = DEFAULT_HIDDEN2;
+        nodes[3] = OUTPUT_LINES;
         eta = ETA_DEFAULT;
         cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " <<
             nodes[2] << "\" " << endl << flush;
@@ -1579,9 +1607,12 @@ exit (1);
 
     checkError(cudaEventDestroy(start));
     checkError(cudaEventDestroy(stop));
+#ifdef USE_CUBLAS
+	// Destroy the handle
+	cublasDestroy(handle);
+#endif
 #endif
 
 
 }
-
 
