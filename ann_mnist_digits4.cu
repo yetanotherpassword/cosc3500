@@ -30,13 +30,13 @@
 #define ETA_DEFAULT 0.5f
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 6
-#define TESTINGSAMPLES 10000
+#define TESTINGSAMPLES 10
 #define EPOCHS 1
 
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
-#define SAMPLEFREQ 100
-#undef SAMPLEFREQ
+#define SAMPLEFREQ 1
+//#undef SAMPLEFREQ
 #ifdef USE_CUBLAS
 cublasHandle_t handle;
 void gpu_blas_mmul(const double *A, const double *B, double *C, const int m, const int k, const int n) {
@@ -90,11 +90,11 @@ using namespace std;
 float mintime = std::numeric_limits<float>::max();
 float maxtime = std::numeric_limits<float>::min();
 
-std::chrono::microseconds Process_MaxTime = std::chrono::microseconds::min();
-std::chrono::microseconds Process_MinTime = std::chrono::microseconds::max();
-std::chrono::microseconds Call_MaxTime = std::chrono::microseconds::min();
-std::chrono::microseconds Call_MinTime = std::chrono::microseconds::max();
-std::chrono::microseconds Avg_Time;
+std::chrono::nanoseconds Process_MaxTime = std::chrono::nanoseconds::min();
+std::chrono::nanoseconds Process_MinTime = std::chrono::nanoseconds::max();
+std::chrono::nanoseconds Call_MaxTime = std::chrono::nanoseconds::min();
+std::chrono::nanoseconds Call_MinTime = std::chrono::nanoseconds::max();
+std::chrono::nanoseconds Avg_Time;
 int avgcnt = 0;
 char ss[60000000];
 
@@ -167,10 +167,15 @@ __global__ void MatMultMatEleWise(double* A, double* B, double* C)
 }
 
 
-__global__ void MatSubMat(double* A, double* B, double* C)
+__global__ void MatSubMat(double* A, double* B, double* C, int n_rows, int n_cols)
 {
-    int i = threadIdx.x;
-    C[i] = A[i] - B[i];
+    int Row = blockIdx.y * TILE_DIM + threadIdx.y;
+    int Col = blockIdx.x * TILE_DIM + threadIdx.x;
+    if((Col < n_cols) && (Row < n_rows))
+    {
+          int i=Row*n_cols+Col;
+          C[i] = A[i] - B[i];
+    }
 }
 
 __global__ void MatAddMat(double* A, double* B, double* C)
@@ -278,7 +283,7 @@ public:
         cudaMemcpy(deviceA, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(deviceB, m1.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
 
-        MatAddMat <<< 1, onedLen >>> (deviceA, deviceB, deviceC);
+        MatAddMat <<< onedLen, 1 >>> (deviceA, deviceB, deviceC);
 
         checkError(cudaDeviceSynchronize());
 
@@ -385,7 +390,7 @@ for (int i = 0; i < n_rows; i++)
         {
             if (n_rows != p1.n_rows || n_cols != p2.n_cols)
             {
-                cout << "Resultant matrix wont hold result, fixing by realloc in matlmult" << endl;
+                cout << "Resultant matrix wont hold result, fixing by realloc in set_matmult" << endl;
                 free_ele();
                 n_rows = p1.n_rows;
                 n_cols = p2.n_cols;
@@ -442,8 +447,10 @@ for (int i = 0; i < n_rows; i++)
 #endif
     };
 
-    void set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
+    int64_t set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
     {
+    auto StartTestTime = std::chrono::high_resolution_clock::now();
+
 
         if (n_rows != p1.n_rows || n_rows != p2.n_rows || n_cols != p1.n_cols || n_cols != p2.n_cols)
         {
@@ -460,8 +467,13 @@ for (int i = 0; i < n_rows; i++)
         int onedLen = n_rows * n_cols;
         cudaMemcpy(deviceA, p1.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
         cudaMemcpy(deviceB, p2.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+    dim3 dimBlock(TILE_DIM, TILE_DIM, 1);
+    dim3 dimGrid;
 
-        MatSubMat <<< 1, onedLen >>> (deviceA, deviceB, deviceC);
+    dimGrid.x = (n_cols + dimBlock.x - 1) / dimBlock.x;
+    dimGrid.y = (n_rows + dimBlock.y - 1) / dimBlock.y;
+
+        MatSubMat <<< dimGrid, dimBlock >>> (deviceA, deviceB, deviceC, n_rows, n_cols);
 
         checkError(cudaDeviceSynchronize());
 
@@ -469,6 +481,10 @@ for (int i = 0; i < n_rows; i++)
 
 #endif
         piecewisemult(p3);
+    auto EndTestTime = std::chrono::high_resolution_clock::now();
+
+    auto TestTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTestTime - StartTestTime);
+    return TestTime.count();
     };
 
     char* prtstr()
@@ -570,7 +586,7 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
 
 
     auto EndCallTime = std::chrono::high_resolution_clock::now();
-    auto TotalCallTime = std::chrono::duration_cast<std::chrono::microseconds> (EndCallTime - StartCallTime);
+    auto TotalCallTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndCallTime - StartCallTime);
 
 
     if (TotalCallTime > Call_MaxTime)
@@ -1042,7 +1058,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                     actuation[i].ptr, actuation[i].n_rows,
                     layer_weights_t[i].ptr, layer_weights_t[i].n_rows, layer_weights_t[i].n_cols);
                 auto EndCallTime = std::chrono::high_resolution_clock::now();
-                auto TotalCallTime = std::chrono::duration_cast<std::chrono::microseconds>
+                auto TotalCallTime = std::chrono::duration_cast<std::chrono::nanoseconds>
                     (EndCallTime - StartCallTime);
 
                 if (TotalCallTime > Call_MaxTime)
@@ -1349,19 +1365,69 @@ void save_weights(string hdr)
 
 int main()
 {
-#if 0
+    size_t available, total;
+    cudaMemGetInfo(&available, &total);
+    int nDevices;
+
+    cudaGetDeviceCount(&nDevices);
+    cout << "avail=" << available << " total=" << total << " ndevices=" << nDevices <<endl;
+    for (int i = 0; i < nDevices; i++) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        printf("Device Number: %d\n", i);
+        printf("  Device name: %s\n", prop.name);
+        printf("  Memory Clock Rate (KHz): %d\n",
+            prop.memoryClockRate);
+        printf("  Memory Bus Width (bits): %d\n",
+            prop.memoryBusWidth);
+        printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+            2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
+    }
+    checkError(cudaMalloc((void**)&deviceA, 100000* sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceB, 100000* sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceC, 100000* sizeof(double)));
 newmat a(4,3);
+newmat b(4,3);
+newmat c(4,3);
+newmat d(4,3);
 for (int i =0;i<a.n_rows;i++)
    for (int j=0;j<a.n_cols;j++)
+   {
      a.ptr[i*a.n_cols+j] = i+j;
+     
+   }
+for (int i =0;i<b.n_rows;i++)
+   for (int j=0;j<b.n_cols;j++)
+   {
+     b.ptr[i*b.n_cols+j] = i*2+j*2;
+     c.ptr[i*b.n_cols+j] = i*(3+j+1); 
+   }
 
 output(a);
-cout << " And div by 10.0 we get:"<<endl;
-a.div_scalar(10.0);
-
+a.add_scalar(5);
 output(a);
+//output(c);
+//int64_t q=d.set_diff2_piecewisemult3(a,b,c);
+//output(d);
+//cout << "in " << q << " nanosecs"<<endl;
+//output(c);
+//output(b);
 exit(1);
-#endif
+/*__global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols) {
+__global__ void TransposeMat(double *idata, double *odata, int height, int width)
+__global__ void MatMultMatEleWise(double* A, double* B, double* C)
+__global__ void MatSubMat(double* A, double* B, double* C)
+__global__ void MatAddMat(double* A, double* B, double* C)
+__global__ void MatAddScalar(double scalar, double* C)
+__global__ void MatDivScalar(double scalar, double* C)
+__global__ void MatMultScalar(double scalar, double* C)
+    void set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
+    void free_ele()
+    void zeroize()
+*/
+}
+int main2()
+{
 #ifdef USE_CUBLAS
 	// Create a handle for CUBLAS
 	cublasCreate(&handle);
@@ -1546,9 +1612,9 @@ exit(1);
 
     cout << "Testing complete" << endl << flush;
 
-    auto TotalTime = std::chrono::duration_cast<std::chrono::microseconds> (EndTestTime - StartTime);
-    auto TrainTime = std::chrono::duration_cast<std::chrono::microseconds> (EndTrainTime - StartTrainTime);
-    auto TestTime = std::chrono::duration_cast<std::chrono::microseconds> (EndTestTime - StartTestTime);
+    auto TotalTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTestTime - StartTime);
+    auto TrainTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTrainTime - StartTrainTime);
+    auto TestTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTestTime - StartTestTime);
 
     cout << "Total Time       : " << std::setw(12) << TotalTime.count() << " us" <<
         endl << flush;
@@ -1600,7 +1666,7 @@ exit(1);
     cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() / 1000000 << " s" << endl;
     cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() / 60000000 << " min" << endl;
     auto EndChronoTime = std::chrono::high_resolution_clock::now();
-    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::microseconds> (EndChronoTime - StartChronoTime);
+    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndChronoTime - StartChronoTime);
 
     cout << "Time for  Total Program : " << TotalChronoTime.count() << " us " << endl;
 
