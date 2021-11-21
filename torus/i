@@ -1,0 +1,27 @@
+http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/
+
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/A
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/B
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/I
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/IR
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/R
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/RI
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/getMatrix
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/getMatrix.c
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/makefile
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/matrix.c
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/matrix.h
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/matrix.o
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mkIdentityMatrix
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mkIdentityMatrix.c
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mkRandomMatrix
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mkRandomMatrix.c
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mkZeroMatrix
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mkZeroMatrix.c
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mmlib.c
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mmlib.h
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/mmlib.o
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/setup-o
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/test_mpi_run
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/torus
+wget http://turing.une.edu.au/~cosc330/lectures/lecture_17/examples/torus.c

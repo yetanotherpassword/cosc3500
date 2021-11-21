@@ -1,0 +1,48 @@
+#!/usr/bin/perl
+my ( 
+     $nprocs,
+     $m, 
+     $blksize,
+     $yesORno,
+     $dim,
+     $diff
+     );
+do {
+    print "Enter the number of processes  (a perfect square): ";
+    $nprocs = <>;
+    chomp($nprocs);
+    $m = sqrt($nprocs);
+} while (($m * $m) != $nprocs);
+print "Enter the size of the blocks: ";
+$blksize = <>;
+chomp($blksize);
+$dim = $m * $blksize;
+print "You are going to multiply $dim by $dim matrices!\n" ;
+print "Do you want me to make the matrices? (y/n)\n";
+$yesORno = <>;
+chomp($yesORno);
+if($yesORno eq "y"){
+    `rm -f I R IR RI`;
+    `./mkRandomMatrix R $dim`;
+    print `ls -lh R`;
+    `./mkIdentityMatrix I $dim`;
+    print `ls -lh I`;
+    `./mkZeroMatrix IR $dim`;
+    print `ls -lh IR`;
+    `./mkZeroMatrix RI $dim`;
+    print `ls -lh RI`;
+} else {
+    print `ls -lh R`;
+    print `ls -lh I`;
+    print `ls -lh IR`;
+    print `ls -lh RI`;
+}
+`mpirun -np $nprocs torus I R IR $m  $blksize`;
+`mpirun -np $nprocs torus R I RI $m  $blksize`;
+$diff = `diff IR RI`;
+if($diff){
+    print "IR and RI differ\n";
+} else {
+    print "IR and RI agree\n";
+}
+
