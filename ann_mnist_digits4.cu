@@ -24,12 +24,12 @@
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
-#define DEFAULT_HIDDEN 30
+#define DEFAULT_HIDDEN 300
 #define DEFAULT_HIDDEN1 500
 #define DEFAULT_HIDDEN2 300
 #define ETA_DEFAULT 0.5f
 #define EPSILON 1E-04
-#define TRAININGSAMPLES 60000
+#define TRAININGSAMPLES 6
 #define TESTINGSAMPLES 10000
 #define EPOCHS 1
 
@@ -780,7 +780,7 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
 }
 
 void load_an_image(int seq, unsigned char*& mptr, newmat& img, newmat& t,
-    unsigned char*& lp)
+    unsigned char*& lp, int e)
 {
     int start = (INPUT_LINES * seq) + IMAGE_OFFSET;
     double greyval = MAX_PIXEL_VAL;
@@ -797,7 +797,7 @@ void load_an_image(int seq, unsigned char*& mptr, newmat& img, newmat& t,
 #ifdef SAMPLEFREQ
     if ((seq + 1) % SAMPLEFREQ == 0)
     {
-        cout << "For sample :" << seq + 1 << endl << flush;
+        cout << "For sample :" << seq + 1 << " About to do " << e << " Epochs on" << endl << flush;
         print_an_image(&mptr[start], img_is_digit);
     }
 #endif
@@ -1026,7 +1026,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
             cout << " SAMPLE # " << y + 1 << endl << flush;
         }
 #endif
-        load_an_image(y, imgdata, actuation[0], tgt, labdata);
+        load_an_image(y, imgdata, actuation[0], tgt, labdata, epochs);
 
         int tgtval = tgt.index_max_row(0, 0, 9);
         for (int e = 0; e < epochs; e++)
@@ -1398,15 +1398,24 @@ exit(1);
     for (int i = 0; i < err_summary.n_cols; i++)
         err_summary.ptr[i] = -1.0;
    
-        NumberOfLayers = 4;
+        //NumberOfLayers = 4;
+        NumberOfLayers = 3;
         nodes = new unsigned int[NumberOfLayers];
         nodes[0] = INPUT_LINES;
         nodes[1] = DEFAULT_HIDDEN1;
-        nodes[2] = DEFAULT_HIDDEN2;
-        nodes[3] = OUTPUT_LINES;
+        nodes[2] = OUTPUT_LINES;
+        //nodes[1] = DEFAULT_HIDDEN1;
+        //nodes[2] = DEFAULT_HIDDEN2;
+        //nodes[3] = OUTPUT_LINES;
         eta = ETA_DEFAULT;
-        cout << "Using default setting of \"" << nodes[0] << " " << nodes[1] << " " <<
-            nodes[2] << "\" " << endl << flush;
+        cout << "Using default setting of \"";
+        for (int i = 0; i < NumberOfLayers; i++)
+        {
+            cout << nodes[i]; 
+            if (i < NumberOfLayers - 1)
+                cout << " "; 
+        }
+        cout << "\" " << endl << flush;
         cout << "And ETA=" << eta << endl << flush;;
     
 
