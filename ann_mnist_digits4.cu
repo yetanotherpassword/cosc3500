@@ -17,6 +17,8 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <map>
+#include <iterator>
 // Application Parameters
 #define DEFTHREADS 256
 #define INPUT_LINES 784
@@ -30,7 +32,7 @@
 #define ETA_DEFAULT 0.5f
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 6
-#define TESTINGSAMPLES 10
+#define TESTINGSAMPLES 1
 #define EPOCHS 1
 
 // How often to print samples, 1=All, 2=every second one, etc
@@ -92,10 +94,143 @@ float maxtime = std::numeric_limits<float>::min();
 
 std::chrono::nanoseconds Process_MaxTime = std::chrono::nanoseconds::min();
 std::chrono::nanoseconds Process_MinTime = std::chrono::nanoseconds::max();
-std::chrono::nanoseconds Call_MaxTime = std::chrono::nanoseconds::min();
-std::chrono::nanoseconds Call_MinTime = std::chrono::nanoseconds::max();
-std::chrono::nanoseconds Avg_Time;
-int avgcnt = 0;
+class time_measurement 
+{  
+   public:
+     std::chrono::nanoseconds Call_MaxTime;
+     std::chrono::nanoseconds Call_MinTime;
+     std::chrono::nanoseconds TotalCallTime;
+     std::chrono::_V2::system_clock::time_point StartCallTime;
+     std::chrono::_V2::system_clock::time_point EndCallTime;
+     std::chrono::nanoseconds Tot_Time;
+     int Tot_Cnt;
+     int depth;
+     bool in_measurement;
+     string name;
+     time_measurement(string n="")
+     {
+       depth=0;
+       in_measurement=false;
+       Call_MaxTime = std::chrono::nanoseconds::min();
+       Call_MinTime = std::chrono::nanoseconds::max();
+       Tot_Cnt =0;
+       Tot_Time = std::chrono::nanoseconds::zero();
+       name=n;
+     };
+     void start_measurement()
+     {
+        if (in_measurement)
+        {
+          depth++;
+        }
+        else
+        {
+          if (depth==0)
+          {
+            depth=1;
+            in_measurement = true;
+            StartCallTime = std::chrono::high_resolution_clock::now();
+          }
+          else
+          {
+             cout << "Error: in call sequence of Start Measurement" << endl;
+          }
+        }
+     };
+     void stop_measurement()
+     {
+          if (depth <= 0)
+          {
+             cout << "Error: in call sequence of Stop Measurement" << endl;
+          }
+          else
+          {
+             depth--;
+             if (depth == 0)
+             {
+                EndCallTime = std::chrono::high_resolution_clock::now();
+                TotalCallTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndCallTime - StartCallTime);
+
+                if (TotalCallTime > Call_MaxTime)
+                    Call_MaxTime = TotalCallTime;
+
+                if (TotalCallTime < Call_MinTime)
+                    Call_MinTime = TotalCallTime;
+         
+                Tot_Time += TotalCallTime;
+                Tot_Cnt++;
+             }
+          }
+     };
+     int64_t min_time()
+     {
+         return Call_MinTime.count();
+     };
+     int64_t max_time()
+     {
+         return Call_MaxTime.count();
+     };
+
+     int number_of_calls()
+     {
+         return Tot_Cnt;
+     };
+
+     int64_t accumulated_time()
+     {
+         return Tot_Time.count();
+     };
+
+     string avg_time()
+     {
+         string s;
+         if (Tot_Cnt == 0)
+         {
+             s="Never Called";
+             return s;
+         }
+         else
+         {
+             int64_t t=Tot_Time.count() / (int64_t) Tot_Cnt;
+             s=to_string(t);
+         } 
+         return s;
+     };
+
+     int64_t last_time()
+     {
+         return TotalCallTime.count();
+     };
+     string output_all_times(const string b)
+     {
+         stringstream s;
+         string s2=avg_time();
+         if (s2=="Never Called")
+         {
+            s << "For " << name << ":" << endl;
+            s << "   No measurements as wasnt called" << endl << flush;
+         }
+         else
+         {
+            string bt2;
+            if (b=="Parallel")
+                bt2="|Parallel|";
+            else
+                bt2="..Serial.."; 
+            string blank="                              ";
+            string filler=blank.substr(name.length());
+            s << "For " << name << bt2<<  filler << endl;
+            s << "   Min Time    : " << min_time() << " ns" << endl;
+            s << "   Max Time    : " << max_time() << " ns" << endl;
+            s << "   All Time    : " << accumulated_time() << " ns" << endl;
+            s << "   No of Calls : " << number_of_calls() << "        " << endl;
+            s << "   Avg Time    : " << s2 << " ns" << endl;
+            s << "   Last Time   : " << last_time() << " ns" << endl << flush;
+         }
+         return s.str();
+     };
+
+};
 char ss[60000000];
 
 #ifndef SERIAL_ONLY
@@ -110,6 +245,7 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm);
 
 #endif
 
+typedef std::map< std::string, time_measurement* > maptype;
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -204,17 +340,72 @@ __global__ void MatMultScalar(double scalar, double* C)
 }
 
 
-#endif
+#else
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// implementation of the matrix-vector multiply function
+void SerialMatrixVectorMultiply(double* Y, double* X, int r1, double* M, int m_nr, int m_nc, int norm)
+{
+    // Need to ensure Y vector passed has been zeroised
 
+
+    for (int i = 0; i < r1; ++i)
+    {
+        for (int j = 0; j < m_nc; ++j)
+        {
+            Y[i * m_nc + j] = 0;
+            for (int k = 0; k < m_nr; ++k) // c1==r2
+            {
+                Y[i * m_nc + j] += X[i * m_nr + k] * M[k * m_nc + j];
+                //                cout << "Y["<<i*m_nc+j<<"] += "<<X[i*m_nr+k] * M[k*m_nc+j] << endl;
+            }
+            Y[i * m_nc + j] =  Y[i * m_nc + j] / (double) norm;
+        }
+    }
+
+}
+#endif
 
 class newmat {
 public:
     double* ptr;
     int n_rows;
     int n_cols;
+    static time_measurement* timeptr;
+    static map< string, time_measurement* > *timers;
+      
+#ifdef SERIAL_ONLY
+    const string build_type = "Serial";
+#else
+    const string build_type = "Parallel";
+#endif
+         void create_new_time_meas(string s)
+         {
+               timeptr = new time_measurement(s);
+               (*timers)[s] = timeptr;
+         }
+    void init_timers()
+    {
+       if (timers==NULL)
+          timers= new  map< string, time_measurement* >;
+       if (timeptr==NULL)
+       {
+               create_new_time_meas("set_transpose");
+               create_new_time_meas("add_mat");
+               create_new_time_meas("add_scalar");
+               create_new_time_meas("div_scalar");
+               create_new_time_meas("mult_scalar");
+               create_new_time_meas("set_mult1_add2_scalars");
+               create_new_time_meas("set_mult1_add2_mat");
+               create_new_time_meas("set_matmult");
+               create_new_time_meas("piecewisemult");
+               create_new_time_meas("set_diff2_piecewisemult3");
+               create_new_time_meas("free_ele");
+               create_new_time_meas("zeroize");
+       }
+    }
     newmat(int r, int c, double* p)
     {
+        init_timers();
         n_rows = r;
         n_cols = c;
         ptr = new double[n_rows * n_cols];
@@ -228,18 +419,21 @@ public:
     };
     newmat()
     {
+        init_timers();
         n_rows = 0;
         n_cols = 0;
         ptr = NULL;
     };
     newmat(int r, int c)
     {
+        init_timers();
         n_rows = r;
         n_cols = c;
         ptr = new double[r * c];
     };
     void set_transpose(newmat tmp)
     {
+        (*timers)["set_transpose"]->start_measurement();
         if (n_rows == tmp.n_cols && n_cols == tmp.n_rows)
         {
 #ifdef SERIAL_ONLY
@@ -249,8 +443,8 @@ public:
 #else
             int onedLen = n_rows * n_cols;
             cudaMemcpy(deviceA, tmp.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-   dim3 grid(tmp.n_cols*tmp.n_rows/ TILE_DIM, tmp.n_cols*tmp.n_rows/ TILE_DIM, 1);
-    dim3 threads(TILE_DIM, TILE_DIM, 1);
+            dim3 grid(tmp.n_cols*tmp.n_rows/ TILE_DIM, tmp.n_cols*tmp.n_rows/ TILE_DIM, 1);
+            dim3 threads(TILE_DIM, TILE_DIM, 1);
 
             TransposeMat <<< grid, threads >>> (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
 
@@ -265,10 +459,12 @@ public:
             cout << "Cant transpose Matrix[" << tmp.n_rows << "," << tmp.n_cols << "] into given Matrix[" << n_rows << "," << n_cols << "]" << endl << flush;
             exit(1);
         }
+        (*timers)["set_transpose"]->stop_measurement();
     };
 
     void add_mat(newmat m1)
     {
+        (*timers)["add_mat"]->start_measurement();
         if (m1.n_rows != n_rows || m1.n_cols != n_cols)
         {
             cout << "Cant addmat m1[" << m1.n_rows << "," << m1.n_cols << "] with *this[" << n_rows << "," << n_cols << "]" << endl << flush;
@@ -289,9 +485,12 @@ public:
 
         cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 #endif
+        (*timers)["add_mat"]->stop_measurement();
     };
+
     void add_scalar(double d)
     {
+        (*timers)["add_scalar"]->start_measurement();
 
 #ifdef SERIAL_ONLY
  for (int i = 0; i < n_rows; i++)
@@ -307,14 +506,17 @@ public:
 
         cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 #endif
+        (*timers)["add_scalar"]->stop_measurement();
     };
+
     void div_scalar(double d)
     {
+        (*timers)["div_scalar"]->start_measurement();
 
 #ifdef SERIAL_ONLY
-for (int i = 0; i < n_rows; i++)
-    for (int j = 0; j < n_cols; j++)
-        ptr[i * n_cols + j] /= d; 
+        for (int i = 0; i < n_rows; i++)
+          for (int j = 0; j < n_cols; j++)
+             ptr[i * n_cols + j] /= d; 
 #else
         int onedLen = n_rows * n_cols;
         cudaMemcpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
@@ -326,14 +528,17 @@ for (int i = 0; i < n_rows; i++)
         cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 #endif
 
+        (*timers)["div_scalar"]->stop_measurement();
     };
+
     void mult_scalar(double d)
     {
+        (*timers)["mult_scalar"]->start_measurement();
 
 #ifdef SERIAL_ONLY
-for (int i = 0; i < n_rows; i++)
-    for (int j = 0; j < n_cols; j++)
-        ptr[i * n_cols + j] *= d; 
+       for (int i = 0; i < n_rows; i++)
+          for (int j = 0; j < n_cols; j++)
+             ptr[i * n_cols + j] *= d; 
 #else
         int onedLen = n_rows * n_cols;
         cudaMemcpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
@@ -344,11 +549,14 @@ for (int i = 0; i < n_rows; i++)
 
         cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 #endif
+        (*timers)["mult_scalar"]->stop_measurement();
 
     };
 
-    void set_mult1_add2(newmat y1, double d1, double d2)
+    void set_mult1_add2_scalars(newmat y1, double d1, double d2)
     {
+        (*timers)["set_mult1_add2_scalars"]->start_measurement();
+
         if (n_rows != y1.n_rows || n_cols != y1.n_cols)
         {
             cout << "Cant store y1[" << y1.n_rows << "," << y1.n_cols << " in *this[" << n_rows << "," << n_cols << "]" << endl;
@@ -365,9 +573,12 @@ for (int i = 0; i < n_rows; i++)
 
         mult_scalar(d1);
         add_scalar(d2);
+
+        (*timers)["set_mult1_add2_scalars"]->stop_measurement();
     };
-    void set_mult1_add2(newmat y1, double d1, newmat y2)
+    void set_mult1_add2_mat(newmat y1, double d1, newmat y2)
     {
+        (*timers)["set_mult1_add2_mat"]->start_measurement();
         if (n_rows != y1.n_rows || n_rows != y2.n_rows || n_cols != y1.n_cols || n_cols != y2.n_cols)
         {
             cout << "Cant add y1[" << y1.n_rows << "," << y1.n_cols << "] to y2[" << y2.n_rows << "," << y2.n_cols << "] and store in *this[" << n_rows << "," << n_cols << "]" << endl;
@@ -383,9 +594,11 @@ for (int i = 0; i < n_rows; i++)
         mult_scalar(d1);
         add_mat(y2);
 
+        (*timers)["set_mult1_add2_mat"]->stop_measurement();
     };
-    void set_matmult(newmat p1, newmat p2)
+    void set_matmult(newmat p1, newmat p2, int norm=1)
     {
+        (*timers)["set_matmult"]->start_measurement();
         if (p1.n_cols == p2.n_rows)
         {
             if (n_rows != p1.n_rows || n_cols != p2.n_cols)
@@ -398,6 +611,8 @@ for (int i = 0; i < n_rows; i++)
             }
    
 #ifdef SERIAL_ONLY
+            SerialMatrixVectorMultiply(ptr, p1.ptr, p1.n_rows, p2.ptr, p2.n_rows, p2.n_cols, norm);
+/*
             for (int i = 0; i < p1.n_rows; ++i)
                 for (int j = 0; j < p2.n_cols; ++j)
                 {
@@ -406,10 +621,11 @@ for (int i = 0; i < n_rows; i++)
                     {
                         ptr[i * p2.n_cols + j] += p1.ptr[i * p1.n_cols + k] * p2.ptr[k * p2.n_cols + j];
                     }
+                    ptr[i * p2.n_cols + j] = ptr[i * p2.n_cols + j] / (double) norm;
                 }
-               
+ */              
 #else
-             PreMatMul(p1, p2, *this, 1);
+             PreMatMul(p1, p2, *this, norm);
 #endif
         }
         else
@@ -417,10 +633,13 @@ for (int i = 0; i < n_rows; i++)
             cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols << "] by p2[" << p2.n_rows << "," << p2.n_cols << "]" << endl;
             exit(1);
         }
+
+        (*timers)["set_matmult"]->stop_measurement();
     };
 
     void piecewisemult(newmat p1)
     {
+        (*timers)["piecewisemult"]->start_measurement();
 
         if (p1.n_rows != n_rows || p1.n_cols != n_cols)
         {
@@ -445,12 +664,13 @@ for (int i = 0; i < n_rows; i++)
         cudaMemcpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
         
 #endif
+
+        (*timers)["piecewisemult"]->stop_measurement();
     };
 
-    int64_t set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
+    void set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
     {
-    auto StartTestTime = std::chrono::high_resolution_clock::now();
-
+        (*timers)["set_diff2_piecewisemult3"]->start_measurement();
 
         if (n_rows != p1.n_rows || n_rows != p2.n_rows || n_cols != p1.n_cols || n_cols != p2.n_cols)
         {
@@ -481,10 +701,8 @@ for (int i = 0; i < n_rows; i++)
 
 #endif
         piecewisemult(p3);
-    auto EndTestTime = std::chrono::high_resolution_clock::now();
 
-    auto TestTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTestTime - StartTestTime);
-    return TestTime.count();
+        (*timers)["set_diff2_piecewisemult3"]->stop_measurement();
     };
 
     char* prtstr()
@@ -507,11 +725,15 @@ for (int i = 0; i < n_rows; i++)
     };
     void free_ele()
     {
+        (*timers)["free_ele"]->start_measurement();
         if (ptr != NULL)
             delete[] ptr;
+
+        (*timers)["free_ele"]->stop_measurement();
     };
     void zeroize()
     {
+        (*timers)["zeroize"]->start_measurement();
 #ifdef SERIAL_ONLY
         for (int i = 0; i < n_rows; i++)
         {
@@ -521,11 +743,14 @@ for (int i = 0; i < n_rows; i++)
 #else
         memset(ptr, 0, n_cols * n_rows * sizeof(double));
 #endif
+        (*timers)["zeroize"]->stop_measurement();
     };
+
     double* memptr()
     {
         return ptr;
     };
+
     int index_max_row(int r, int start, int stop)
     {
         int idx = 0;
@@ -540,8 +765,24 @@ for (int i = 0; i < n_rows; i++)
                     }
         return idx;
     };
-
+    void output_all_procs(ostream & s)
+    {
+        int toplen=60;
+        for (maptype::iterator t_it = timers->begin(); t_it != timers->end(); t_it++)
+        {
+            string outp = (*timers)[t_it->first]->output_all_times(build_type);
+            int fill=toplen-outp.length();
+            s << outp;
+            for (int i=0;i<fill;i++)
+               s << " ";
+            s << endl;
+            
+        }
+    };
 };
+maptype* newmat::timers;
+
+time_measurement * newmat::timeptr=NULL;
 
 #ifndef SERIAL_ONLY
 void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
@@ -574,9 +815,7 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
     cudaMemcpy(deviceA, a.memptr(), DIMX * DIMY * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(deviceB, b.memptr(), DIMY * DIMZ * sizeof(double), cudaMemcpyHostToDevice);
 
-    auto StartChronoTime = std::chrono::high_resolution_clock::now();
 
-    auto StartCallTime = std::chrono::high_resolution_clock::now();
 #ifndef USE_CUBLAS
     MatMultMat << <dimGrid, dimBlock >> > (deviceA, deviceB, deviceC, ARows, ACols, BRows, BCols, CRows, CCols);
 #else
@@ -585,15 +824,6 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
     checkError(cudaDeviceSynchronize());
 
 
-    auto EndCallTime = std::chrono::high_resolution_clock::now();
-    auto TotalCallTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndCallTime - StartCallTime);
-
-
-    if (TotalCallTime > Call_MaxTime)
-        Call_MaxTime = TotalCallTime;
-
-    if (TotalCallTime < Call_MinTime)
-        Call_MinTime = TotalCallTime;
 
 
     if (norm != 1)
@@ -629,6 +859,7 @@ newmat tgt(1, OUTPUT_LINES + 1);
 
 ios init(NULL);
 stringstream confusion_matrix;
+stringstream time_output;
 newmat err_summary(1, OUTPUT_LINES);
 
 
@@ -642,35 +873,6 @@ int t = 0;
 int x = 0;
 #endif
 
-#ifdef SERIAL_ONLY
-string build_type = "Serial";
-#else
-string build_type = "Parallel";
-#endif
-
-
-
-
-// implementation of the matrix-vector multiply function
-void SerialMatrixVectorMultiply(double* Y, double* X, int r1, double* M, int m_nr, int m_nc)
-{
-    // Need to ensure Y vector passed has been zeroised
-
-
-    for (int i = 0; i < r1; ++i)
-    {
-        for (int j = 0; j < m_nc; ++j)
-        {
-            Y[i * m_nc + j] = 0;
-            for (int k = 0; k < m_nr; ++k) // c1==r2
-            {
-                Y[i * m_nc + j] += X[i * m_nr + k] * M[k * m_nc + j];
-                //                cout << "Y["<<i*m_nc+j<<"] += "<<X[i*m_nr+k] * M[k*m_nc+j] << endl;
-            }
-        }
-    }
-
-}
 
 void sigmoid3(newmat& net, newmat& out)
 {
@@ -965,7 +1167,7 @@ int backprop(int y0)
         cout << "------------------------------------ BACK PROPAGATION sample=" <<
         y0 + 1 << endl << flush;
 #endif
-    ftick[OutputLayer].set_mult1_add2(actuation[OutputLayer], -1.0, 1.0);                            //  ftick[OutputLayer] = -actuation[OutputLayer] + 1;
+    ftick[OutputLayer].set_mult1_add2_scalars(actuation[OutputLayer], -1.0, 1.0);                            //  ftick[OutputLayer] = -actuation[OutputLayer] + 1;
 //output( ftick[OutputLayer], " ftick[OutputLayer] 1");
     ftick[OutputLayer].piecewisemult(actuation[OutputLayer]);	// element wise multiply                //  ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);      
 //output( ftick[OutputLayer], " ftick[OutputLayer] 2");
@@ -978,9 +1180,9 @@ int backprop(int y0)
 //output( deltafn_t[i + 1], " deltafn_t[i + 1]");
         weight_updates[i].set_matmult(deltafn_t[i + 1], actuation[i]);            // weight_updates[i] = deltafn[i + 1].t() *actuation[i];
 //output( weight_updates[i], "weight_updates[i]");
-        new_layer_weights[i].set_mult1_add2(weight_updates[i], eta, layer_weights[i]);// new_layer_weights[i] = layer_weights[i] + (eta *weight_updates[i]);
+        new_layer_weights[i].set_mult1_add2_mat(weight_updates[i], eta, layer_weights[i]);// new_layer_weights[i] = layer_weights[i] + (eta *weight_updates[i]);
 //output( new_layer_weights[i], "new_layer_weights[i]");
-        ftick[i].set_mult1_add2(actuation[i], -1.0, 1.0);                              //  ftick[i] = -actuation[i] + 1;
+        ftick[i].set_mult1_add2_scalars(actuation[i], -1.0, 1.0);                              //  ftick[i] = -actuation[i] + 1;
 //output( ftick[i], "ftick[i]");
         ftick[i].piecewisemult(actuation[i]);	// element wise multiply          //  ftick[i] = ftick[i] % (actuation[i]); 
 //output( ftick[i], "ftick[i]2");
@@ -1050,30 +1252,18 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
             for (int i = 0; i < OutputLayer; i++)	// only n-1 transitions between n layers
             {
 #ifdef SERIAL_ONLY
-                auto StartCallTime = std::chrono::high_resolution_clock::now();
 
 
                 layer_weights_t[i].set_transpose(layer_weights[i]);
-                SerialMatrixVectorMultiply(netin[i].ptr,
-                    actuation[i].ptr, actuation[i].n_rows,
-                    layer_weights_t[i].ptr, layer_weights_t[i].n_rows, layer_weights_t[i].n_cols);
-                auto EndCallTime = std::chrono::high_resolution_clock::now();
-                auto TotalCallTime = std::chrono::duration_cast<std::chrono::nanoseconds>
-                    (EndCallTime - StartCallTime);
+               // SerialMatrixVectorMultiply(netin[i].ptr,
+               //     actuation[i].ptr, actuation[i].n_rows,
+               //     layer_weights_t[i].ptr, layer_weights_t[i].n_rows, layer_weights_t[i].n_cols);
+                netin[i].set_matmult(actuation[i], layer_weights_t[i], actuation[i].n_cols);
 
-                if (TotalCallTime > Call_MaxTime)
-                    Call_MaxTime = TotalCallTime;
-
-                if (TotalCallTime < Call_MinTime)
-                    Call_MinTime = TotalCallTime;
-
-                Avg_Time += TotalCallTime;
-                avgcnt++;
-
-                for (int j = 0; j < netin[i].n_cols; j++)
-                {
-                    netin[i].ptr[j] /= actuation[i].n_cols;
-                }
+              //  for (int j = 0; j < netin[i].n_cols; j++)
+              //  {
+              //      netin[i].ptr[j] /= actuation[i].n_cols;
+              //  }
 #ifdef SAMPLEFREQ
                 if ((y + 1) % SAMPLEFREQ == 0)
                     cout << "Netin serial (" << netin[i].n_rows << "," << netin[i].n_cols <<
@@ -1081,7 +1271,8 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
 #endif
 #else
                 layer_weights_t[i].set_transpose(layer_weights[i]);
-                PreMatMul(actuation[i], layer_weights_t[i], netin[i], actuation[i].n_cols);
+                netin[i].set_matmult(actuation[i], layer_weights_t[i], actuation[i].n_cols);
+                //PreMatMul(actuation[i], layer_weights_t[i], netin[i], actuation[i].n_cols);
 
 #ifdef SAMPLEFREQ
                 cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
@@ -1353,9 +1544,6 @@ void save_weights(string hdr)
         //    oFile << endl;
         // }
     }
-    oFile << "Error Summary" << endl << flush;
-
-    oFile << err_summary.prtstr() << endl << flush;
 
     oFile << "EndFile" << endl << flush;
     oFile.close();
@@ -1363,7 +1551,7 @@ void save_weights(string hdr)
 
 }
 
-int main()
+int main2()
 {
     size_t available, total;
     cudaMemGetInfo(&available, &total);
@@ -1383,78 +1571,80 @@ int main()
         printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
             2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
     }
+#ifndef SERIAL_ONLY
     checkError(cudaMalloc((void**)&deviceA, 100000* sizeof(double)));
     checkError(cudaMalloc((void**)&deviceB, 100000* sizeof(double)));
     checkError(cudaMalloc((void**)&deviceC, 100000* sizeof(double)));
+#endif
 newmat a(4,3);
-newmat b(4,3);
-newmat c(4,3);
+newmat b(3,4);
+newmat c(4,4);
+
 newmat d(4,3);
 for (int i =0;i<a.n_rows;i++)
    for (int j=0;j<a.n_cols;j++)
    {
-     a.ptr[i*a.n_cols+j] = i+j;
-     
+       a.ptr[i*a.n_cols+j] = i+j;
    }
 for (int i =0;i<b.n_rows;i++)
    for (int j=0;j<b.n_cols;j++)
    {
      b.ptr[i*b.n_cols+j] = i*2+j*2;
-     c.ptr[i*b.n_cols+j] = i*(3+j+1); 
    }
 
-output(a);
+for (int i =0;i<c.n_rows;i++)
+   for (int j=0;j<c.n_cols;j++)
+   {
+     c.ptr[i*c.n_cols+j] = i*(3+j+1); 
+   }
 a.add_scalar(5);
-output(a);
+a.output_all_procs(cout);
+//output(a);
+//output(b);
 //output(c);
-//int64_t q=d.set_diff2_piecewisemult3(a,b,c);
+c.set_matmult(a,b);
+cout << "-------------------" << endl;
+//output(c);
 //output(d);
-//cout << "in " << q << " nanosecs"<<endl;
+c.output_all_procs(cout);
 //output(c);
 //output(b);
 exit(1);
-/*__global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols) {
-__global__ void TransposeMat(double *idata, double *odata, int height, int width)
-__global__ void MatMultMatEleWise(double* A, double* B, double* C)
-__global__ void MatSubMat(double* A, double* B, double* C)
-__global__ void MatAddMat(double* A, double* B, double* C)
-__global__ void MatAddScalar(double scalar, double* C)
-__global__ void MatDivScalar(double scalar, double* C)
-__global__ void MatMultScalar(double scalar, double* C)
-    void set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
-    void free_ele()
-    void zeroize()
-*/
 }
-int main2()
+int main()
 {
+   time_measurement main_time("main");
+   time_measurement initialise_time("initialise");
+   time_measurement train_time("train");
+   time_measurement test_time("test");
 #ifdef USE_CUBLAS
 	// Create a handle for CUBLAS
 	cublasCreate(&handle);
 #endif
     size_t available, total;
     cudaMemGetInfo(&available, &total);
-    cout << "avail=" << available << " total=" << total << endl;
+    confusion_matrix << "Info: Available Memory=" << available << " Total=" << total << endl;
     int nDevices;
 
     cudaGetDeviceCount(&nDevices);
+    confusion_matrix << "Info: Number of devices available = " << nDevices << endl;
     for (int i = 0; i < nDevices; i++) {
         cudaDeviceProp prop;
         cudaGetDeviceProperties(&prop, i);
-        printf("Device Number: %d\n", i);
-        printf("  Device name: %s\n", prop.name);
-        printf("  Memory Clock Rate (KHz): %d\n",
-            prop.memoryClockRate);
-        printf("  Memory Bus Width (bits): %d\n",
-            prop.memoryBusWidth);
-        printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
-            2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
+        confusion_matrix << "Info: Device Number: "<< i << endl;
+        confusion_matrix << "  Device name: " << prop.name << endl;
+        confusion_matrix << "  Memory Clock Rate (KHz): "<< prop.memoryClockRate << endl;
+        confusion_matrix << "  Memory Bus Width (bits): "<< prop.memoryBusWidth << "\n";
+        double val=(double)2.0 * (double)prop.memoryClockRate * (double)(prop.memoryBusWidth / (double)8) / (double)1.0e6 ;
+        confusion_matrix << "  Peak Memory Bandwidth (GB/s): "<< val << endl;
     }
     extern char** environ;
     string hname = "";
-    //string y="initial_random_values_weights_11337071.txt";
+#ifdef WANT_TO_LOAD_WEIGHTS
     string weight_file_to_preload = "initial_random_values_weights_1637223695.txt";
-    auto StartChronoTime = std::chrono::high_resolution_clock::now();
+#endif
+    main_time.start_measurement();
+    initialise_time.start_measurement();
 
     vector<string> strs;
     string bldver = string(__DATE__) + " at time " + string(__TIME__);
@@ -1503,7 +1693,6 @@ int main2()
         "train-labels-idx1-ubyte", &trainlabels);
     unsigned char* testdata = load_file("t10k-images-idx3-ubyte",
         "t10k-labels-idx1-ubyte", &testlabels);
-    auto StartTime = std::chrono::high_resolution_clock::now();
 
     ///////////////////////////////////////////////
     //
@@ -1563,7 +1752,7 @@ int main2()
     }
 
     // Informational, the max value of matrix and vectors are record and used to reserve CUDA memory 
-    cout << "Max Matrix size " << max_mat << " Max vector size = " << max_vec <<
+    confusion_matrix << "Max Matrix size " << max_mat << " Max vector size = " << max_vec <<
         endl << flush;
 
 #ifdef WANT_TO_LOAD_WEIGHTS
@@ -1571,7 +1760,7 @@ int main2()
     // if say moving platforms with different psudeo RNG, or to load post weights after training
     // This works, but only implemented atm, by direct code changes, no UI implemented
     // But note used in this project anyway
-    cout << "Chosen to load saved weight file '" << weight_file_to_preload << "' , so loading it ....." << endl;
+    confusion_matrix  << "Chosen to load saved weight file '" << weight_file_to_preload << "' , so loading it ....." << endl;
     load_weights(weight_file_to_preload);
 #else
     // Save initial starting weights if required for later
@@ -1584,94 +1773,97 @@ int main2()
     checkError(cudaMalloc((void**)&deviceC, max_mat * sizeof(double)));
 
 #ifdef __CUDA_ARCH__
-    cout << "Built for CUDA ARCH == " << __CUDA_ARCH__ << endl;
+    confusion_matrix << "Built for CUDA ARCH == " << __CUDA_ARCH__ << endl;
 #endif
 #endif
+    initialise_time.stop_measurement();
     ///////////////////////////////////////////////
     //
     // TRAIN THE DATA
     //
-    auto StartTrainTime = std::chrono::high_resolution_clock::now();
-    cout << "Training on data started (epochs=" << EPOCHS << ")...." << endl <<
+    train_time.start_measurement();
+    confusion_matrix<< "Training on data started (epochs=" << EPOCHS << ")...." << endl <<
         flush;
 
     forward_feed(traindata, trainlabels, true, TRAININGSAMPLES);
-    auto EndTrainTime = std::chrono::high_resolution_clock::now();
+    train_time.stop_measurement();
 
-    cout << "Training complete" << endl << flush;
+    confusion_matrix  << "Training complete" << endl << flush;
     ///////////////////////////////////////////////
     //
     // TEST THE DATA
     //
-    cout << "Testing of data started...." << endl << flush;
-    auto StartTestTime = std::chrono::high_resolution_clock::now();
+    test_time.start_measurement();
+    confusion_matrix << "Testing of data started...." << endl << flush;
 
     forward_feed(testdata, testlabels, false, TESTINGSAMPLES);
 
-    auto EndTestTime = std::chrono::high_resolution_clock::now();
+    test_time.stop_measurement();
 
-    cout << "Testing complete" << endl << flush;
+    time_output << "Testing complete" << endl << flush;
 
-    auto TotalTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTestTime - StartTime);
-    auto TrainTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTrainTime - StartTrainTime);
-    auto TestTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndTestTime - StartTestTime);
-
-    cout << "Total Time       : " << std::setw(12) << TotalTime.count() << " us" <<
+    main_time.stop_measurement();
+    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " us" <<
         endl << flush;
-    cout << "Total Train Time : " << std::setw(12) << TrainTime.count() << " us" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " us" <<
         endl << flush;
-    cout << "Total Test Time  : " << std::setw(12) << TestTime.count() << " us" <<
+    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " us" <<
+        endl << flush;
+    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " us" <<
+        endl << flush;
+    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " us" <<
         endl << flush;
 
-    confusion_matrix << "Epochs in Training : " << EPOCHS << endl << flush;
-    confusion_matrix << "Training Samples   : " << TRAININGSAMPLES << endl <<
+    time_output << "Epochs in Training : " << EPOCHS << endl << flush;
+    time_output << "Training Samples   : " << TRAININGSAMPLES << endl <<
         flush;
-    confusion_matrix << "Testing Samples    : " << TESTINGSAMPLES << endl <<
+    time_output << "Testing Samples    : " << TESTINGSAMPLES << endl <<
         flush;
-    confusion_matrix << endl << endl << "Total Time       : " << std::setw(12) <<
-        TotalTime.count() << " us" << endl << flush;
-    confusion_matrix << "Total Train Time : " << std::setw(12) <<
-        TrainTime.count() << " us" << endl << flush;
-    confusion_matrix << "Total Test Time  : " << std::setw(12) << TestTime.count() <<
-        " us" << endl << flush;
-    confusion_matrix << endl << endl << "Total Time       : " << std::setw(12) <<
-        TotalTime.count() / 1000000 << " s" << endl << flush;
-    confusion_matrix << "Total Train Time : " << std::setw(12) <<
-        TrainTime.count() / 1000000 << " s" << endl << flush;
-    confusion_matrix << "Total Test Time  : " << std::setw(12) <<
-        TestTime.count() / 1000000 << " s" << endl << flush;
-    confusion_matrix << endl << endl << "Total Time       : " << std::setw(12) <<
-        TotalTime.count() / 60000000 << " min" << endl << flush;
-    confusion_matrix << "Total Train Time : " << std::setw(12) <<
-        TrainTime.count() / 60000000 << " min" << endl << flush;
-    confusion_matrix << "Total Test Time  : " << std::setw(12) <<
-        TestTime.count() / 60000000 << " min" << endl << flush;
-    confusion_matrix << "Epsilon  : " << EPSILON << endl << flush;
-    confusion_matrix << "Eta      : " << eta << endl << flush;
-    confusion_matrix << "Build ver: " << bldver << endl << flush;
+    time_output << "Epsilon  : " << EPSILON << endl << flush;
+    time_output << "Eta      : " << eta << endl << flush;
+    time_output << "Build ver: " << bldver << endl << flush;
+    time_output << "Error Summary" << endl << flush;
+
+    time_output << err_summary.prtstr() << endl << flush;
+
+
+    for (int i = 0; i <= OutputLayer; i++)
+    {
+        if (i < OutputLayer)
+        {
+            netin[i].free_ele();
+            layer_weights[i].free_ele();
+            layer_weights_t[i].free_ele();
+            new_layer_weights[i].free_ele();
+            weight_updates[i].free_ele();
+        }
+        actuation[i].free_ele();
+        deltafn[i].free_ele();
+        deltafn_t[i].free_ele();
+        if (i==OutputLayer)
+         ftick[i].output_all_procs( time_output );
+        ftick[i].free_ele();
+    }
+
+    confusion_matrix << time_output.str();
+    cout << confusion_matrix.str();
+
     save_weights("post_training_weights");
 
     delete[] traindata;
     delete[] trainlabels;
     delete[] testdata;
     delete[] testlabels;
+    //cout << "Min time for " << build_type << " call : " << Call_MinTime.count() << " ns" << endl;
+    //cout << "Total time for all " << avgcnt << " calls is " << Avg_Time.count() << " ns" << endl;
+    //cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)avgcnt << " ns" << endl;
+    //cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)(avgcnt * 1e09) << " s" << endl;
+    //cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() << " ns" << endl;
+    //cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() / 1000000000 << " s" << endl;
+    //auto EndChronoTime = std::chrono::high_resolution_clock::now();
+    //auto TotalChronoTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndChronoTime - StartChronoTime);
 
-    cout << "Min time for " << build_type << " call : " << Call_MinTime.count() << " us" << endl;
-    cout << "Min time for " << build_type << " call : " << Call_MinTime.count() / 1000000 << " s" << endl;
-    cout << "Min time for " << build_type << " call : " << Call_MinTime.count() / 60000000 << " min" << endl;
-    cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)avgcnt << " us" << endl;
-    cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)(avgcnt * 1000000) << " s" << endl;
-    cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)(avgcnt * 60000000) << " min" << endl;
-    cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() << " us" << endl;
-    cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() / 1000000 << " s" << endl;
-    cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() / 60000000 << " min" << endl;
-    auto EndChronoTime = std::chrono::high_resolution_clock::now();
-    auto TotalChronoTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndChronoTime - StartChronoTime);
 
-    cout << "Time for  Total Program : " << TotalChronoTime.count() << " us " << endl;
-
-    for (int i = 0; i < netin.size(); i++)
-        netin[i].free_ele();
 
 
 #ifndef SERIAL_ONLY
