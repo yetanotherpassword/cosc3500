@@ -40,7 +40,7 @@
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine or define to very large number to remove output
 #define SAMPLEFREQ 1
-//#undef SAMPLEFREQ
+#undef SAMPLEFREQ
 #define TILE_WIDTH 100 // for shared kernel
 #define TILE_DIM 100 // for book example
 
@@ -210,7 +210,7 @@ public:
         {
             string bt2;
             if (b == "Parallel")
-                bt2 = "|Parallel|";
+                bt2 = "|Parallel|             ";
             else
                 bt2 = "..Serial..";
             string blank = "                              ";
@@ -2153,7 +2153,7 @@ int main()
 
 
     cout << "Number of Layers is " << NumberOfLayers << endl << flush;
-
+    cout << "Training epochs set to " << EPOCHS << endl;
 
 #ifndef SERIAL_ONLY
     // set up CUDA timing structs
