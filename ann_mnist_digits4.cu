@@ -31,7 +31,7 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 1
+#define EPOCHS 512
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
 //#define MyCUDAMemCpy(A, B, C, D) C>max_bytes?1:cudaMemcpy(A,B,C,D)
@@ -1162,15 +1162,15 @@ void early_exit(string msg) {
     main_time.stop_measurement();
     if (msg.length() > 0)
         cout << msg << endl;
-    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " us" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " ns" <<
         endl << flush;
-    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " us" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " ns" <<
         endl << flush;
-    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " us" <<
+    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " ns" <<
         endl << flush;
-    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " us" <<
+    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " ns" <<
         endl << flush;
-    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " us" <<
+    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " ns" <<
         endl << flush;
 
     time_output << "Epochs in Training : " << EPOCHS << endl << flush;
@@ -2278,15 +2278,15 @@ int main()
     time_output << "Testing complete" << endl << flush;
 
     main_time.stop_measurement();
-    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " us" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " ns" <<
         endl << flush;
-    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " us" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " ns" <<
         endl << flush;
-    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " us" <<
+    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " ns" <<
         endl << flush;
-    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " us" <<
+    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " ns" <<
         endl << flush;
-    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " us" <<
+    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " ns" <<
         endl << flush;
 
     time_output << "Epochs in Training : " << EPOCHS << endl << flush;
@@ -2297,7 +2297,7 @@ int main()
     time_output << "Epsilon  : " << EPSILON << endl << flush;
     time_output << "Eta      : " << eta << endl << flush;
     time_output << "Build ver: " << bldver << endl << flush;
-    time_output << "Error Summary" << endl << flush;
+    time_output << "Error Summary (-1 means corresponding cost did not go less than Epsilon)" << endl << flush;
 
     time_output << err_summary.prtstr() << endl << flush;
 
