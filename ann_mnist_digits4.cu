@@ -31,7 +31,7 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 512
+#define EPOCHS 256
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
 //#define MyCUDAMemCpy(A, B, C, D) C>max_bytes?1:cudaMemcpy(A,B,C,D)
@@ -2129,15 +2129,15 @@ int main()
     for (int i = 0; i < err_summary.n_cols; i++)
         err_summary.ptr[i] = -1.0;
 
-    //NumberOfLayers = 4;
-    NumberOfLayers = 3;
+    NumberOfLayers = 4;
+    //NumberOfLayers = 3;
     nodes = new unsigned int[NumberOfLayers];
     nodes[0] = INPUT_LINES;
-    nodes[1] = DEFAULT_HIDDEN1;
-    nodes[2] = OUTPUT_LINES;
     //nodes[1] = DEFAULT_HIDDEN1;
-    //nodes[2] = DEFAULT_HIDDEN2;
-    //nodes[3] = OUTPUT_LINES;
+    //nodes[2] = OUTPUT_LINES;
+    nodes[1] = DEFAULT_HIDDEN1;
+    nodes[2] = DEFAULT_HIDDEN2;
+    nodes[3] = OUTPUT_LINES;
     eta = ETA_DEFAULT;
     cout << "Using default setting of \"";
     for (int i = 0; i < NumberOfLayers; i++)
