@@ -248,7 +248,7 @@ typedef std::map< std::string, time_measurement* > maptype;
 
 
 #ifndef SERIAL_ONLY 
-__global__ void MatAdd2Mat(double* A, double* B, double* C, int len) {
+__global__ void MatAddMat(double* A, double* B, double* C, int len) {
 
 
     int idx = blockIdx.x * blockDim.x  + threadIdx.x;
@@ -259,6 +259,16 @@ __global__ void MatAdd2Mat(double* A, double* B, double* C, int len) {
 
 }
 
+__global__ void MatSubMat(double* A, double* B, double* C, int len) {
+
+
+    int idx = blockIdx.x * blockDim.x  + threadIdx.x;
+    if (idx < len)
+    {
+        C[idx] = A[idx] - B[idx];
+    }
+
+}
 __global__
 void add(int n, double* x, double const* y)
 {
@@ -274,8 +284,8 @@ __global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols
 
     double CValue = 0;
 
-    int Row = blockIdx.y * THREADS_PER_2BLKDIM + threadIdx.y;
-    int Col = blockIdx.x * THREADS_PER_2BLKDIM + threadIdx.x;
+    int Row = blockIdx.y * blockDim.y + threadIdx.y;
+    int Col = blockIdx.x * blockDim.x + threadIdx.x;
 
     for (int k = 0; k < (THREADS_PER_2BLKDIM + ACols - 1) / THREADS_PER_2BLKDIM; k++) {
 
@@ -339,28 +349,6 @@ __global__ void transposeNaive(double *idata, double* odata,
 
 } 
 
-#if 0
-
-__global__ void transposeCoalesced(double *odata, const double *idata)
-{
-  __shared__ double tile[TILE_DIM][TILE_DIM+1];
-
-  int x = blockIdx.x * TILE_DIM + threadIdx.x;
-  int y = blockIdx.y * TILE_DIM + threadIdx.y;
-  int width = gridDim.x * TILE_DIM;
-
-  for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
-     tile[threadIdx.y+j][threadIdx.x] = idata[(y+j)*width + x];
-
-  __syncthreads();
-
-  x = blockIdx.y * TILE_DIM + threadIdx.x;  // transpose block offset
-  y = blockIdx.x * TILE_DIM + threadIdx.y;
-
-  for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
-     odata[(y+j)*width + x] = tile[threadIdx.x][threadIdx.y + j];
-}
-#endif
 __global__ void transpose(double* A, double* C, int r, int c){
 
      
@@ -374,123 +362,12 @@ __global__ void transpose(double* A, double* C, int r, int c){
         }
 }
 
-// NAIVE APPROACH - each threads pass one enrty of the matrix its corresponding place.
-__global__ void transpose2(double* M, double* R, int dim1, int dim2){
 
-        int tile_size = blockDim.x ;
-        int column = tile_size * blockIdx.x + threadIdx.x;
-        int row = tile_size * blockIdx.y + threadIdx.y;
-
-        if(column < dim2 && row < dim1){
-                R[column*dim2 + row] = M[column + row*dim2];
-        }
-}
-
-// SHARED MEM APROACH - use shared memory
-/*
-__global__ void sharedMem_transpose(double* M, double* R, int dim1, int dim2){
-
-        // fill data into shared memory
-        __shared__ double M_Shared[TILE_WIDTH][TILE_WIDTH];
-
-        int tile_size =TILE_WIDTH;
-        int column = tile_size * blockIdx.x + threadIdx.x;
-        int row = tile_size * blockIdx.y + threadIdx.y;
-        int index_in = row*dim2 + column;
-        int index_out = column*dim2 + row;
-
-
-        if(row < dim1 && column < dim2 && index_in < dim1*dim2){
-                M_Shared[threadIdx.y][threadIdx.x] = M[index_in];
-        }
-        __syncthreads(); // wait all other threads to go further.
-
-        if(row < dim1 && column < dim2 && index_out < dim1*dim2){
-                R[index_out] = M_Shared[threadIdx.y][threadIdx.x];
-        }
-}
-*/
-/*
-// PROPOSED at BOOK
-__global__ void transposeCoalesced(double *idata, double *odata,
-                int height, int width)
+__global__ void MatMultMatEleWise(double* A, double* B, double* C, int max)
 {
-        __shared__ double tile[TILE_DIM][TILE_DIM];
-        int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
-        int yIndex = blockIdx.y * TILE_DIM + threadIdx.y;
-        int index_in = xIndex + (yIndex)*width;
-        xIndex = blockIdx.y * TILE_DIM + threadIdx.x;
-        yIndex = blockIdx.x * TILE_DIM + threadIdx.y;
-        int index_out = xIndex + (yIndex)*height;
-        tile[threadIdx.y][threadIdx.x] = idata[index_in];
-        __syncthreads();
-        odata[index_out] = tile[threadIdx.x][threadIdx.y];
-}
-*/
-__global__ void TransposeMat(double* idata, double* odata, int height, int width)
-{
-    __shared__ double block[THREADS_PER_2BLKDIM][THREADS_PER_2BLKDIM + 1];
-
-    // read the matrix tile into shared memory
-    unsigned int xIndex = blockIdx.x * THREADS_PER_2BLKDIM + threadIdx.x;
-    unsigned int yIndex = blockIdx.y * THREADS_PER_2BLKDIM + threadIdx.y;
-    if ((xIndex < width) && (yIndex < height))
-    {
-        unsigned int index_in = yIndex * width + xIndex;
-        block[threadIdx.y][threadIdx.x] = idata[index_in];
-    }
-
-    __syncthreads();
-
-    // write the transposed matrix tile to global memory
-    xIndex = blockIdx.y * THREADS_PER_2BLKDIM + threadIdx.x;
-    yIndex = blockIdx.x * THREADS_PER_2BLKDIM + threadIdx.y;
-    if ((xIndex < height) && (yIndex < width))
-    {
-        unsigned int index_out = yIndex * height + xIndex;
-        odata[index_out] = block[threadIdx.x][threadIdx.y];
-    }
-}
-
-__global__ void MatMultMatEleWise(double* A, double* B, double* C)
-{
-    int i = threadIdx.x;
-    C[i] = A[i] * B[i];
-}
-
-
-__global__ void MatSubMat(double* A, double* B, double* C, int n_rows, int n_cols)
-{
-    int Row = blockIdx.y * THREADS_PER_2BLKDIM + threadIdx.y;
-    int Col = blockIdx.x * THREADS_PER_2BLKDIM + threadIdx.x;
-    if ((Col < n_cols) && (Row < n_rows))
-    {
-        int i = Row * n_cols + Col;
-        C[i] = A[i] - B[i];
-    }
-}
-__global__ void mAdd(double* A, double* B, double* C, int n)
-{
-    int k = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (k < n)
-        C[k] = A[k] + B[k];
-}
-__global__ void matrixAdd(double* a, double* b, double* c, int maxrow, int maxcol) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    int col = blockIdx.y * blockDim.y + threadIdx.y;
-
-    int index = col + row * maxcol;
-
-    if (col < maxcol && row < maxrow) {
-        c[index] = a[index] + b[index];
-    }
-
-}
-__global__ void MatAddMat(double* A, double* B, double* C)
-{
-    int i = threadIdx.x;
-    C[i] = A[i] + B[i];
+         int ele = blockDim.x  * blockIdx.x + threadIdx.x;
+         if (ele < max)
+            C[ele] = A[ele] * B[ele];
 }
 
 __global__ void MatAddScalar(double scalar, double* C, int n)
@@ -498,22 +375,27 @@ __global__ void MatAddScalar(double scalar, double* C, int n)
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i<n)
         C[i] = C[i] + scalar;
-        else
-        int k=0;
+
 }
 
-__global__ void MatDivScalar(double scalar, double* C)
+
+__global__ void MatDivScalar(double scalar, double* C, int n)
 {
-    int i = threadIdx.x;
-    C[i] = C[i] / scalar;
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i<n)
+        C[i] = C[i] / scalar;
+
 }
 
 
-__global__ void MatMultScalar(double scalar, double* C)
+__global__ void MatMultScalar(double scalar, double* C, int n)
 {
-    int i = threadIdx.x;
-    C[i] = C[i] * scalar;
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    if (i<n)
+        C[i] = C[i] * scalar;
+
 }
+
 
 
 #else
@@ -567,6 +449,7 @@ public:
         {
             create_new_time_meas("set_transpose");
             create_new_time_meas("add_mat");
+            create_new_time_meas("sub_mat");
             create_new_time_meas("add_scalar");
             create_new_time_meas("div_scalar");
             create_new_time_meas("mult_scalar");
@@ -594,47 +477,7 @@ public:
 #endif
     };
 
-    void copy_aligned(newmat m, int tile_dim)
-    {
-
-     if (n_rows>=m.n_rows && n_cols >= m.n_cols)
-     {
-        memset(ptr, 0, n_rows*n_cols*sizeof(double));
-        for (int i=0;i<m.n_rows;i++)
-        {
-            memcpy(&ptr[i*n_cols], &m.ptr[i*m.n_cols], m.n_cols*sizeof(double));
-        }
-     }
-     else
-     {
-         cout << "Error trying to copy and align a matrix ( ["<< m.n_rows << "x" << m.n_cols << "] to multiple of " << tile_dim << ") into one that is too small [" << n_rows << "x" << n_cols << "]" << endl;
-         exit(1);
-     }
-    };
-
-    void copy_transpose_realign(newmat & m)
-    {
- 
-        if (m.n_rows >= n_cols && m.n_cols >= n_rows)
-        {
-            // data is transposed, but not its super struct, so do it now
-            int t = m.n_cols;
-            m.n_cols = m.n_rows;
-            m.n_rows = t;
-
-        //memset(ptr, 0, n_rows*n_cols*sizeof(double));
-            for (int i=0;i<n_rows;i++)
-            {
-                memcpy(&ptr[i*n_cols], &m.ptr[i*m.n_cols], n_cols*sizeof(double));
-            }
-        }
-        else
-        {
-            cout << "Error: Incorrect transpose sent for realignment" << endl;
-            exit(1);
-        }
-    };
-
+  
 
 
     newmat()
@@ -672,61 +515,14 @@ public:
 #else
  int onedLen = tmp.n_rows * tmp.n_cols;
  MyCUDAMemCpy(deviceA, tmp.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-//dim3 threads(THREADS_PER_2BLKDIM,THREADS_PER_2BLKDIM);
-           // dim3 grid(tmp.n_cols * tmp.n_rows / THREADS_PER_2BLKDIM, tmp.n_cols * tmp.n_rows / THREADS_PER_2BLKDIM, 1);
-            //int threads=THREADS_PER_1BLKDIM;
 
-           // dim3 blockSize, minGridSize;
-          // int blockSize, minGridSize;
-          //  cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, TransposeMat, 0, onedLen);
-
-           // dim3 blockSize = 1024;
-           // int gridSize = sqrt((double)onedLen / (pow((double)THREADS_PER_2BLKDIM,2))) + 1;
-            //dim3 grid(gridSize, gridSize);
-            // Round up according to array size 
 
             int threads=TILES;
             int gridSize = (onedLen + TILES - 1) / TILES; 
-
-            //int gridSize = minGridSize;
-
-
-            
-                //    TransposeMat <<< gridSize, blockSize>>> (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
+              
                 transpose <<< gridSize, threads >> > (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
 
-//newmat tmp(ptr, n_rows, n_cols, new_rows, new_cols);
- /*   int onedLen = tmp.n_rows * tmp.n_cols;
- MyCUDAMemCpy(deviceA, tmp.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-
-    dim3 threads(TILE_DIM, BLOCK_ROWS);
-    dim3 blocks(tmp.n_rows/TILE_DIM, tmp.n_cols/TILE_DIM);
-    transposeCoalesced<<<blocks, threads >>>(deviceC, deviceA); 
-    int const tile_size = 100;
-       int threadNumX = tile_size;
-        int threadNumY = tile_size;
-        int blockNumX = n_cols / tile_size + (n_cols%tile_size == 0 ? 0 : 1 );
-        int blockNumY = n_rows / tile_size + (n_rows%tile_size == 0 ? 0 : 1 );
-
-        dim3 blockSize(threadNumX,threadNumY);
-        dim3 gridSize(blockNumX, blockNumY);
-
-
-/*
-    int new_rows=(int)ceil((double) n_rows/ (double) THREADS_PER_2BLKDIM)*THREADS_PER_2BLKDIM;
-    int new_cols=(int)ceil((double) n_cols/ (double) THREADS_PER_2BLKDIM)*THREADS_PER_2BLKDIM;
-    int newonedLen = new_rows * new_cols;
-    newmat tmp_aligned(new_cols, new_rows);
-    tmp_aligned.copy_aligned(tmp,THREADS_PER_2BLKDIM);
-
-                MyCUDAMemCpy(deviceA, tmp_aligned.ptr, newonedLen * sizeof(double), cudaMemcpyHostToDevice);
-  dim3 grid(new_rows/THREADS_PER_2BLKDIM+1, new_cols/THREADS_PER_2BLKDIM+1);
-  dim3 threads(THREADS_PER_2BLKDIM,THREADS_PER_2BLKDIM); 
-transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_cols);*/
-
-//transpose<<<gridSize,blockSize>>>(deviceA,deviceC,tmp.n_rows,tmp.n_cols);
-
-            checkError(cudaDeviceSynchronize());
+          checkError(cudaDeviceSynchronize());
 
             MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
             
@@ -754,40 +550,52 @@ transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_c
                 ptr[i * n_cols + j] += m1.ptr[i * n_cols + j];
 #else
         int onedLen = n_rows * n_cols;
-        //  dim3 threads(THREADS_PER_2BLKDIM, THREADS_PER_2BLKDIM, 1);
+
 
         int threads =THREADS_PER_1BLKDIM;
         int dimGrid= ((onedLen + THREADS_PER_1BLKDIM - 1) / THREADS_PER_1BLKDIM);
 
-
-        //dim3 threads(THREADS_PER_2BLKDIM, THREADS_PER_2BLKDIM, 1);
-        //int gridSize = sqrt((double)onedLen / (pow((double)THREADS_PER_2BLKDIM, 2))) + 1;
-        //dim3 grid(gridSize, gridSize);
-
-        //dim3 grid(tmp.n_cols*tmp.n_rows/ THREADS_PER_2BLKDIM, tmp.n_cols*tmp.n_rows/ THREADS_PER_2BLKDIM, 1);
         MyCUDAMemCpy(deviceA, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
         MyCUDAMemCpy(deviceB, m1.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-        //        int blockSize, minGridSize;
-        //   cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatAdd2Mat, 0, onedLen); 
 
-            // Round up according to array size 
-        //    int gridSize = (onedLen + blockSize - 1) / blockSize; 
-            //int gridSize = minGridSize;
+        MatAddMat << <   dimGrid, threads >> > (deviceA, deviceB, deviceC, onedLen);
 
-            //int blksize = 512;
-            //int nblocks=onedLen / blksize;
-           // mAdd<<<nblocks, blksize>>>(deviceA, deviceB, deviceC, onedLen);
-
-
-
-                //MatAdd2Mat<<<  gridSize, blockSize  >>> (deviceA, deviceB, deviceC,  n_rows , n_cols);
-        MatAdd2Mat << <   dimGrid, threads >> > (deviceA, deviceB, deviceC, onedLen);
-        //MatAdd2Mat << <   grid, threads >> > (deviceA, deviceB, deviceC, onedLen);
         checkError(cudaDeviceSynchronize());
 
         MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 #endif
         (*timers)["add_mat"]->stop_measurement();
+    };
+
+        void sub_mat(newmat m1)
+    {
+        (*timers)["sub_mat"]->start_measurement();
+        if (m1.n_rows != n_rows || m1.n_cols != n_cols)
+        {
+            cout << "Cant submat m1[" << m1.n_rows << "," << m1.n_cols << "] from *this[" << n_rows << "," << n_cols << "]" << endl << flush;
+            exit(1);
+        }
+#ifdef SERIAL_ONLY
+        for (int i = 0; i < n_rows; i++)
+            for (int j = 0; j < n_cols; j++)
+                ptr[i * n_cols + j] -= m1.ptr[i * n_cols + j];
+#else
+        int onedLen = n_rows * n_cols;
+
+
+        int threads =THREADS_PER_1BLKDIM;
+        int dimGrid= ((onedLen + THREADS_PER_1BLKDIM - 1) / THREADS_PER_1BLKDIM);
+
+        MyCUDAMemCpy(deviceA, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+        MyCUDAMemCpy(deviceB, m1.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+
+        MatSubMat << <   dimGrid, threads >> > (deviceA, deviceB, deviceC, onedLen);
+
+        checkError(cudaDeviceSynchronize());
+
+        MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
+#endif
+        (*timers)["sub_mat"]->stop_measurement();
     };
 
     void add_scalar(double d)
@@ -818,6 +626,63 @@ transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_c
         (*timers)["add_scalar"]->stop_measurement();
     };
 
+        void div_scalar(double d)
+    {
+        (*timers)["div_scalar"]->start_measurement();
+
+#ifdef SERIAL_ONLY
+        for (int i = 0; i < n_rows; i++)
+            for (int j = 0; j < n_cols; j++)
+                ptr[i * n_cols + j] /= d;
+#else
+        int blockSize, minGridSize;
+        int onedLen = n_rows * n_cols;
+        MyCUDAMemCpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+        cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatAddScalar, 0, onedLen);
+
+        // Round up according to array size 
+        int gridSize = (onedLen + blockSize - 1) / blockSize; 
+        //int gridSize = minGridSize;
+
+
+        MatDivScalar << < gridSize, blockSize >> > (d, deviceC, onedLen);
+
+        checkError(cudaDeviceSynchronize());
+
+        MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
+#endif
+        (*timers)["div_scalar"]->stop_measurement();
+    };
+
+
+        void mult_scalar(double d)
+    {
+        (*timers)["mult_scalar"]->start_measurement();
+
+#ifdef SERIAL_ONLY
+        for (int i = 0; i < n_rows; i++)
+            for (int j = 0; j < n_cols; j++)
+                ptr[i * n_cols + j] *= d;
+#else
+        int blockSize, minGridSize;
+        int onedLen = n_rows * n_cols;
+        MyCUDAMemCpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
+        cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatAddScalar, 0, onedLen);
+
+        // Round up according to array size 
+        int gridSize = (onedLen + blockSize - 1) / blockSize; 
+        //int gridSize = minGridSize;
+
+
+        MatMultScalar << < gridSize, blockSize >> > (d, deviceC, onedLen);
+
+        checkError(cudaDeviceSynchronize());
+
+        MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
+#endif
+        (*timers)["mult_scalar"]->stop_measurement();
+    };
+/*
     void div_scalar(double d)
     {
         (*timers)["div_scalar"]->start_measurement();
@@ -882,7 +747,7 @@ transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_c
         (*timers)["mult_scalar"]->stop_measurement();
 
     };
-
+*/
     void set_mult1_add2_scalars(newmat y1, double d1, double d2)
     {
         (*timers)["set_mult1_add2_scalars"]->start_measurement();
@@ -926,6 +791,47 @@ transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_c
 
         (*timers)["set_mult1_add2_mat"]->stop_measurement();
     };
+
+     void set_matmult_testing_only(newmat p1, newmat p2, int norm = 1)
+    {
+        if (p1.n_cols == p2.n_rows)
+        {
+            if (n_rows != p1.n_rows || n_cols != p2.n_cols)
+            {
+                cout << "Resultant matrix wont hold result, fixing by realloc in set_matmult" << endl;
+                free_ele();
+                n_rows = p1.n_rows;
+                n_cols = p2.n_cols;
+                ptr = new double[n_rows * n_cols];
+            }
+
+            for (int i = 0; i < p1.n_rows; ++i)
+            {
+                 for (int j = 0; j < p2.n_cols; ++j)
+                 {
+                    ptr[i * p2.n_cols + j] = 0;
+                    for (int k = 0; k < p2.n_rows; ++k) // c1==r2
+                    {
+                       ptr[i * p2.n_cols + j] += p1.ptr[i * p2.n_rows + k] * p2.ptr[k * p2.n_cols + j];
+              
+                    }
+                    ptr[i * p2.n_cols + j] = ptr[i * p2.n_cols + j] / (double)norm;
+                  }
+            }
+
+
+
+        }
+        else
+        {
+            cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols << "] by p2[" << p2.n_rows << "," << p2.n_cols << "]" << endl;
+            exit(1);
+        }
+
+
+    };
+
+
     void set_matmult(newmat p1, newmat p2, int norm = 1)
     {
         (*timers)["set_matmult"]->start_measurement();
@@ -991,12 +897,12 @@ transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_c
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
 
         // Round up according to array size
-        //int gridSize = (onedLen + blockSize - 1) / blockSize;
-        int gridSize = minGridSize;
+        int gridSize = (onedLen + blockSize - 1) / blockSize;
+        //int gridSize = minGridSize;
 
 
         /////////
-        MatMultMatEleWise << <  gridSize, blockSize >> > (deviceA, deviceB, deviceC);
+        MatMultMatEleWise << <  gridSize, blockSize >> > (deviceA, deviceB, deviceC, onedLen);
 
         checkError(cudaDeviceSynchronize());
 
@@ -1026,23 +932,15 @@ transposeNaive <<< gridSize, blockSize >>>(deviceA, deviceC, tmp.n_rows, tmp.n_c
         int onedLen = n_rows * n_cols;
         MyCUDAMemCpy(deviceA, p1.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
         MyCUDAMemCpy(deviceB, p2.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-        dim3 dimBlock(THREADS_PER_2BLKDIM, THREADS_PER_2BLKDIM, 1);
-        dim3 dimGrid;
 
-        dimGrid.x = (n_cols + dimBlock.x - 1) / dimBlock.x;
-        dimGrid.y = (n_rows + dimBlock.y - 1) / dimBlock.y;
-        ///////
         int blockSize, minGridSize;
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
 
-        // Round up according to array size 
-        //int gridSize = (onedLen + blockSize - 1) / blockSize; 
+  
         int gridSize = minGridSize;
 
-        //////
-        MatSubMat << < gridSize, blockSize >> > (deviceA, deviceB, deviceC, n_rows, n_cols);
-        //MatSubMat <<< dimGrid, dimBlock >>> (deviceA, deviceB, deviceC, n_rows, n_cols);
-
+        MatSubMat << < gridSize, blockSize >> > (deviceA, deviceB, deviceC, onedLen);
+        
         checkError(cudaDeviceSynchronize());
 
         MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
@@ -1162,42 +1060,34 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
         exit(1);
     }
 
-    dim3 dimBlock(THREADS_PER_2BLKDIM, THREADS_PER_2BLKDIM, 1);
-    dim3 dimGrid;
-
-    dimGrid.x = (c.n_cols + dimBlock.x - 1) / dimBlock.x;
-    dimGrid.y = (c.n_rows + dimBlock.y - 1) / dimBlock.y;
-    //cout << " dimGrid.x = ("<< c.n_cols << " + " << dimBlock.x << " - 1)/" << dimBlock.x<<endl;
-    //cout << " dimGrid.y = ("<< c.n_rows<< " + " << dimBlock.y << " - 1)/" << dimBlock.y<<endl;
-        //hostC = 
+    
     double* hostC = (double*)malloc(c.n_rows * c.n_cols * sizeof(double));
 
     MyCUDAMemCpy(deviceA, a.memptr(), c.n_rows * a.n_cols * sizeof(double), cudaMemcpyHostToDevice);
     MyCUDAMemCpy(deviceB, b.memptr(), a.n_cols * c.n_cols * sizeof(double), cudaMemcpyHostToDevice);
 
+ int onedLen = c.n_rows * c.n_cols;
+/*
+   
 
-
-    int onedLen = c.n_rows * c.n_cols;
-    //////////
     int blockSize, minGridSize;
     cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
 
     // Round up according to array size
-    //int gridSize = (onedLen + blockSize - 1) / blockSize;
-    int gridSize = minGridSize;
-    cout << "Max Pot Blk Size: PreMatMul: grid= " << gridSize << " blocksize= " << blockSize << " minGridSize=" << minGridSize << endl;
-    MatMultMat << < gridSize, blockSize >> > (deviceA, deviceB, deviceC, c.n_rows, a.n_cols, a.n_cols, c.n_cols, c.n_rows, c.n_cols);
+    int gridSize = (onedLen + blockSize - 1) / blockSize; */
 
-    /////////
+    dim3 dimBlock(THREADS_PER_2BLKDIM, THREADS_PER_2BLKDIM, 1);
+    dim3 dimGrid;
+
+    dimGrid.x = (c.n_cols + dimBlock.x - 1) / dimBlock.x;
+    dimGrid.y = (c.n_rows + dimBlock.y - 1) / dimBlock.y;
 
 
-    cout << "OrigPot Blk Size: PreMatMul: dimGrid.x= " << dimGrid.x << " dimGrid.y=" << dimGrid.y << " dimBlock.x= " << dimBlock.x << " dimBlock.y= " << dimBlock.y << endl;
-    //    MatMultMat <<<dimGrid, dimBlock >>> (deviceA, deviceB, deviceC, c.n_rows,  a.n_cols,  a.n_cols, c.n_cols, c.n_rows, c.n_cols);
+    
+    MatMultMat << < dimGrid, dimBlock >> > (deviceA, deviceB, deviceC, c.n_rows, a.n_cols, a.n_cols, c.n_cols, c.n_rows, c.n_cols);
 
+   
     checkError(cudaDeviceSynchronize());
-
-
-
 
     if (norm != 1)
     {
@@ -1208,7 +1098,7 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
         //int gridSize = (onedLen + blockSize - 1) / blockSize; 
         int gridSize = minGridSize;
 
-        MatDivScalar << <  gridSize, blockSize >> > ((double)norm, deviceC);
+        MatDivScalar << <  gridSize, blockSize >> > ((double)norm, deviceC, onedLen);
 
         checkError(cudaDeviceSynchronize());
 
@@ -1513,82 +1403,7 @@ double accu0(newmat m1)
     return tmp;
 }
 
-#if 0
-newmat diff0(newmat p1, newmat p2)
-{
-    newmat tmp(p1.n_rows, p1.n_cols);
-    for (int i = 0; i < p1.n_rows; i++)
-    {
-        for (int j = 0; j < p1.n_cols; j++)
-            tmp.ptr[i * p1.n_cols + j] = p1.ptr[i * p1.n_cols + j] - p2.ptr[i * p1.n_cols + j];
-    }
-    return tmp;
-}
-newmat matmult0(newmat p1, newmat p2)
-{
-    if (p1.n_cols == p2.n_rows)
-    {
-        newmat tmp(p1.n_rows, p2.n_cols);
 
-        /*
-            for(i = 0; i < r1; ++i)
-                for(j = 0; j < c2; ++j)
-                    for(k = 0; k < c1; ++k) // c1==r2
-                    {
-                        mult2[i*c2+j] += ap[i*c1+k] * bp[k*c2+j];
-                    }
-        */
-
-
-
-        if (p1.n_cols == p2.n_rows)
-        {
-            for (int i = 0; i < p1.n_rows; i++)
-                for (int j = 0; j < p2.n_cols; j++)
-                    for (int k = 0; k < p1.n_cols; k++)
-                        tmp.ptr[i * p2.n_cols + j] = p1.ptr[i * p1.n_cols + k] * p2.ptr[k * p2.n_cols + j];
-        }
-        return tmp;
-    }
-    else
-    {
-        cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols << "] by p2[" << p2.n_rows << "," << p2.n_cols << "]" << endl;
-        exit(1);
-    }
-    newmat dumy;
-    return dumy;
-}
-newmat mult(newmat p1, double p2)
-{
-    newmat tmp(p1.n_rows, p1.n_cols);
-    for (int i = 0; i < p1.n_rows; i++)
-    {
-        for (int j = 0; j < p1.n_cols; j++)
-            tmp.ptr[i * p1.n_cols + j] = p1.ptr[i * p1.n_cols + j] * p2;
-    }
-    return tmp;
-}
-newmat add(newmat p1, double p2)
-{
-    newmat tmp(p1.n_rows, p1.n_cols);
-    for (int i = 0; i < p1.n_rows; i++)
-    {
-        for (int j = 0; j < p1.n_cols; j++)
-            tmp.ptr[i * p1.n_cols + j] = p1.ptr[i * p1.n_cols + j] + p2;
-    }
-    return tmp;
-}
-newmat matadd(newmat p1, newmat p2)
-{
-    newmat tmp(p1.n_rows, p1.n_cols);
-    for (int i = 0; i < p1.n_rows; i++)
-    {
-        for (int j = 0; j < p1.n_cols; j++)
-            tmp.ptr[i * p1.n_cols + j] = p1.ptr[i * p1.n_cols + j] + p2.ptr[i * p1.n_cols + j];
-    }
-    return tmp;
-}
-#endif
 int backprop(int y0)
 {
 
@@ -2004,43 +1819,78 @@ void save_weights(string hdr)
 
 }
 
-int main()
+int main_unit_tests()
 {
+    const int r1=4000;
+const int c1=3000;
+
 #ifndef SERIAL_ONLY
+stringstream suffix;
+int max = c1>r1?c1:r1;
     size_t available, total;
     cudaMemGetInfo(&available, &total);
     int nDevices;
 
     cudaGetDeviceCount(&nDevices);
-    cout << "avail=" << available << " total=" << total << " ndevices=" << nDevices << endl;
+    suffix << "Availiable Memory of GPU=" << available << " Total Mem=" << total << " Number of Devices=" << nDevices << endl;
     for (int i = 0; i < nDevices; i++) {
         cudaDeviceProp prop;
         cudaGetDeviceProperties(&prop, i);
-        printf("Device Number: %d\n", i);
-        printf("  Device name: %s\n", prop.name);
-        printf("  Memory Clock Rate (KHz): %d\n",
-            prop.memoryClockRate);
-        printf("  Memory Bus Width (bits): %d\n",
-            prop.memoryBusWidth);
-        printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
-            2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
+        suffix << "Device Number: " << i << endl;
+        suffix << "  Device name: " << prop.name << endl;
+        suffix << "  Memory Clock Rate (KHz): " << prop.memoryClockRate << endl;
+        suffix << "  Memory Bus Width (bits): " << prop.memoryBusWidth << endl;
+        suffix << "  Peak Memory Bandwidth (GB/s): " << 2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6 << endl << endl;
     }
-    checkError(cudaMalloc((void**)&deviceA, 20000 * sizeof(double)));
-    checkError(cudaMalloc((void**)&deviceB, 20000 * sizeof(double)));
-    checkError(cudaMalloc((void**)&deviceC, 20000 * sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceA, max*max * sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceB, max*max * sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceC, max*max * sizeof(double)));
 #endif
-    newmat a(40, 30);
-    newmat b(30, 40);
-    newmat c(40, 40);
-    newmat d(40, 30);
-    newmat e(40, 30);
+
+
+    newmat a(r1, c1);
+    newmat b(c1, r1);
+    newmat c(r1, r1);
+        newmat c0(r1, r1);
+        newmat d3(r1, c1);
+    newmat d2(r1, c1);
+        newmat d5(r1, c1);
+    newmat d1(r1, c1);
+        newmat d0(r1, c1);
+            newmat d4(r1, c1);
+                    newmat d6(r1, c1);
+            newmat d7(r1, c1);
+                        newmat d8(r1, c1);
+    newmat d(r1, c1);
+    newmat e(r1, c1);
+
+    cout << "Running version : " << e.build_type << endl;
+    /* testing 
+        free_ele();
+        output_all_procs(time_output);
+        set_matmult(deltafn_t[i + 1], actuation[i]);       
+        set_mult1_add2_mat(weight_updates[i], eta, layer_weights[i]);
+        set_mult1_add2_scalars(actuation[i], -1.0, 1.0);   
+        piecewisemult(actuation[i]);
+        set_transpose(layer_weights[i]);
+        set_matmult(actuation[i], layer_weights_t[i], actuation[i].n_cols);
+        prtstr();
+        */
 
     for (int i = 0; i < a.n_rows; i++)
         for (int j = 0; j < a.n_cols; j++)
         {
             a.ptr[i * a.n_cols + j] = 5;
             d.ptr[i * a.n_cols + j] = (i + 2) * 2 + j * 3;
+            d2.ptr[i * a.n_cols + j] = (i + 2) * 2 + j * 3;
             e.ptr[i * a.n_cols + j] = (i + 2) * 2 + j * 3;
+            d1.ptr[i * a.n_cols + j] = i * (3 + j + 1);
+                        d0.ptr[i * a.n_cols + j] = i * (3 + j + 1);
+            d3.ptr[i * a.n_cols + j] = d1.ptr[i * a.n_cols + j] * d2.ptr[i * a.n_cols + j];
+            d4.ptr[i * a.n_cols + j] = d0.ptr[i * a.n_cols + j] - d2.ptr[i * a.n_cols + j];
+                        d5.ptr[i * a.n_cols + j] = d2.ptr[i * a.n_cols + j] /10;
+                                    d6.ptr[i * a.n_cols + j] = i * (4+ j -3);
+                                    d7.ptr[i * a.n_cols + j] = d6.ptr[i * a.n_cols + j] *9 +17;
         }
     for (int i = 0; i < b.n_rows; i++)
         for (int j = 0; j < b.n_cols; j++)
@@ -2052,6 +1902,7 @@ int main()
         for (int j = 0; j < c.n_cols; j++)
         {
             c.ptr[i * c.n_cols + j] = i * (3 + j + 1);
+
         }
     e.add_mat(a);
   
@@ -2090,6 +1941,11 @@ int main()
     else
         cout << "No Error occured in add_scalar" << endl;
 
+
+
+
+
+err=0;
     b.set_transpose(d);
     for (int i = 0; i < b.n_rows; i++)
         for (int j = 0; j < b.n_cols; j++)
@@ -2099,10 +1955,6 @@ int main()
                 err = 1;
                 break;
             }
-
-
-
-
     if (err == 1)
     {
         cout << "Error occured in set_transpose" << endl;
@@ -2111,21 +1963,136 @@ int main()
     }
     else
         cout << "No Error occured in set_transpose" << endl;
-    a.output_all_procs(cout);
-    //d.output_all_procs(cout);
-    //output(a);
-    //output(b);
-    //output(c);
+
+d1.piecewisemult(d2);
+err=0;
+for (int i = 0; i < d1.n_rows; i++)
+        for (int j = 0; j < d1.n_cols; j++)
+            if (d1.ptr[i * d1.n_cols + j] != d3.ptr[ i* d1.n_cols + j])
+            {
+                cout << "error in piecewisemult d1.ptr["<<i<<","<<j <<"]==idx["<<i * d1.n_cols + j<< "] != d3" << "== "<< d1.ptr[i * d1.n_cols + j] << "!="  << d3.ptr[ i* d1.n_cols + j]  << endl;
+                err = 1;
+                break;
+            }
+
+
+    if (err == 1)
+    {
+        cout << "Error occured in piecewisemult" << endl;
+        output(d1,"d1");
+        output(d3,"d3");
+    }
+    else
+        cout << "No Error occured in piecewisemult" << endl;
+
+
+
+
+  d0.sub_mat(d2);
+
+  err=0;
+for (int i = 0; i < d0.n_rows; i++)
+        for (int j = 0; j < d1.n_cols; j++)
+            if (d0.ptr[i * d0.n_cols + j] != d4.ptr[ i* d0.n_cols + j])
+            {
+                cout << "error in sub_mat d0.ptr["<<i<<","<<j <<"]==idx["<<i * d0.n_cols + j<< "] != d3" << "== "<< d0.ptr[i * d0.n_cols + j] << "!="  << d4.ptr[ i* d0.n_cols + j]  << endl;
+                err = 1;
+                break;
+            }
+
+
+    if (err == 1)
+    {
+        cout << "Error occured in sub_mat" << endl;
+        output(d0,"d0");
+        output(d4,"d4");
+    }
+    else
+        cout << "No Error occured in sub_mat" << endl;
+
+d2.div_scalar(10);
+ err=0;
+for (int i = 0; i < d2.n_rows; i++)
+        for (int j = 0; j < d2.n_cols; j++)
+            if (d2.ptr[i * d2.n_cols + j] != d5.ptr[ i* d2.n_cols + j])
+            {
+                cout << "error in div_scalar d2.ptr["<<i<<","<<j <<"]==idx["<<i * d2.n_cols + j<< "] != d5" << "== "<< d5.ptr[i * d2.n_cols + j] << "!="  << d5.ptr[ i* d2.n_cols + j]  << endl;
+                err = 1;
+                break;
+            }
+
+
+    if (err == 1)
+    {
+        cout << "Error occured in div_scalar" << endl;
+        output(d2,"d2");
+        output(d5,"d5");
+    }
+    else
+        cout << "No Error occured in div_scalar" << endl;
+
+
+d8.set_mult1_add2_scalars(d6,9,17);
+ err=0;
+for (int i = 0; i < d8.n_rows; i++)
+        for (int j = 0; j < d8.n_cols; j++)
+            if (d8.ptr[i * d8.n_cols + j] != d7.ptr[ i* d8.n_cols + j])
+            {
+                cout << "error in set_mult1_add2_scalars d8.ptr["<<i<<","<<j <<"]==idx["<<i * d8.n_cols + j<< "] != d7" << "== "<< d8.ptr[i * d8.n_cols + j] << "!="  << d7.ptr[ i* d8.n_cols + j]  << endl;
+                err = 1;
+                break;
+            }
+
+
+    if (err == 1)
+    {
+        cout << "Error occured in set_mult1_add2_scalars" << endl;
+        output(d8,"d8");
+        output(d7,"d7");
+    }
+    else
+        cout << "No Error occured in set_mult1_add2_scalars" << endl;
+
+
+
     c.set_matmult(a, b);
-    cout << "-------------------" << endl;
-    //output(c);
-    //output(d);
+  
+    c0.set_matmult_testing_only(a,b);
+
+ err=0;
+for (int i = 0; i < c0.n_rows; i++)
+        for (int j = 0; j < c0.n_cols; j++)
+            if (c.ptr[i * c0.n_cols + j] != c0.ptr[ i* c0.n_cols + j])
+            {
+                cout << "error in set_matmult c.ptr["<<i<<","<<j <<"]==idx["<<i * c0.n_cols + j<< "] != c0" << "== "<< c.ptr[i * c0.n_cols + j] << "!="  << c0.ptr[ i* c0.n_cols + j]  << endl;
+                err = 1;
+                break;
+            }
+
+
+    if (err == 1)
+    {
+        cout << "Error occured in set_matmult" << endl;
+        output(c,"c");
+        output(c0,"c0");
+    }
+    else
+        cout << "No Error occured in set_matmult" << endl;
+
+
+
+
+      cout << "-------------------" << endl;
     c.output_all_procs(cout);
-    //output(c);
-    //output(b);
-    exit(1);
+    cout << "Tests performed on matrices of sizes " << r1 << " x " << c1 << endl;
+
+    #ifndef SERIAL_ONLY
+     cout << suffix.str();
+     #endif
+     return (0);
+    
 }
-int main2()
+int main()
 {
     signal(SIGINT, signal_callback_handler);
 
