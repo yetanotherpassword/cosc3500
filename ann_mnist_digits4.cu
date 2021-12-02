@@ -5,10 +5,12 @@
 
 #include <cmath>
 #include <chrono>
+
 #ifdef WANT_TO_LOAD_WEIGHTS
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 #endif
+
 #include <vector>
 #include <limits>
 #include <sstream>
@@ -18,6 +20,7 @@
 #include <map>
 #include <iterator>
 #include <signal.h>
+
 // Application Parameters
 #define INPUT_LINES 784
 #define OUTPUT_LINES 10
@@ -31,19 +34,22 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 256
+#define EPOCHS 32
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
-//#define MyCUDAMemCpy(A, B, C, D) C>max_bytes?1:cudaMemcpy(A,B,C,D)
-            #define TILES 32
-#define MyCUDAMemCpy(A, B, C, D) checkError(cudaMemcpy(A,B,C,D))
-// How often to print samples, 1=All, 2=every second one, etc
-// Undefine or define to very large number to remove output
-#define SAMPLEFREQ 1
-#undef SAMPLEFREQ
-#define TILE_WIDTH 100 // for shared kernel
-#define TILE_DIM 100 // for book example
+#define MyCUDAMemCpy(A, B, C, D) if (C>max_bytes) { cout << "Error on " << __LINE__ << " as cudaMemcpy attempt (" << C << ") exceeds  allocation of " << max_bytes << endl; exit(1); } else checkError(cudaMemcpy(A,B,C,D))
+#define TILES 32
 
+// How often to print samples, 1=All, 2=every second one, etc
+// Undefine to remove output
+#define SAMPLEFREQ 1000
+//#undef SAMPLEFREQ
+
+#ifdef SERIAL_ONLY
+#define BUILT_TYPE "Serial"
+#else
+#define BUILT_TYPE "Parallel"
+#endif
 
 int max_mat = 0;
 int max_vec = 0;
@@ -227,39 +233,26 @@ public:
     };
 
 };
-char ss[60000000];
 
 #ifndef SERIAL_ONLY
+class newmat;  // Forward declaration
 double* LayerWeightsDevice;
 double* ActuationDevice;
 double* NetinDevice;
 double* deviceA, * deviceB, * deviceC;
 cudaEvent_t start, stop;
-int tile_dimension = 64;
-class newmat;
 void PreMatMul(newmat& a, newmat& b, newmat& c, int norm);
-
-#endif
-
-typedef std::map< std::string, time_measurement* > maptype;
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-#ifndef SERIAL_ONLY 
-__global__ void MatAddMat(double* A, double* B, double* C, int len) {
-
-
+__global__ void MatAddMat(double* A, double* B, double* C, int len) 
+{
     int idx = blockIdx.x * blockDim.x  + threadIdx.x;
     if (idx < len)
     {
         C[idx] = A[idx] + B[idx];
     }
-
 }
 
-__global__ void MatSubMat(double* A, double* B, double* C, int len) {
+__global__ void MatSubMat(double* A, double* B, double* C, int len) 
+{
 
 
     int idx = blockIdx.x * blockDim.x  + threadIdx.x;
@@ -269,25 +262,17 @@ __global__ void MatSubMat(double* A, double* B, double* C, int len) {
     }
 
 }
-__global__
-void add(int n, double* x, double const* y)
-{
-    // This version will fail if the number of blocks is insufficient to cover the whole array
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n)
-    {
-        x[i] = x[i] + y[i];
-    }
 
-}
-__global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols) {
+__global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols, int BRows, int BCols, int CRows, int CCols) 
+{
 
     double CValue = 0;
 
     int Row = blockIdx.y * blockDim.y + threadIdx.y;
     int Col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    for (int k = 0; k < (THREADS_PER_2BLKDIM + ACols - 1) / THREADS_PER_2BLKDIM; k++) {
+    for (int k = 0; k < (THREADS_PER_2BLKDIM + ACols - 1) / THREADS_PER_2BLKDIM; k++) 
+    {
 
         for (int n = 0; n < THREADS_PER_2BLKDIM; ++n)
             if ((k * THREADS_PER_2BLKDIM + n < ACols && Row < ARows) && (k * THREADS_PER_2BLKDIM + n < BRows && Col < BCols))
@@ -298,66 +283,15 @@ __global__ void MatMultMat(double* A, double* B, double* C, int ARows, int ACols
     if (Row < CRows && Col < CCols) C[((blockIdx.y * blockDim.y + threadIdx.y) * CCols) + (blockIdx.x * blockDim.x) + threadIdx.x] = CValue;
 }
 
-__global__ void MatMul(float* A, float* B, float* C, int ARows, int ACols, int BRows,
-    int BCols, int CRows, int CCols)
+
+__global__ void transpose(double* A, double* C, int r, int c)
 {
-    float CValue = 0;
-
-    int Row = blockIdx.y * THREADS_PER_2BLKDIM + threadIdx.y;
-    int Col = blockIdx.x * THREADS_PER_2BLKDIM + threadIdx.x;
-
-    __shared__ float As[THREADS_PER_2BLKDIM][THREADS_PER_2BLKDIM];
-    __shared__ float Bs[THREADS_PER_2BLKDIM][THREADS_PER_2BLKDIM];
-
-    for (int k = 0; k < (THREADS_PER_2BLKDIM + ACols - 1) / THREADS_PER_2BLKDIM; k++) {
-
-        if (k * THREADS_PER_2BLKDIM + threadIdx.x < ACols && Row < ARows)
-            As[threadIdx.y][threadIdx.x] = A[Row * ACols + k * THREADS_PER_2BLKDIM + threadIdx.x];
-        else
-            As[threadIdx.y][threadIdx.x] = 0.0;
-
-        if (k * THREADS_PER_2BLKDIM + threadIdx.y < BRows && Col < BCols)
-            Bs[threadIdx.y][threadIdx.x] = B[(k * THREADS_PER_2BLKDIM + threadIdx.y) * BCols + Col];
-        else
-            Bs[threadIdx.y][threadIdx.x] = 0.0;
-
-        __syncthreads();
-
-        for (int n = 0; n < THREADS_PER_2BLKDIM; ++n)
-            CValue += As[threadIdx.y][n] * Bs[n][threadIdx.x];
-
-        __syncthreads();
-    }
-
-    if (Row < CRows && Col < CCols)
-        C[((blockIdx.y * blockDim.y + threadIdx.y) * CCols) +
-        (blockIdx.x * blockDim.x) + threadIdx.x] = CValue;
-}
-
-__global__ void transposeNaive(double *idata, double* odata,  
-                         int height, int width )
-{ 
-  int xIndex = blockIdx.x*THREADS_PER_2BLKDIM + threadIdx.x; 
-  int yIndex = blockIdx.y*THREADS_PER_2BLKDIM + threadIdx.y; 
- 
-  int index_in  = xIndex + width * yIndex; 
-  int index_out = yIndex + height * xIndex; 
-
-    for (int i=0; i<THREADS_PER_2BLKDIM; i+=THREADS_PER_2BLKDIM) { 
-      odata[index_out+i] = idata[index_in+i*width]; 
-    } 
-
-} 
-
-__global__ void transpose(double* A, double* C, int r, int c){
-
-     
         int ele = blockDim.x  * blockIdx.x + threadIdx.x;
         int col = ele % c;
         int row = ele / c;
         
-
-        if(col < c && row < r){
+        if(col < c && row < r)
+        {
                 C[row + col*r] = A[col + row*c];
         }
 }
@@ -375,7 +309,6 @@ __global__ void MatAddScalar(double scalar, double* C, int n)
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i<n)
         C[i] = C[i] + scalar;
-
 }
 
 
@@ -384,7 +317,6 @@ __global__ void MatDivScalar(double scalar, double* C, int n)
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i<n)
         C[i] = C[i] / scalar;
-
 }
 
 
@@ -393,19 +325,16 @@ __global__ void MatMultScalar(double scalar, double* C, int n)
     int i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i<n)
         C[i] = C[i] * scalar;
-
 }
 
 
 
 #else
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// implementation of the matrix-vector multiply function
+///////////////////////////////////////////////////////////////////
+// Serial implementation of the matrix-vector multiply function
 void SerialMatrixVectorMultiply(double* Y, double* X, int r1, double* M, int m_nr, int m_nc, int norm)
 {
     // Need to ensure Y vector passed has been zeroised
-
-
     for (int i = 0; i < r1; ++i)
     {
         for (int j = 0; j < m_nc; ++j)
@@ -414,7 +343,6 @@ void SerialMatrixVectorMultiply(double* Y, double* X, int r1, double* M, int m_n
             for (int k = 0; k < m_nr; ++k) // c1==r2
             {
                 Y[i * m_nc + j] += X[i * m_nr + k] * M[k * m_nc + j];
-                //                cout << "Y["<<i*m_nc+j<<"] += "<<X[i*m_nr+k] * M[k*m_nc+j] << endl;
             }
             Y[i * m_nc + j] = Y[i * m_nc + j] / (double)norm;
         }
@@ -422,8 +350,11 @@ void SerialMatrixVectorMultiply(double* Y, double* X, int r1, double* M, int m_n
 
 }
 #endif
+// Associative Array type Mapping of times to names (for discrete function timing)
+typedef std::map< std::string, time_measurement* > maptype;
 
-class newmat {
+class newmat 
+{
 public:
     double* ptr;
     int n_rows;
@@ -431,11 +362,7 @@ public:
     static time_measurement* timeptr;
     static map< string, time_measurement* >* timers;
 
-#ifdef SERIAL_ONLY
-    const string build_type = "Serial";
-#else
-    const string build_type = "Parallel";
-#endif
+    const string build_type = BUILT_TYPE;
     void create_new_time_meas(string s)
     {
         timeptr = new time_measurement(s);
@@ -462,6 +389,7 @@ public:
             create_new_time_meas("zeroize");
         }
     }
+
     newmat(int r, int c, double* p)
     {
         init_timers();
@@ -477,9 +405,6 @@ public:
 #endif
     };
 
-  
-
-
     newmat()
     {
         init_timers();
@@ -487,6 +412,7 @@ public:
         n_cols = 0;
         ptr = NULL;
     };
+
     newmat(int r, int c)
     {
         init_timers();
@@ -494,6 +420,7 @@ public:
         n_cols = c;
         ptr = new double[r * c];
     };
+
     void set_serial_transpose(newmat tmp)
     {
         if (n_rows == tmp.n_cols && n_cols == tmp.n_rows)
@@ -503,6 +430,7 @@ public:
                     ptr[j * tmp.n_rows + i] = tmp.ptr[i * tmp.n_cols + j];
         }
     };
+
     void set_transpose(newmat  tmp)
     {
         (*timers)["set_transpose"]->start_measurement();
@@ -513,16 +441,15 @@ public:
                 for (int j = 0; j < tmp.n_cols; j++)
                     ptr[j * tmp.n_rows + i] = tmp.ptr[i * tmp.n_cols + j];
 #else
- int onedLen = tmp.n_rows * tmp.n_cols;
- MyCUDAMemCpy(deviceA, tmp.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-
+            int onedLen = tmp.n_rows * tmp.n_cols;
+            MyCUDAMemCpy(deviceA, tmp.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
 
             int threads=TILES;
             int gridSize = (onedLen + TILES - 1) / TILES; 
               
-                transpose <<< gridSize, threads >> > (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
+            transpose <<< gridSize, threads >> > (deviceA, deviceC, tmp.n_rows, tmp.n_cols);
 
-          checkError(cudaDeviceSynchronize());
+            checkError(cudaDeviceSynchronize());
 
             MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
             
@@ -550,8 +477,6 @@ public:
                 ptr[i * n_cols + j] += m1.ptr[i * n_cols + j];
 #else
         int onedLen = n_rows * n_cols;
-
-
         int threads =THREADS_PER_1BLKDIM;
         int dimGrid= ((onedLen + THREADS_PER_1BLKDIM - 1) / THREADS_PER_1BLKDIM);
 
@@ -567,7 +492,7 @@ public:
         (*timers)["add_mat"]->stop_measurement();
     };
 
-        void sub_mat(newmat m1)
+    void sub_mat(newmat m1)
     {
         (*timers)["sub_mat"]->start_measurement();
         if (m1.n_rows != n_rows || m1.n_cols != n_cols)
@@ -614,8 +539,6 @@ public:
 
         // Round up according to array size 
         int gridSize = (onedLen + blockSize - 1) / blockSize; 
-        //int gridSize = minGridSize;
-
 
         MatAddScalar << < gridSize, blockSize >> > (d, deviceC, onedLen);
 
@@ -626,7 +549,7 @@ public:
         (*timers)["add_scalar"]->stop_measurement();
     };
 
-        void div_scalar(double d)
+    void div_scalar(double d)
     {
         (*timers)["div_scalar"]->start_measurement();
 
@@ -642,8 +565,6 @@ public:
 
         // Round up according to array size 
         int gridSize = (onedLen + blockSize - 1) / blockSize; 
-        //int gridSize = minGridSize;
-
 
         MatDivScalar << < gridSize, blockSize >> > (d, deviceC, onedLen);
 
@@ -655,7 +576,7 @@ public:
     };
 
 
-        void mult_scalar(double d)
+    void mult_scalar(double d)
     {
         (*timers)["mult_scalar"]->start_measurement();
 
@@ -673,7 +594,6 @@ public:
         int gridSize = (onedLen + blockSize - 1) / blockSize; 
         //int gridSize = minGridSize;
 
-
         MatMultScalar << < gridSize, blockSize >> > (d, deviceC, onedLen);
 
         checkError(cudaDeviceSynchronize());
@@ -682,79 +602,15 @@ public:
 #endif
         (*timers)["mult_scalar"]->stop_measurement();
     };
-/*
-    void div_scalar(double d)
-    {
-        (*timers)["div_scalar"]->start_measurement();
 
-#ifdef SERIAL_ONLY
-        for (int i = 0; i < n_rows; i++)
-            for (int j = 0; j < n_cols; j++)
-                ptr[i * n_cols + j] /= d;
-#else
-        int onedLen = n_rows * n_cols;
-        MyCUDAMemCpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-        //////////
-        int blockSize, minGridSize;
-        cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
-
-        // Round up according to array size
-        //int gridSize = (onedLen + blockSize - 1) / blockSize;
-        int gridSize = minGridSize;
-
-
-        /////////
-
-        MatDivScalar << < gridSize, blockSize >> > (d, deviceC);
-
-        checkError(cudaDeviceSynchronize());
-
-        MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
-#endif
-
-        (*timers)["div_scalar"]->stop_measurement();
-    };
-
-    void mult_scalar(double d)
-    {
-        (*timers)["mult_scalar"]->start_measurement();
-
-#ifdef SERIAL_ONLY
-        for (int i = 0; i < n_rows; i++)
-            for (int j = 0; j < n_cols; j++)
-                ptr[i * n_cols + j] *= d;
-#else
-        int onedLen = n_rows * n_cols;
-        MyCUDAMemCpy(deviceC, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-
-        //////////
-        int blockSize, minGridSize;
-        cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
-
-        // Round up according to array size
-        //int gridSize = (onedLen + blockSize - 1) / blockSize;
-        int gridSize = minGridSize;
-
-
-        /////////
-
-        MatMultScalar << < gridSize, blockSize >> > (d, deviceC);
-
-        checkError(cudaDeviceSynchronize());
-
-        MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
-#endif
-        (*timers)["mult_scalar"]->stop_measurement();
-
-    };
-*/
     void set_mult1_add2_scalars(newmat y1, double d1, double d2)
     {
         (*timers)["set_mult1_add2_scalars"]->start_measurement();
 
         if (n_rows != y1.n_rows || n_cols != y1.n_cols)
         {
-            cout << "Cant store y1[" << y1.n_rows << "," << y1.n_cols << " in *this[" << n_rows << "," << n_cols << "]" << endl;
+            cout << "Cant store y1[" << y1.n_rows << "," << y1.n_cols 
+                 << " in *this[" << n_rows << "," << n_cols << "]" << endl;
             exit(1);
         }
 
@@ -771,12 +627,15 @@ public:
 
         (*timers)["set_mult1_add2_scalars"]->stop_measurement();
     };
+
     void set_mult1_add2_mat(newmat y1, double d1, newmat y2)
     {
         (*timers)["set_mult1_add2_mat"]->start_measurement();
         if (n_rows != y1.n_rows || n_rows != y2.n_rows || n_cols != y1.n_cols || n_cols != y2.n_cols)
         {
-            cout << "Cant add y1[" << y1.n_rows << "," << y1.n_cols << "] to y2[" << y2.n_rows << "," << y2.n_cols << "] and store in *this[" << n_rows << "," << n_cols << "]" << endl;
+            cout << "Cant add y1[" << y1.n_rows << "," << y1.n_cols << "] to y2[" 
+                 << y2.n_rows << "," << y2.n_cols << "] and store in *this[" 
+                 << n_rows << "," << n_cols << "]" << endl;
             exit(1);
         }
 #ifdef SERIAL_ONLY
@@ -792,7 +651,11 @@ public:
         (*timers)["set_mult1_add2_mat"]->stop_measurement();
     };
 
-     void set_matmult_testing_only(newmat p1, newmat p2, int norm = 1)
+//////////////////////////////////////////////////////////////////////
+//
+// This serial function ONLY used for testing the parallel version
+//
+    void set_matmult_testing_only(newmat p1, newmat p2, int norm = 1)
     {
         if (p1.n_cols == p2.n_rows)
         {
@@ -818,19 +681,15 @@ public:
                     ptr[i * p2.n_cols + j] = ptr[i * p2.n_cols + j] / (double)norm;
                   }
             }
-
-
-
         }
         else
         {
             cout << "Cant multiply p1[" << p1.n_rows << "," << p1.n_cols << "] by p2[" << p2.n_rows << "," << p2.n_cols << "]" << endl;
             exit(1);
         }
-
-
     };
-
+//
+//////////////////////////////////////////////////////////////////////
 
     void set_matmult(newmat p1, newmat p2, int norm = 1)
     {
@@ -845,21 +704,8 @@ public:
                 n_cols = p2.n_cols;
                 ptr = new double[n_rows * n_cols];
             }
-
 #ifdef SERIAL_ONLY
             SerialMatrixVectorMultiply(ptr, p1.ptr, p1.n_rows, p2.ptr, p2.n_rows, p2.n_cols, norm);
-            /*
-                        for (int i = 0; i < p1.n_rows; ++i)
-                            for (int j = 0; j < p2.n_cols; ++j)
-                            {
-                                ptr[i * p2.n_cols + j] = 0;
-                                for (int k = 0; k < p1.n_cols; ++k) // c1==r2
-                                {
-                                    ptr[i * p2.n_cols + j] += p1.ptr[i * p1.n_cols + k] * p2.ptr[k * p2.n_cols + j];
-                                }
-                                ptr[i * p2.n_cols + j] = ptr[i * p2.n_cols + j] / (double) norm;
-                            }
-             */
 #else
             PreMatMul(p1, p2, *this, norm);
 #endif
@@ -892,7 +738,7 @@ public:
         int onedLen = n_rows * n_cols;
         MyCUDAMemCpy(deviceA, ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
         MyCUDAMemCpy(deviceB, p1.ptr, onedLen * sizeof(double), cudaMemcpyHostToDevice);
-        //////////
+
         int blockSize, minGridSize;
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
 
@@ -900,14 +746,11 @@ public:
         int gridSize = (onedLen + blockSize - 1) / blockSize;
         //int gridSize = minGridSize;
 
-
-        /////////
         MatMultMatEleWise << <  gridSize, blockSize >> > (deviceA, deviceB, deviceC, onedLen);
 
         checkError(cudaDeviceSynchronize());
 
         MyCUDAMemCpy(ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
-
 #endif
 
         (*timers)["piecewisemult"]->stop_measurement();
@@ -919,7 +762,9 @@ public:
 
         if (n_rows != p1.n_rows || n_rows != p2.n_rows || n_cols != p1.n_cols || n_cols != p2.n_cols)
         {
-            cout << "Cant diff p2[" << p2.n_rows << "," << p2.n_cols << "] from p1[" << p1.n_rows << "," << p1.n_cols << "] and store in *this[" << n_rows << "," << n_cols << "]" << endl;
+            cout << "Cant diff p2[" << p2.n_rows << "," << p2.n_cols << "] from p1[" 
+                 << p1.n_rows << "," << p1.n_cols << "] and store in *this[" 
+                 << n_rows << "," << n_cols << "]" << endl;
             exit(1);
         }
 #ifdef SERIAL_ONLY
@@ -935,7 +780,6 @@ public:
 
         int blockSize, minGridSize;
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
-
   
         int gridSize = minGridSize;
 
@@ -950,8 +794,10 @@ public:
 
         (*timers)["set_diff2_piecewisemult3"]->stop_measurement();
     };
-
-    string prtstr()
+//////////////////////////////////////////////
+//
+// Print Functions
+    string prtstr(string q="   ")
     {
         stringstream s;
         s << "";
@@ -960,32 +806,15 @@ public:
         {
             for (int j = 0; j < n_cols; j++)
             {
-
-                s<<  "   " << ptr[i*n_cols+j];
+                s<<  q << ptr[i*n_cols+j];
             }
             s << endl;
         }
         return s.str();
     };
+//
+//////////////////////////////////////////////
 
-    char* prtstr2()
-    {
-        // string s="";
-       //  char ss[100000];
-        ss[0] = '\0';
-        for (int i = 0; i < n_rows; i++)
-        {
-            for (int j = 0; j < n_cols; j++)
-            {
-                int len = strlen(ss);
-                sprintf(&ss[len], "   %20.10g", ptr[i * n_cols + j]);
-                //	   s = s + "   " + to_string(ptr[i*n_cols+j]);
-            }
-            //  s+= '\n';
-            sprintf(&ss[strlen(ss)], "\n");
-        }
-        return ss;
-    };
     void free_ele()
     {
         (*timers)["free_ele"]->start_measurement();
@@ -1007,11 +836,6 @@ public:
         memset(ptr, 0, n_cols * n_rows * sizeof(double));
 #endif
         (*timers)["zeroize"]->stop_measurement();
-    };
-
-    double* memptr()
-    {
-        return ptr;
     };
 
     int index_max_row(int r, int start, int stop)
@@ -1044,8 +868,8 @@ public:
     };
 };
 maptype* newmat::timers;
-
 time_measurement* newmat::timeptr = NULL;
+
 
 #ifndef SERIAL_ONLY
 void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
@@ -1063,8 +887,8 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
     
     double* hostC = (double*)malloc(c.n_rows * c.n_cols * sizeof(double));
 
-    MyCUDAMemCpy(deviceA, a.memptr(), c.n_rows * a.n_cols * sizeof(double), cudaMemcpyHostToDevice);
-    MyCUDAMemCpy(deviceB, b.memptr(), a.n_cols * c.n_cols * sizeof(double), cudaMemcpyHostToDevice);
+    MyCUDAMemCpy(deviceA, a.ptr, c.n_rows * a.n_cols * sizeof(double), cudaMemcpyHostToDevice);
+    MyCUDAMemCpy(deviceB, b.ptr, a.n_cols * c.n_cols * sizeof(double), cudaMemcpyHostToDevice);
 
  int onedLen = c.n_rows * c.n_cols;
 /*
@@ -1104,7 +928,7 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
 
     }
 
-    MyCUDAMemCpy(c.memptr(), deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
+    MyCUDAMemCpy(c.ptr, deviceC, onedLen * sizeof(double), cudaMemcpyDeviceToHost);
 
 }
 #endif
@@ -1532,7 +1356,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                 //  {
                 //      netin[i].ptr[j] /= actuation[i].n_cols;
                 //  }
-#ifdef SAMPLEFREQ
+#ifdef SAMPLEFREQ2
                 if ((y + 1) % SAMPLEFREQ == 0)
                     cout << "Netin serial (" << netin[i].n_rows << "," << netin[i].n_cols <<
                     ")= " << netin[i].prtstr() << endl << flush;
@@ -1542,9 +1366,10 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                 netin[i].set_matmult(actuation[i], layer_weights_t[i], actuation[i].n_cols);
                 //PreMatMul(actuation[i], layer_weights_t[i], netin[i], actuation[i].n_cols);
 
-#ifdef SAMPLEFREQ
-                cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
-                    ")= " << netin[i].prtstr() << endl << flush;
+#ifdef SAMPLEFREQ2
+                if ((y + 1) % SAMPLEFREQ == 0)
+                   cout << "Netin Parallel " << netin[i].n_rows << "," << netin[i].n_cols <<
+                       ")= " << netin[i].prtstr() << endl << flush;
 #endif
 
 #endif
@@ -1557,7 +1382,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                     showpoint << actuation[OutputLayer].prtstr() <<
                     " Sample: " << y + 1 << std::endl << flush;
                 std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                    showpoint << tgt.prtstr() << " Sample: " << y + 1 <<
+                showpoint << tgt.prtstr("            ") << " Sample: " << y + 1 <<
                     std::endl << flush;
             }
 #endif
@@ -1630,7 +1455,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                 cout << "         ";
             cout << "       ^" << endl << flush;
             std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                showpoint << tgt.prtstr() << " Sample: " << y + 1 <<
+                showpoint << tgt.prtstr("            ") << " Sample: " << y + 1 <<
                 std::endl << flush;
         }
     }
@@ -1827,6 +1652,7 @@ const int c1=3000;
 #ifndef SERIAL_ONLY
 stringstream suffix;
 int max = c1>r1?c1:r1;
+max_bytes = max*sizeof(double);
     size_t available, total;
     cudaMemGetInfo(&available, &total);
     int nDevices;
@@ -1842,9 +1668,9 @@ int max = c1>r1?c1:r1;
         suffix << "  Memory Bus Width (bits): " << prop.memoryBusWidth << endl;
         suffix << "  Peak Memory Bandwidth (GB/s): " << 2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6 << endl << endl;
     }
-    checkError(cudaMalloc((void**)&deviceA, max*max * sizeof(double)));
-    checkError(cudaMalloc((void**)&deviceB, max*max * sizeof(double)));
-    checkError(cudaMalloc((void**)&deviceC, max*max * sizeof(double)));
+    checkError(cudaMalloc((void**)&deviceA, max_bytes));
+    checkError(cudaMalloc((void**)&deviceB, max_bytes));
+    checkError(cudaMalloc((void**)&deviceC, max_bytes));
 #endif
 
 
@@ -2130,7 +1956,7 @@ int main()
         err_summary.ptr[i] = -1.0;
 
     NumberOfLayers = 4;
-    //NumberOfLayers = 3;
+
     nodes = new unsigned int[NumberOfLayers];
     nodes[0] = INPUT_LINES;
     //nodes[1] = DEFAULT_HIDDEN1;
@@ -2154,6 +1980,7 @@ int main()
 
     cout << "Number of Layers is " << NumberOfLayers << endl << flush;
     cout << "Training epochs set to " << EPOCHS << endl;
+    cout << "Build type is : " << BUILT_TYPE << endl;
 
 #ifndef SERIAL_ONLY
     // set up CUDA timing structs
@@ -2194,11 +2021,10 @@ int main()
 
         if (i < OutputLayer)
         {
+            // Save the biggest matrix size (to ensure cuda memory allocation is sufficient)
             max_mat =
                 max(max_mat, (nodes[i] + bias_field) * (nodes[i + 1] + bias_field));
-            // These buffers for the rowvec and mat structures below are done to ensure
-            // the Armadillo matrix can be accessed directly and the library doesnt move
-            // the memory around
+            
             newmat rb3(1, (nodes[i + 1] + bias_field));
 
             // Create an array of matrices (one element for each layer) for the netin value
@@ -2226,8 +2052,9 @@ int main()
     }
 
     // Informational, the max value of matrix and vectors are record and used to reserve CUDA memory 
-    confusion_matrix << "Max Matrix size " << max_mat << " Max vector size = " << max_vec <<
-        endl << flush;
+    confusion_matrix << "Max Matrix size " << max_mat 
+                     << " Max vector size = " << max_vec 
+                     << endl << flush;
 
 #ifdef WANT_TO_LOAD_WEIGHTS
     // this is a function to load previously saved weights, to either ensure constant initial values
@@ -2329,27 +2156,14 @@ int main()
     delete[] trainlabels;
     delete[] testdata;
     delete[] testlabels;
-    //cout << "Min time for " << build_type << " call : " << Call_MinTime.count() << " ns" << endl;
-    //cout << "Total time for all " << avgcnt << " calls is " << Avg_Time.count() << " ns" << endl;
-    //cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)avgcnt << " ns" << endl;
-    //cout << "Avg time for " << build_type << " call : " << (double)Avg_Time.count() / (double)(avgcnt * 1e09) << " s" << endl;
-    //cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() << " ns" << endl;
-    //cout << "Max time for " << build_type << " call : " << Call_MaxTime.count() / 1000000000 << " s" << endl;
-    //auto EndChronoTime = std::chrono::high_resolution_clock::now();
-    //auto TotalChronoTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndChronoTime - StartChronoTime);
-
-
-
 
 #ifndef SERIAL_ONLY
-    cout << "Used Tile Dimension of " << tile_dimension << endl;
     checkError(cudaFree(deviceA));
     checkError(cudaFree(deviceB));
     checkError(cudaFree(deviceC));
 
     checkError(cudaEventDestroy(start));
     checkError(cudaEventDestroy(stop));
-
 #endif
 
     return (0);
