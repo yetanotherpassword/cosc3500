@@ -34,9 +34,10 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 32
+#define EPOCHS 64
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
+// Wrapper for cuda memcpy to ensure size is ok
 #define MyCUDAMemCpy(A, B, C, D) if (C>max_bytes) { cout << "Error on " << __LINE__ << " as cudaMemcpy attempt (" << C << ") exceeds  allocation of " << max_bytes << endl; exit(1); } else checkError(cudaMemcpy(A,B,C,D))
 #define TILES 32
 
@@ -45,6 +46,7 @@
 #define SAMPLEFREQ 1000
 //#undef SAMPLEFREQ
 
+// SERIAL_ONLY macro passed at compile time to determine if building SERIAL or PARALLEL (default) vesrion
 #ifdef SERIAL_ONLY
 #define BUILT_TYPE "Serial"
 #else
@@ -353,25 +355,42 @@ void SerialMatrixVectorMultiply(double* Y, double* X, int r1, double* M, int m_n
 // Associative Array type Mapping of times to names (for discrete function timing)
 typedef std::map< std::string, time_measurement* > maptype;
 
+void ouch (string s)
+{
+     cerr << s << endl;
+     exit(1);
+}
+
 class newmat 
 {
 public:
     double* ptr;
     int n_rows;
     int n_cols;
+    bool destruct; // flag to invoke destructor or not
     static time_measurement* timeptr;
-    static map< string, time_measurement* >* timers;
+    static map< string, time_measurement* >* timers;  // timers are static, ie one copy for all instantiations
 
     const string build_type = BUILT_TYPE;
     void create_new_time_meas(string s)
     {
         timeptr = new time_measurement(s);
+        if (timeptr == NULL)
+        {
+            ouch("Error: Failed to allocate memory for timeptr in create_new_time_meas");
+        }
         (*timers)[s] = timeptr;
     }
     void init_timers()
     {
         if (timers == NULL)
+        {
             timers = new  map< string, time_measurement* >;
+            if (timers == NULL)
+            {
+                ouch("Error: Failed to allocate memory for timers in init_timers");
+            }
+        }
         if (timeptr == NULL)
         {
             create_new_time_meas("set_transpose");
@@ -389,13 +408,18 @@ public:
             create_new_time_meas("zeroize");
         }
     }
-
+/*
     newmat(int r, int c, double* p)
     {
         init_timers();
         n_rows = r;
         n_cols = c;
         ptr = new double[n_rows * n_cols];
+        if (ptr == NULL)
+        {
+            ouch("Error: Failed to allocate memory (newmat constructor) at line "+to_string(__LINE__));
+        }
+
 #ifdef SERIAL_ONLY
         for (int i = 0; i < n_rows; i++)
             for (int j = 0; j < n_cols; j++)
@@ -411,16 +435,39 @@ public:
         n_rows = 0;
         n_cols = 0;
         ptr = NULL;
+        destruct = false;
     };
-
-    newmat(int r, int c)
+*/
+    newmat(int r=0, int c=0, bool d=false)
     {
         init_timers();
         n_rows = r;
         n_cols = c;
-        ptr = new double[r * c];
+        destruct = d;
+        if (r != 0 && c != 0)
+        {
+           ptr = new double[r * c];
+           if (ptr == NULL)
+           {
+               ouch("Error: Failed to allocate memory (newmat constructor) at line "+to_string(__LINE__));
+           }
+        }
+        else
+        {
+           ptr = NULL;
+           destruct = false;
+        }
     };
-
+    ~newmat()
+    {
+        if (destruct)
+        {
+            delete[] ptr;
+            ptr = NULL;
+            n_rows=0;
+            n_cols=0;
+        }
+    };
     void set_serial_transpose(newmat tmp)
     {
         if (n_rows == tmp.n_cols && n_cols == tmp.n_rows)
@@ -666,6 +713,10 @@ public:
                 n_rows = p1.n_rows;
                 n_cols = p2.n_cols;
                 ptr = new double[n_rows * n_cols];
+                if (ptr == NULL)
+                {
+                    ouch("Error: Failed to allocate memory (temp var in set_matmult_testing_only)");
+                }
             }
 
             for (int i = 0; i < p1.n_rows; ++i)
@@ -703,6 +754,10 @@ public:
                 n_rows = p1.n_rows;
                 n_cols = p2.n_cols;
                 ptr = new double[n_rows * n_cols];
+                if (ptr == NULL)
+                {
+                    ouch("Error: Failed to re-allocate memory (temp var in set_matmult)");
+                }
             }
 #ifdef SERIAL_ONLY
             SerialMatrixVectorMultiply(ptr, p1.ptr, p1.n_rows, p2.ptr, p2.n_rows, p2.n_cols, norm);
@@ -1127,6 +1182,10 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
     {
         size = inFile.tellg();
         memblock = new unsigned char[size];
+        if (memblock == NULL)
+        {
+            ouch("Error: Failed to allocate memory (for '"+filename+"') in load_file");
+        }
         inFile.seekg(0, ios::beg);
         inFile.read((char*)memblock, size);
         inFile.close();
@@ -1153,6 +1212,10 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
     {
         size = inFile.tellg();
         *labs = new unsigned char[size];
+        if (*labs == NULL)
+        {
+            ouch("Error: Failed to allocate memory (for '"+labels+"') in load_file");
+        }
         inFile.seekg(0, ios::beg);
         inFile.read((char*)*labs, size);
         inFile.close();
@@ -1413,10 +1476,10 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                     if (firstval == lastval)
                         firststr = "*" + to_string(firstval);	// correct
                     for (int z1 = 0; z1 < firstval; z1++)
-                        cout << "         ";
+                        cout << "               ";
                     cout << "       " << firststr;
                     for (int z1 = 0; z1 < lastval - firstval - 1; z1++)
-                        cout << "         ";
+                        cout << "               ";
                     if (firstval != lastval)
                         cout << "       " << laststr;	// expected
                     cout << endl << flush;
@@ -1958,6 +2021,10 @@ int main()
     NumberOfLayers = 4;
 
     nodes = new unsigned int[NumberOfLayers];
+    if (*labs == NULL)
+    {
+        ouch("Error: Failed to allocate memory for nodes in main");
+    }
     nodes[0] = INPUT_LINES;
     //nodes[1] = DEFAULT_HIDDEN1;
     //nodes[2] = OUTPUT_LINES;
