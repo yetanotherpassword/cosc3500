@@ -38,7 +38,7 @@
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
 // Wrapper for cuda memcpy to ensure size is ok
-#define MyCUDAMemCpy(A, B, C, D) if (C>max_bytes) { cout << "Error on " << __LINE__ << " as cudaMemcpy attempt (" << C << ") exceeds  allocation of " << max_bytes << endl; exit(1); } else checkError(cudaMemcpy(A,B,C,D))
+#define MyCUDAMemCpy(A, B, C, D) if (C>max_bytes || C<=0) { cout << "Error on " << __LINE__ << " as cudaMemcpy attempt (" << C << ") is invalid for allocation of " << max_bytes << endl; exit(1); } else checkError(cudaMemcpy(A,B,C,D))
 #define TILES 32
 
 // How often to print samples, 1=All, 2=every second one, etc
@@ -372,6 +372,14 @@ public:
     static map< string, time_measurement* >* timers;  // timers are static, ie one copy for all instantiations
 
     const string build_type = BUILT_TYPE;
+    void delete_timers()
+    {
+       for(maptype::iterator iter = timers->begin(); iter != timers->end(); ++iter)
+       {
+          delete (*timers)[iter->first];
+       }
+       delete timers;
+    };
     void create_new_time_meas(string s)
     {
         timeptr = new time_measurement(s);
@@ -639,7 +647,6 @@ public:
 
         // Round up according to array size 
         int gridSize = (onedLen + blockSize - 1) / blockSize; 
-        //int gridSize = minGridSize;
 
         MatMultScalar << < gridSize, blockSize >> > (d, deviceC, onedLen);
 
@@ -799,7 +806,6 @@ public:
 
         // Round up according to array size
         int gridSize = (onedLen + blockSize - 1) / blockSize;
-        //int gridSize = minGridSize;
 
         MatMultMatEleWise << <  gridSize, blockSize >> > (deviceA, deviceB, deviceC, onedLen);
 
@@ -836,7 +842,7 @@ public:
         int blockSize, minGridSize;
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
   
-        int gridSize = minGridSize;
+        int gridSize = (onedLen + blockSize - 1) / blockSize;
 
         MatSubMat << < gridSize, blockSize >> > (deviceA, deviceB, deviceC, onedLen);
         
@@ -922,7 +928,7 @@ public:
         }
     };
 };
-maptype* newmat::timers;
+maptype* newmat::timers = NULL;
 time_measurement* newmat::timeptr = NULL;
 
 
@@ -945,16 +951,6 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
     MyCUDAMemCpy(deviceA, a.ptr, c.n_rows * a.n_cols * sizeof(double), cudaMemcpyHostToDevice);
     MyCUDAMemCpy(deviceB, b.ptr, a.n_cols * c.n_cols * sizeof(double), cudaMemcpyHostToDevice);
 
- int onedLen = c.n_rows * c.n_cols;
-/*
-   
-
-    int blockSize, minGridSize;
-    cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
-
-    // Round up according to array size
-    int gridSize = (onedLen + blockSize - 1) / blockSize; */
-
     dim3 dimBlock(THREADS_PER_2BLKDIM, THREADS_PER_2BLKDIM, 1);
     dim3 dimGrid;
 
@@ -968,14 +964,14 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
    
     checkError(cudaDeviceSynchronize());
 
+    int onedLen = c.n_rows * c.n_cols;
     if (norm != 1)
     {
         int blockSize, minGridSize;
         cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, MatDivScalar, 0, onedLen);
 
         // Round up according to array size 
-        //int gridSize = (onedLen + blockSize - 1) / blockSize; 
-        int gridSize = minGridSize;
+        int gridSize = (onedLen + blockSize - 1) / blockSize; 
 
         MatDivScalar << <  gridSize, blockSize >> > ((double)norm, deviceC, onedLen);
 
@@ -989,9 +985,9 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
 #endif
 std::time_t result = std::time(nullptr);
 string fid = to_string(result);
-unsigned int NumberOfLayers;
-unsigned int OutputLayer;
-unsigned int* nodes;
+unsigned int NumberOfLayers=0;
+unsigned int OutputLayer=0;
+unsigned int* nodes=NULL;
 double eta;	// Learning factor
 
 vector<newmat> netin;
@@ -1027,6 +1023,24 @@ int t = 0;
 int x = 0;
 #endif
 
+void delete_all()
+{
+    for (int i = 0; i <= OutputLayer; i++)
+    {
+        if (i < OutputLayer)
+        {
+            netin[i].free_ele();
+            layer_weights[i].free_ele();
+            layer_weights_t[i].free_ele();
+            new_layer_weights[i].free_ele();
+            weight_updates[i].free_ele();
+        }
+        actuation[i].free_ele();
+        deltafn[i].free_ele();
+        deltafn_t[i].free_ele();
+        ftick[i].free_ele();
+    }
+}
 
 void early_exit(string msg) {
     if (train_time.in_measurement)
@@ -1064,24 +1078,10 @@ void early_exit(string msg) {
 
     time_output << err_summary.prtstr() << endl << flush;
 
-
-    for (int i = 0; i <= OutputLayer; i++)
-    {
-        if (i < OutputLayer)
-        {
-            netin[i].free_ele();
-            layer_weights[i].free_ele();
-            layer_weights_t[i].free_ele();
-            new_layer_weights[i].free_ele();
-            weight_updates[i].free_ele();
-        }
-        actuation[i].free_ele();
-        deltafn[i].free_ele();
-        deltafn_t[i].free_ele();
-        if (i == OutputLayer)
-            ftick[i].output_all_procs(time_output);
-        ftick[i].free_ele();
-    }
+    delete_all();
+    newmat dummy;
+    dummy.output_all_procs(time_output);
+    dummy.delete_timers();
 
     confusion_matrix << time_output.str();
     cout << confusion_matrix.str();
@@ -1754,17 +1754,6 @@ max_bytes = max*sizeof(double);
     newmat e(r1, c1);
 
     cout << "Running version : " << e.build_type << endl;
-    /* testing 
-        free_ele();
-        output_all_procs(time_output);
-        set_matmult(deltafn_t[i + 1], actuation[i]);       
-        set_mult1_add2_mat(weight_updates[i], eta, layer_weights[i]);
-        set_mult1_add2_scalars(actuation[i], -1.0, 1.0);   
-        piecewisemult(actuation[i]);
-        set_transpose(layer_weights[i]);
-        set_matmult(actuation[i], layer_weights_t[i], actuation[i].n_cols);
-        prtstr();
-        */
 
     for (int i = 0; i < a.n_rows; i++)
         for (int j = 0; j < a.n_cols; j++)
@@ -1795,10 +1784,6 @@ max_bytes = max*sizeof(double);
         }
     e.add_mat(a);
   
-    //d.set_transpose(b);
-    //d.output_all_procs(cout);
-    //exit(0);
-    //d.add_mat(a);
     int err = 0;
     for (int i = 0; i < a.n_rows; i++)
         for (int j = 0; j < a.n_cols; j++)
@@ -2195,24 +2180,10 @@ int main()
 
     time_output << err_summary.prtstr() << endl << flush;
 
-
-    for (int i = 0; i <= OutputLayer; i++)
-    {
-        if (i < OutputLayer)
-        {
-            netin[i].free_ele();
-            layer_weights[i].free_ele();
-            layer_weights_t[i].free_ele();
-            new_layer_weights[i].free_ele();
-            weight_updates[i].free_ele();
-        }
-        actuation[i].free_ele();
-        deltafn[i].free_ele();
-        deltafn_t[i].free_ele();
-        if (i == OutputLayer)
-            ftick[i].output_all_procs(time_output);
-        ftick[i].free_ele();
-    }
+    delete_all();
+    newmat dummy;
+    dummy.output_all_procs(time_output);
+    dummy.delete_timers();
 
     confusion_matrix << time_output.str();
     cout << confusion_matrix.str();
