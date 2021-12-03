@@ -336,7 +336,7 @@ endif
 # Target rules
 all: build
 
-build: ann_mnist_digits4
+build: ann_mnist_digits4 ann_mnist_digits4_serial
 
 check.deps:
 ifeq ($(SAMPLE_ENABLED),0)
@@ -345,8 +345,16 @@ else
 	@echo "Sample is ready - all dependencies have been met"
 endif
 
+ann_mnist_digits4_serial.o:ann_mnist_digits4.cu
+	$(EXEC) $(NVCC) $(INCLUDES) -DSERIAL_ONLY $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
 ann_mnist_digits4.o:ann_mnist_digits4.cu
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+ann_mnist_digits4_serial: ann_mnist_digits4_serial.o
+	$(EXEC) $(NVCC) -DSERIAL_ONLY $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+	$(EXEC) mkdir -p ./bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+	$(EXEC) cp $@ ./bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 ann_mnist_digits4: ann_mnist_digits4.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
@@ -357,7 +365,7 @@ run: build
 	$(EXEC) ./ann_mnist_digits4
 
 clean:
-	rm -f ann_mnist_digits4 ann_mnist_digits4.o
-	rm -rf ./bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/ann_mnist_digits4
+	rm -f ann_mnist_digits4 ann_mnist_digits4.o ann_mnist_digits4_serial.o ann_mnist_digits4_serial
+	rm -rf ./bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/ann_mnist_digits4 ./bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/ann_mnist_digits4_serial
 
 clobber: clean
