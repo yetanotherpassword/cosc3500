@@ -27,9 +27,10 @@
 #define MATRIX_SIDE 28
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
-#define DEFAULT_HIDDEN 300
+#define DEFAULT_HIDDEN 30
 #define DEFAULT_HIDDEN1 500
 #define DEFAULT_HIDDEN2 300
+#define DEFAULT_HIDDEN3 50
 #define ETA_DEFAULT 0.5f
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
@@ -37,9 +38,11 @@
 #define EPOCHS 64
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
+#define TILES 32
 // Wrapper for cuda memcpy to ensure size is ok
 #define MyCUDAMemCpy(A, B, C, D) if (C>max_bytes || C<=0) { cout << "Error on " << __LINE__ << " as cudaMemcpy attempt (" << C << ") is invalid for allocation of " << max_bytes << endl; exit(1); } else checkError(cudaMemcpy(A,B,C,D))
-#define TILES 32
+#define TRY try {
+#define CATCH } catch (const std::exception& e) { ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" ); } 
 
 // How often to print samples, 1=All, 2=every second one, etc
 // Undefine to remove output
@@ -89,14 +92,14 @@ using namespace std;
 float mintime = std::numeric_limits<float>::max();
 float maxtime = std::numeric_limits<float>::min();
 
-std::chrono::nanoseconds Process_MaxTime = std::chrono::nanoseconds::min();
-std::chrono::nanoseconds Process_MinTime = std::chrono::nanoseconds::max();
+std::chrono::milliseconds Process_MaxTime = std::chrono::milliseconds::min();
+std::chrono::milliseconds Process_MinTime = std::chrono::milliseconds::max();
 class time_measurement
 {
 public:
-    std::chrono::nanoseconds Call_MaxTime;
-    std::chrono::nanoseconds Call_MinTime;
-    std::chrono::nanoseconds TotalCallTime;
+    std::chrono::milliseconds Call_MaxTime;
+    std::chrono::milliseconds Call_MinTime;
+    std::chrono::milliseconds TotalCallTime;
 //    std::chrono::system_clock::time_point StartCallTime;
     
 #ifndef _WIN64
@@ -106,7 +109,7 @@ public:
     std::chrono::steady_clock::time_point StartCallTime;
     std::chrono::steady_clock::time_point EndCallTime;
 #endif
-    std::chrono::nanoseconds Tot_Time;
+    std::chrono::milliseconds Tot_Time;
     int Tot_Cnt;
     int depth;
     bool in_measurement;
@@ -115,10 +118,10 @@ public:
     {
         depth = 0;
         in_measurement = false;
-        Call_MaxTime = std::chrono::nanoseconds::min();
-        Call_MinTime = std::chrono::nanoseconds::max();
+        Call_MaxTime = std::chrono::milliseconds::min();
+        Call_MinTime = std::chrono::milliseconds::max();
         Tot_Cnt = 0;
-        Tot_Time = std::chrono::nanoseconds::zero();
+        Tot_Time = std::chrono::milliseconds::zero();
         name = n;
     };
     void start_measurement()
@@ -153,7 +156,7 @@ public:
             if (depth == 0)
             {
                 EndCallTime = std::chrono::high_resolution_clock::now();
-                TotalCallTime = std::chrono::duration_cast<std::chrono::nanoseconds> (EndCallTime - StartCallTime);
+                TotalCallTime = std::chrono::duration_cast<std::chrono::milliseconds> (EndCallTime - StartCallTime);
 
                 if (TotalCallTime > Call_MaxTime)
                     Call_MaxTime = TotalCallTime;
@@ -224,12 +227,12 @@ public:
             string blank = "                              ";
             string filler = blank.substr(name.length());
             s << "For " << name << bt2 << filler << endl;
-            s << "   Min Time    : " << min_time() << " ns" << endl;
-            s << "   Max Time    : " << max_time() << " ns" << endl;
-            s << "   All Time    : " << accumulated_time() << " ns" << endl;
+            s << "   Min Time    : " << min_time() << " ms" << endl;
+            s << "   Max Time    : " << max_time() << " ms" << endl;
+            s << "   All Time    : " << accumulated_time() << " ms" << endl;
             s << "   No of Calls : " << number_of_calls() << "        " << endl;
-            s << "   Avg Time    : " << s2 << " ns" << endl;
-            s << "   Last Time   : " << last_time() << " ns" << endl << flush;
+            s << "   Avg Time    : " << s2 << " ms" << endl;
+            s << "   Last Time   : " << last_time() << " ms" << endl << flush;
         }
         return s.str();
     };
@@ -357,7 +360,7 @@ typedef std::map< std::string, time_measurement* > maptype;
 
 void ouch (string s)
 {
-     cerr << s << endl;
+     cerr << s << endl << flush;
      exit(1);
 }
 
@@ -368,6 +371,7 @@ public:
     int n_rows;
     int n_cols;
     bool destruct; // flag to invoke destructor or not
+
     static time_measurement* timeptr;
     static map< string, time_measurement* >* timers;  // timers are static, ie one copy for all instantiations
 
@@ -382,22 +386,36 @@ public:
     };
     void create_new_time_meas(string s)
     {
+      try
+      {
         timeptr = new time_measurement(s);
         if (timeptr == NULL)
         {
             ouch("Error: Failed to allocate memory for timeptr in create_new_time_meas");
         }
+      }
+      catch (const std::exception& e) 
+      { 
+         ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+      }
         (*timers)[s] = timeptr;
     }
     void init_timers()
     {
         if (timers == NULL)
         {
+          try
+          {
             timers = new  map< string, time_measurement* >;
             if (timers == NULL)
             {
                 ouch("Error: Failed to allocate memory for timers in init_timers");
             }
+          }
+          catch (const std::exception& e) 
+          { 
+             ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+          }
         }
         if (timeptr == NULL)
         {
@@ -416,36 +434,7 @@ public:
             create_new_time_meas("zeroize");
         }
     }
-/*
-    newmat(int r, int c, double* p)
-    {
-        init_timers();
-        n_rows = r;
-        n_cols = c;
-        ptr = new double[n_rows * n_cols];
-        if (ptr == NULL)
-        {
-            ouch("Error: Failed to allocate memory (newmat constructor) at line "+to_string(__LINE__));
-        }
 
-#ifdef SERIAL_ONLY
-        for (int i = 0; i < n_rows; i++)
-            for (int j = 0; j < n_cols; j++)
-                ptr[i * n_cols + j] = p[i * n_cols + j];
-#else
-        memcpy(ptr, p, n_rows * n_cols * sizeof(double));
-#endif
-    };
-
-    newmat()
-    {
-        init_timers();
-        n_rows = 0;
-        n_cols = 0;
-        ptr = NULL;
-        destruct = false;
-    };
-*/
     newmat(int r=0, int c=0, bool d=false)
     {
         init_timers();
@@ -454,29 +443,40 @@ public:
         destruct = d;
         if (r != 0 && c != 0)
         {
+          try
+          {
            ptr = new double[r * c];
            if (ptr == NULL)
            {
                ouch("Error: Failed to allocate memory (newmat constructor) at line "+to_string(__LINE__));
            }
+          }
+          catch (const std::exception& e) 
+          { 
+             ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+          }
         }
         else
         {
            ptr = NULL;
            destruct = false;
+           n_rows = 0;
+           n_cols = 0;
         }
     };
+
     ~newmat()
     {
         if (destruct)
         {
             delete[] ptr;
             ptr = NULL;
-            n_rows=0;
-            n_cols=0;
+            n_rows = 0;
+            n_cols = 0;
         }
     };
-    void set_serial_transpose(newmat tmp)
+
+    void set_serial_transpose(newmat & tmp)
     {
         if (n_rows == tmp.n_cols && n_cols == tmp.n_rows)
         {
@@ -486,7 +486,7 @@ public:
         }
     };
 
-    void set_transpose(newmat  tmp)
+    void set_transpose(newmat &  tmp)
     {
         (*timers)["set_transpose"]->start_measurement();
         if (n_rows == tmp.n_cols && n_cols == tmp.n_rows)
@@ -518,7 +518,7 @@ public:
         (*timers)["set_transpose"]->stop_measurement();
     };
 
-    void add_mat(newmat m1)
+    void add_mat(newmat & m1)
     {
         (*timers)["add_mat"]->start_measurement();
         if (m1.n_rows != n_rows || m1.n_cols != n_cols)
@@ -547,7 +547,7 @@ public:
         (*timers)["add_mat"]->stop_measurement();
     };
 
-    void sub_mat(newmat m1)
+    void sub_mat(newmat & m1)
     {
         (*timers)["sub_mat"]->start_measurement();
         if (m1.n_rows != n_rows || m1.n_cols != n_cols)
@@ -657,7 +657,7 @@ public:
         (*timers)["mult_scalar"]->stop_measurement();
     };
 
-    void set_mult1_add2_scalars(newmat y1, double d1, double d2)
+    void set_mult1_add2_scalars(newmat & y1, double d1, double d2)
     {
         (*timers)["set_mult1_add2_scalars"]->start_measurement();
 
@@ -682,7 +682,7 @@ public:
         (*timers)["set_mult1_add2_scalars"]->stop_measurement();
     };
 
-    void set_mult1_add2_mat(newmat y1, double d1, newmat y2)
+    void set_mult1_add2_mat(newmat & y1, double d1, newmat & y2)
     {
         (*timers)["set_mult1_add2_mat"]->start_measurement();
         if (n_rows != y1.n_rows || n_rows != y2.n_rows || n_cols != y1.n_cols || n_cols != y2.n_cols)
@@ -709,7 +709,7 @@ public:
 //
 // This serial function ONLY used for testing the parallel version
 //
-    void set_matmult_testing_only(newmat p1, newmat p2, int norm = 1)
+    void set_matmult_testing_only(newmat & p1, newmat & p2, int norm = 1)
     {
         if (p1.n_cols == p2.n_rows)
         {
@@ -719,11 +719,18 @@ public:
                 free_ele();
                 n_rows = p1.n_rows;
                 n_cols = p2.n_cols;
+          try
+          {
                 ptr = new double[n_rows * n_cols];
                 if (ptr == NULL)
                 {
                     ouch("Error: Failed to allocate memory (temp var in set_matmult_testing_only)");
                 }
+          }
+          catch (const std::exception& e) 
+          { 
+             ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+          }
             }
 
             for (int i = 0; i < p1.n_rows; ++i)
@@ -749,7 +756,7 @@ public:
 //
 //////////////////////////////////////////////////////////////////////
 
-    void set_matmult(newmat p1, newmat p2, int norm = 1)
+    void set_matmult(newmat & p1, newmat & p2, int norm = 1)
     {
         (*timers)["set_matmult"]->start_measurement();
         if (p1.n_cols == p2.n_rows)
@@ -760,11 +767,18 @@ public:
                 free_ele();
                 n_rows = p1.n_rows;
                 n_cols = p2.n_cols;
+           try
+           {
                 ptr = new double[n_rows * n_cols];
                 if (ptr == NULL)
                 {
                     ouch("Error: Failed to re-allocate memory (temp var in set_matmult)");
                 }
+          }
+          catch (const std::exception& e) 
+          { 
+             ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+          }
             }
 #ifdef SERIAL_ONLY
             SerialMatrixVectorMultiply(ptr, p1.ptr, p1.n_rows, p2.ptr, p2.n_rows, p2.n_cols, norm);
@@ -781,7 +795,7 @@ public:
         (*timers)["set_matmult"]->stop_measurement();
     };
 
-    void piecewisemult(newmat p1)
+    void piecewisemult(newmat & p1)
     {
         (*timers)["piecewisemult"]->start_measurement();
 
@@ -817,7 +831,7 @@ public:
         (*timers)["piecewisemult"]->stop_measurement();
     };
 
-    void set_diff2_piecewisemult3(newmat p1, newmat p2, newmat p3)
+    void set_diff2_piecewisemult3(newmat & p1, newmat & p2, newmat & p3)
     {
         (*timers)["set_diff2_piecewisemult3"]->start_measurement();
 
@@ -873,6 +887,21 @@ public:
         }
         return s.str();
     };
+    string prtstr_less_last_col(string q="   ")
+    {
+        stringstream s;
+        s << "";
+
+        for (int i = 0; i < n_rows; i++)
+        {
+            for (int j = 0; j < n_cols-1; j++)
+            {
+                s<<  q << ptr[i*n_cols+j];
+            }
+            s << endl;
+        }
+        return s.str();
+    };
 //
 //////////////////////////////////////////////
 
@@ -880,8 +909,12 @@ public:
     {
         (*timers)["free_ele"]->start_measurement();
         if (ptr != NULL)
+        {
             delete[] ptr;
-
+            ptr = NULL;
+        }
+        n_rows = 0;
+        n_cols = 0;
         (*timers)["free_ele"]->stop_measurement();
     };
     void zeroize()
@@ -945,9 +978,6 @@ void PreMatMul(newmat& a, newmat& b, newmat& c, int norm)
         exit(1);
     }
 
-    
-    double* hostC = (double*)malloc(c.n_rows * c.n_cols * sizeof(double));
-
     MyCUDAMemCpy(deviceA, a.ptr, c.n_rows * a.n_cols * sizeof(double), cudaMemcpyHostToDevice);
     MyCUDAMemCpy(deviceB, b.ptr, a.n_cols * c.n_cols * sizeof(double), cudaMemcpyHostToDevice);
 
@@ -999,7 +1029,9 @@ vector<newmat> layer_weights;
 vector<newmat> layer_weights_t;
 vector<newmat> weight_updates;
 vector<newmat> new_layer_weights;
+
 newmat tgt(1, OUTPUT_LINES + 1);
+newmat err_summary(1, OUTPUT_LINES);
 
 time_measurement main_time("main");
 time_measurement initialise_time("initialise");
@@ -1010,7 +1042,6 @@ time_measurement test_time("test");
 ios init(NULL);
 stringstream confusion_matrix;
 stringstream time_output;
-newmat err_summary(1, OUTPUT_LINES);
 string bldver;
 
 #ifdef WANT_TO_LOAD_WEIGHTS
@@ -1055,15 +1086,15 @@ void early_exit(string msg) {
     main_time.stop_measurement();
     if (msg.length() > 0)
         cout << msg << endl;
-    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " ns" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " ms" <<
         endl << flush;
-    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " ns" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " ms" <<
         endl << flush;
-    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " ns" <<
+    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " ms" <<
         endl << flush;
-    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " ns" <<
+    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " ms" <<
         endl << flush;
-    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " ns" <<
+    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " ms" <<
         endl << flush;
 
     time_output << "Epochs in Training : " << EPOCHS << endl << flush;
@@ -1180,6 +1211,8 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
 
     if (inFile.is_open())
     {
+      try
+      {
         size = inFile.tellg();
         memblock = new unsigned char[size];
         if (memblock == NULL)
@@ -1192,6 +1225,11 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
 
         cout << "the entire file content is in memory, all " << size <<
             " bytes of it" << endl << flush;
+      }
+      catch (const std::exception& e) 
+      { 
+         ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+      }
     }
     inFile.close();
     //
@@ -1210,6 +1248,8 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
 
     if (inFile.is_open())
     {
+      try
+      {
         size = inFile.tellg();
         *labs = new unsigned char[size];
         if (*labs == NULL)
@@ -1222,6 +1262,11 @@ unsigned char* load_file(string filename, string labels, unsigned char** labs)
 
         cout << "the entire file content is in memory, all " << size <<
             " bytes of it" << endl << flush;
+      }
+      catch (const std::exception& e) 
+      { 
+         ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+      }
     }
     inFile.close();
     return memblock;
@@ -1231,11 +1276,15 @@ void load_an_image(int seq, unsigned char*& mptr, newmat& img, newmat& t,
     unsigned char*& lp, int e)
 {
     int start = (INPUT_LINES * seq) + IMAGE_OFFSET;
-    double greyval = MAX_PIXEL_VAL;
+   // double greyval = MAX_PIXEL_VAL;
 
     for (int i = 0; i < INPUT_LINES; i++)
     {
-        img.ptr[i] = ((double)mptr[start + i]) / greyval;
+       // img.ptr[i] = ((double)mptr[start + i]) / greyval;  // 87.81%
+         if (mptr[start + i] == 0)  // 88.54%
+             img.ptr[i] = 0;
+         else
+             img.ptr[i] = 1;
     }
 
     img.ptr[nodes[0]] = 1;      // set bias signal, so can multiply with[node weights |
@@ -1275,13 +1324,13 @@ void output(rowvec t)
      cout << t << endl;
 }
 */
-void output(newmat t, string g = "")
+void output(newmat & t, string g = "")
 {
     cout << g << endl;
     cout << t.prtstr();
 }
 
-double accu0(newmat m1)
+double accu0(newmat & m1)
 {
     double tmp = 0;
     for (int i = 0; i < m1.n_rows; i++)
@@ -1313,7 +1362,10 @@ int backprop(int y0)
             y0 + 1 << " err=" << err << "<epsilon, for tgt '" << val <<
             "' so error is acceptable, returning" << endl << flush;
 #endif
-        err_summary.ptr[val] = err;
+        if (val >= 0 && val <= 9)
+            err_summary.ptr[val] = err;
+        else
+            ouch ("Error: Problem with val="+to_string(val)+" on line "+to_string(__LINE__)+" in backprop");
         return 1;
     }
 
@@ -1322,35 +1374,59 @@ int backprop(int y0)
         cout << "------------------------------------ BACK PROPAGATION sample=" <<
         y0 + 1 << endl << flush;
 #endif
+TRY
     ftick[OutputLayer].set_mult1_add2_scalars(actuation[OutputLayer], -1.0, 1.0);                            //  ftick[OutputLayer] = -actuation[OutputLayer] + 1;
+CATCH
 //output( ftick[OutputLayer], " ftick[OutputLayer] 1");
+TRY
     ftick[OutputLayer].piecewisemult(actuation[OutputLayer]);	// element wise multiply                //  ftick[OutputLayer] = ftick[OutputLayer] % (actuation[OutputLayer]);      
+CATCH
 //output( ftick[OutputLayer], " ftick[OutputLayer] 2");
+TRY
     deltafn[OutputLayer].set_diff2_piecewisemult3(tgt, actuation[OutputLayer], ftick[OutputLayer]);  //  deltafn[OutputLayer] = (tgt0 - actuation[OutputLayer]) % (ftick[OutputLayer]);
+CATCH
 //output( deltafn[OutputLayer], " deltafn[OutputLayer] ");
 
     for (int i = OutputLayer - 1; i >= 0; i--)
     {
+TRY
         deltafn_t[i + 1].set_transpose(deltafn[i + 1]);
+CATCH
         //output( deltafn_t[i + 1], " deltafn_t[i + 1]");
+TRY
         weight_updates[i].set_matmult(deltafn_t[i + 1], actuation[i]);            // weight_updates[i] = deltafn[i + 1].t() *actuation[i];
+CATCH
 //output( weight_updates[i], "weight_updates[i]");
+TRY
         new_layer_weights[i].set_mult1_add2_mat(weight_updates[i], eta, layer_weights[i]);// new_layer_weights[i] = layer_weights[i] + (eta *weight_updates[i]);
+CATCH
 //output( new_layer_weights[i], "new_layer_weights[i]");
+TRY
         ftick[i].set_mult1_add2_scalars(actuation[i], -1.0, 1.0);                              //  ftick[i] = -actuation[i] + 1;
+CATCH
 //output( ftick[i], "ftick[i]");
+TRY
         ftick[i].piecewisemult(actuation[i]);	// element wise multiply          //  ftick[i] = ftick[i] % (actuation[i]); 
+CATCH
 //output( ftick[i], "ftick[i]2");
+TRY
         deltafn[i].set_matmult(deltafn[i + 1], layer_weights[i]);                       // deltafn[i] = deltafn[i + 1] *layer_weights[i];
+CATCH
 //output( deltafn[i], "deltafn[i]1");
+TRY
         deltafn[i].piecewisemult(ftick[i]);                                             //  deltafn[i] = deltafn[i] % ftick[i];
+CATCH
 //output( deltafn[i], "deltafn[i]2");
     }
     for (int i = 0; i < OutputLayer; i++)
     {
         for (int j = 0; j < layer_weights[i].n_rows; j++)
             for (int k = 0; k < layer_weights[i].n_cols; k++)
+            {
+TRY
                 layer_weights[i].ptr[j * layer_weights[i].n_cols + k] = new_layer_weights[i].ptr[j * layer_weights[i].n_cols + k];
+CATCH
+            }
     }
     return 0;
 }
@@ -1442,10 +1518,10 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
             if ((y + 1) % SAMPLEFREQ == 0)
             {
                 std::cout << "Final output : " << endl << std::setw(7) << fixed <<
-                    showpoint << actuation[OutputLayer].prtstr() <<
+                    showpoint << actuation[OutputLayer].prtstr_less_last_col() <<
                     " Sample: " << y + 1 << std::endl << flush;
                 std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                showpoint << tgt.prtstr("            ") << " Sample: " << y + 1 <<
+                showpoint << tgt.prtstr_less_last_col("          ") << " Sample: " << y + 1 <<
                     std::endl << flush;
             }
 #endif
@@ -1459,7 +1535,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                 if ((y + 1) % SAMPLEFREQ == 0)
                 {
                     std::cout << "Train output : " << endl << std::setw(7) << fixed <<
-                        showpoint << actuation[OutputLayer].prtstr() <<
+                        showpoint << actuation[OutputLayer].prtstr_less_last_col() <<
                         " Sample: " << y + 1 << std::endl << flush;
                     // Below just figures out the order in which to print the "A"ctal
                     // result and "O"bjective result
@@ -1476,12 +1552,12 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
                     if (firstval == lastval)
                         firststr = "*" + to_string(firstval);	// correct
                     for (int z1 = 0; z1 < firstval; z1++)
-                        cout << "               ";
-                    cout << "       " << firststr;
+                        cout << "           ";
+                    cout << "      " << firststr;
                     for (int z1 = 0; z1 < lastval - firstval - 1; z1++)
                         cout << "               ";
                     if (firstval != lastval)
-                        cout << "       " << laststr;	// expected
+                        cout << "         " << laststr;	// expected
                     cout << endl << flush;
                 }
 #endif
@@ -1512,13 +1588,13 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
         if (!train)
         {
             std::cout << "Final output : " << endl << std::setw(7) << fixed <<
-                showpoint << actuation[OutputLayer].prtstr() <<
+                showpoint << actuation[OutputLayer].prtstr_less_last_col() <<
                 " Sample: " << y + 1 << std::endl << flush;
             for (int z1 = 0; z1 < actuation[OutputLayer].index_max_row(0, 0, 9); z1++)
                 cout << "         ";
             cout << "       ^" << endl << flush;
             std::cout << "Expec output : " << endl << std::setw(7) << fixed <<
-                showpoint << tgt.prtstr("            ") << " Sample: " << y + 1 <<
+                showpoint << tgt.prtstr_less_last_col("          ") << " Sample: " << y + 1 <<
                 std::endl << flush;
         }
     }
@@ -1569,7 +1645,7 @@ void forward_feed(unsigned char*& imgdata, unsigned char*& labdata, bool train,
         }
         confusion_matrix << endl << "   ^   ";
         for (int i = 0; i < OUTPUT_LINES; i++)
-            confusion_matrix << dec << std::setw(7) << colsum[i] << "      ";
+            confusion_matrix << dec << std::setw(7) << colsum[i] << "        ";
         confusion_matrix << endl << "Target   ";
         for (int i = 0; i < OUTPUT_LINES; i++)
         {
@@ -1968,6 +2044,7 @@ for (int i = 0; i < c0.n_rows; i++)
 }
 int main()
 {
+
     signal(SIGINT, signal_callback_handler);
 
     size_t available, total;
@@ -2003,19 +2080,30 @@ int main()
     for (int i = 0; i < err_summary.n_cols; i++)
         err_summary.ptr[i] = -1.0;
 
-    NumberOfLayers = 4;
+    NumberOfLayers = 3;
 
-    nodes = new unsigned int[NumberOfLayers];
-    if (*labs == NULL)
+    try
     {
-        ouch("Error: Failed to allocate memory for nodes in main");
+        nodes = new unsigned int[NumberOfLayers];
+        if (nodes == NULL)
+        {
+            ouch("Error: Failed to allocate memory for nodes in main");
+        }
     }
-    nodes[0] = INPUT_LINES;
-    //nodes[1] = DEFAULT_HIDDEN1;
-    //nodes[2] = OUTPUT_LINES;
-    nodes[1] = DEFAULT_HIDDEN1;
-    nodes[2] = DEFAULT_HIDDEN2;
-    nodes[3] = OUTPUT_LINES;
+    catch (const std::exception& e) 
+    { 
+        ouch("Exception was caught, on line " + to_string(__LINE__) + " with message '" + e.what() + "'\n" );
+    }
+    int c=0;
+    nodes[c++] = INPUT_LINES;
+    nodes[c++] = DEFAULT_HIDDEN;
+//   nodes[c++] = OUTPUT_LINES;
+//    nodes[c++] = DEFAULT_HIDDEN1;
+//    nodes[c++] = DEFAULT_HIDDEN2;
+//    nodes[c++] = DEFAULT_HIDDEN3;
+    nodes[c++] = OUTPUT_LINES;
+    if (c != NumberOfLayers)
+        ouch("Check of setup appears incorrect, as "+to_string(c)+" != "+to_string(NumberOfLayers)+" See line "+to_string(__LINE__));
     eta = ETA_DEFAULT;
     cout << "Using default setting of \"";
     for (int i = 0; i < NumberOfLayers; i++)
@@ -2076,11 +2164,11 @@ int main()
             // Save the biggest matrix size (to ensure cuda memory allocation is sufficient)
             max_mat =
                 max(max_mat, (nodes[i] + bias_field) * (nodes[i + 1] + bias_field));
-            
+
             newmat rb3(1, (nodes[i + 1] + bias_field));
 
             // Create an array of matrices (one element for each layer) for the netin value
-            // This holds the sum of weighted signals, for each node, that gets squashed to 
+            // This holds the sum of weighted signals, for each node, that gets squashed to
             // produce the nodes output for next layer
             netin.push_back(rb3);
             // Create a buffer of required size for weights, in each layer
@@ -2102,6 +2190,7 @@ int main()
             weight_updates.push_back(tmpwgt300);
         }
     }
+
 
     // Informational, the max value of matrix and vectors are record and used to reserve CUDA memory 
     confusion_matrix << "Max Matrix size " << max_mat 
@@ -2157,15 +2246,15 @@ int main()
     time_output << "Testing complete" << endl << flush;
 
     main_time.stop_measurement();
-    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " ns" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.accumulated_time() << " ms" <<
         endl << flush;
-    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " ns" <<
+    time_output << "Total Time       : " << std::setw(12) << main_time.last_time() << " ms" <<
         endl << flush;
-    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " ns" <<
+    time_output << "Initialise Time  : " << std::setw(12) << initialise_time.accumulated_time() << " ms" <<
         endl << flush;
-    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " ns" <<
+    time_output << "Total Train Time : " << std::setw(12) << train_time.accumulated_time() << " ms" <<
         endl << flush;
-    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " ns" <<
+    time_output << "Total Test Time  : " << std::setw(12) << test_time.accumulated_time() << " ms" <<
         endl << flush;
 
     time_output << "Epochs in Training : " << EPOCHS << endl << flush;
