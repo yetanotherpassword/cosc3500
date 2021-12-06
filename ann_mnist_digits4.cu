@@ -21,6 +21,7 @@
 #include <iterator>
 #include <signal.h>
 
+
 // Application Parameters
 #define INPUT_LINES 784
 #define OUTPUT_LINES 10
@@ -28,17 +29,20 @@
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 #define DEFAULT_HIDDEN 30
-#define DEFAULT_HIDDEN1 500
-#define DEFAULT_HIDDEN2 300
+#define DEFAULT_HIDDEN1 300
+#define DEFAULT_HIDDEN2 200
 #define DEFAULT_HIDDEN3 50
+#define DEFAULT_HIDDEN4 50
+#define DEFAULT_HIDDEN5 50
 #define ETA_DEFAULT 0.5f
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 64
+#define EPOCHS 32
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
 #define TILES 32
+
 // Wrapper for cuda memcpy to ensure size is ok
 #define MyCUDAMemCpy(A, B, C, D) if (C>max_bytes || C<=0) { cout << "Error on " << __LINE__ << " as cudaMemcpy attempt (" << C << ") is invalid for allocation of " << max_bytes << endl; exit(1); } else checkError(cudaMemcpy(A,B,C,D))
 #define TRY try {
@@ -163,9 +167,11 @@ public:
 
                 if (TotalCallTime < Call_MinTime)
                     Call_MinTime = TotalCallTime;
-
+//    std::chrono::milliseconds TempTime = Tot_Time;
                 Tot_Time += TotalCallTime;
-                Tot_Cnt++;
+//if (Tot_Time.count() <= 0)
+//  cout << "Adding " << TotalCallTime.count() << " to " << TempTime.count() << " gives negative number" << endl;
+//                Tot_Cnt++;
             }
         }
     };
@@ -1073,6 +1079,7 @@ void delete_all()
     }
 }
 
+void save_weights(string hdr);
 void early_exit(string msg) {
     if (train_time.in_measurement)
     {
@@ -1109,6 +1116,7 @@ void early_exit(string msg) {
 
     time_output << err_summary.prtstr() << endl << flush;
 
+    save_weights("post_training_weights");
     delete_all();
     newmat dummy;
     dummy.output_all_procs(time_output);
@@ -2080,7 +2088,7 @@ int main()
     for (int i = 0; i < err_summary.n_cols; i++)
         err_summary.ptr[i] = -1.0;
 
-    NumberOfLayers = 3;
+    NumberOfLayers = 7;
 
     try
     {
@@ -2096,11 +2104,13 @@ int main()
     }
     int c=0;
     nodes[c++] = INPUT_LINES;
-    nodes[c++] = DEFAULT_HIDDEN;
-//   nodes[c++] = OUTPUT_LINES;
-//    nodes[c++] = DEFAULT_HIDDEN1;
-//    nodes[c++] = DEFAULT_HIDDEN2;
-//    nodes[c++] = DEFAULT_HIDDEN3;
+//    nodes[c++] = DEFAULT_HIDDEN;
+//    nodes[c++] = OUTPUT_LINES;
+    nodes[c++] = DEFAULT_HIDDEN1;
+    nodes[c++] = DEFAULT_HIDDEN2;
+    nodes[c++] = DEFAULT_HIDDEN3;
+    nodes[c++] = DEFAULT_HIDDEN4;
+    nodes[c++] = DEFAULT_HIDDEN5;
     nodes[c++] = OUTPUT_LINES;
     if (c != NumberOfLayers)
         ouch("Check of setup appears incorrect, as "+to_string(c)+" != "+to_string(NumberOfLayers)+" See line "+to_string(__LINE__));
@@ -2268,6 +2278,7 @@ int main()
     time_output << "Error Summary (-1 means corresponding cost did not go less than Epsilon)" << endl << flush;
 
     time_output << err_summary.prtstr() << endl << flush;
+    save_weights("post_training_weights");
 
     delete_all();
     newmat dummy;
@@ -2277,7 +2288,6 @@ int main()
     confusion_matrix << time_output.str();
     cout << confusion_matrix.str();
 
-    save_weights("post_training_weights");
 
     delete[] traindata;
     delete[] trainlabels;
