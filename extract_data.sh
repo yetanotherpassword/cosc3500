@@ -1,4 +1,6 @@
 rm mfile.m
+echo "clear all" >> mfile.m
+echo "close all" >> mfile.m
 procs="add_mat add_scalar mult_scalar piecewisemult set_diff2_piecewisemult3 set_matmult set_mult1_add2_mat set_mult1_add2_scalars set_transpose"
      smax_d=""
      sall_d=""
@@ -150,41 +152,43 @@ do
             echo -e $allt2 >> $filout
             echo -e $avgt2 >> $filout
      done
-     xtic="$xtic } "
+     newpf=`echo $pf |  sed 's/_/ /g'`
+     xtick="$xtic } "
+     xtic=`echo $xtick | sed 's/_/\\\\_/g'`
      tmpmax_d="$maxdiffs ];\n"
      rmnull=`echo $tmpmax_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         smax_d="$smax_d $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname); title(\"Diffs of Max Time for Routines : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
+         smax_d="$smax_d $rmnull\n x=[1:1:size($maxdname,1)]; \n figure \n plot(x,$maxdname*100-100); title(\"Diffs of Max Time for Routines : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
      fi
 
      tmpall_d="$alldiffs ];\n"
      rmnull=`echo  $tmpall_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_d="$sall_d $rmnull;\n  x=[1:1:size($alldname,1)]; \n figure \n plot(x,$alldname);\n title(\"Diffs of All Time for Routines : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
+         sall_d="$sall_d $rmnull;\n  x=[1:1:size($alldname,1)]; \n figure \n plot(x,$alldname*100-100);\n title(\"Diffs of All Time for Routines : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
      fi
 
      tmpavg_d="$avgdiffs ];\n"
      rmnull=`echo  $avgmax_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_d="$savg_d $rmnull;\n  x=[1:1:size($avgdname,1)]; \n figure \n plot(x,$avgdname);\n  title(\"Diffs of Avg Time for Routines : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
+         savg_d="$savg_d $rmnull;\n  x=[1:1:size($avgdname,1)]; \n figure \n plot(x,$avgdname*100-100);\n  title(\"Diffs of Avg Time for Routines : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
      fi
 
      tmpmax_r="$maxratios ];\n"
      rmnull=`echo  $tmpmax_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         smax_r="$smax_r $rmnull;\n  x=[1:1:size($maxrname,1)]; \n figure \n plot(x,$maxrname*100);\n  title(\"Parallel and Serial Max Time Comparisons per routine : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial:Parallel Time Ratios (%)\")\n "
+         smax_r="$smax_r $rmnull;\n  x=[1:1:size($maxrname,1)]; \n figure \n plot(x,$maxrname*100-100);\n  title(\"Parallel and Serial Max Time Comparisons per routine : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
      fi
 
      tmpall_r="$allratios ];\n"
      rmnull=`echo  $tmpall_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_r="$sall_r $rmnull;\n x=[1:1:size($allrname,1)]; \n figure \n plot(x,$allrname);\n title(\"Parallel and Serial All Time Comparisons per routine  : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
+         sall_r="$sall_r $rmnull;\n x=[1:1:size($allrname,1)]; \n figure \n plot(x,$allrname*100-100);\n title(\"Parallel and Serial All Time Comparisons per routine  : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
      fi
 
      tmpavg_r="$avgratios ];\n"
      rmnull=`echo  $tmpavg_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_r="$savg_r $rmnull;  x=[1:1:size($avgrname,1)]; \n figure \n plot(x,$avgrname);\n title(\"Parallel and Serial Avg Time Comparisons per routine  : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
+         savg_r="$savg_r $rmnull;  x=[1:1:size($avgrname,1)]; \n figure \n plot(x,$avgrname*100-100);\n title(\"Parallel and Serial Avg Time Comparisons per routine  : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
      fi
             real=`tail -20 $fil | grep real | awk '{print $2}'`
             user=`tail -20 $fil |grep user | awk '{print $2}'`
