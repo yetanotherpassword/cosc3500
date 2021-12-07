@@ -2,12 +2,12 @@ rm mfile.m
 echo "clear all" >> mfile.m
 echo "close all" >> mfile.m
 procs="add_mat add_scalar mult_scalar piecewisemult set_diff2_piecewisemult3 set_matmult set_mult1_add2_mat set_mult1_add2_scalars set_transpose"
-     smax_d=""
-     sall_d=""
-     savg_d=""
-     smax_r=""
-     sall_r=""
-     savg_r=""
+declare -A  smax_d=()
+declare -A  sall_d=()
+declare -A  savg_d=()
+declare -A  smax_r=()
+declare -A  sall_r=()
+declare -A  savg_r=()
 names="{"
 grep "\"784 " slurm-1*.out | awk -F\" '{print $2}' | tr " " "_" | sort -u | awk '{  dir=$1; print "if [ -d \x22"dir"\x22 ]; then"; print "  rm -rf "dir; print "fi"; print "mkdir "dir }' > doit
 grep "\"784 " slurm-1* | sed "s/ /_/g" | awk -F: '{a=match($2,"\""); dir = substr($2,a+1,length($2)-a-2);  print "cp "$1" "dir}' >> doit
@@ -85,6 +85,24 @@ do
             tot_test_tim=`grep "Total Test Time" $fil | uniq | awk -F: '{ print $2 }' | sed 's/ ns/\/1000000000/g; s/ ms/\/1000/g'`
             network=$i
             pf="L${layr}_E${epc}"
+if [ -z "$smax_d[$pf]" ]; then
+    smax_d[$pf]="figure;\n"
+fi
+if [ -z "$sall_d[$pf]" ]; then
+  sall_d[$pf]="figure;\n"
+fi
+if [ -z "$savg_d[$pf]" ]; then
+  savg_d[$pf]="figure;\n"
+fi
+if [ -z "$smax_r[$pf]" ]; then
+  smax_r[$pf]="figure;\n"
+fi
+if [ -z "$sall_r[$pf]" ]; then
+  sall_r[$pf]="figure;\n"
+fi
+if [ -z "$savg_r[$pf]" ]; then
+  savg_r[$pf]="figure;\n"
+fi
             prefix1="${pf}_${type}"
             bldver=`grep "Build done" $fil`
             echo "${prefix1}_Build=\"$bldver\";" >> $filout
@@ -158,37 +176,35 @@ do
      tmpmax_d="$maxdiffs ];\n"
      rmnull=`echo $tmpmax_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         smax_d="$smax_d $rmnull\n x=[1:1:size($maxdname,1)]; \n figure \n plot(x,$maxdname*100-100); title(\"Diffs of Max Time for Routines : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
+         smax_d[$pf]="$smax_d[$pf] $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname*100-100); \n hold on \n title(\"Diffs of Max Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
      fi
 
      tmpall_d="$alldiffs ];\n"
      rmnull=`echo  $tmpall_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_d="$sall_d $rmnull;\n  x=[1:1:size($alldname,1)]; \n figure \n plot(x,$alldname*100-100);\n title(\"Diffs of All Time for Routines : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
+         sall_d[$pf]="$sall_d[$pf] $rmnull\n  x=[1:1:size($alldname,1)]; \n plot(x,$alldname*100-100);\n  hold on \n title(\"Diffs of All Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
      fi
 
      tmpavg_d="$avgdiffs ];\n"
      rmnull=`echo  $avgmax_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_d="$savg_d $rmnull;\n  x=[1:1:size($avgdname,1)]; \n figure \n plot(x,$avgdname*100-100);\n  title(\"Diffs of Avg Time for Routines : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
+         savg_d[$pf]="$savg_d[$pf] $rmnull\n  x=[1:1:size($avgdname,1)]; \n plot(x,$avgdname*100-100);\n  hold on \n  title(\"Diffs of Avg Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
      fi
-
      tmpmax_r="$maxratios ];\n"
      rmnull=`echo  $tmpmax_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         smax_r="$smax_r $rmnull;\n  x=[1:1:size($maxrname,1)]; \n figure \n plot(x,$maxrname*100-100);\n  title(\"Parallel and Serial Max Time Comparisons per routine : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
+         smax_r[$pf]="$smax_r[$pf] $rmnull\n  x=[1:1:size($maxrname,1)]; \n plot(x,$maxrname*100-100);\n  hold on \n  title(\"Parallel and Serial Max Time Comparisons per routine :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
      fi
-
      tmpall_r="$allratios ];\n"
      rmnull=`echo  $tmpall_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_r="$sall_r $rmnull;\n x=[1:1:size($allrname,1)]; \n figure \n plot(x,$allrname*100-100);\n title(\"Parallel and Serial All Time Comparisons per routine  : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
+         sall_r[$pf]="$sall_r[$pf] $rmnull\n x=[1:1:size($allrname,1)]; \n plot(x,$allrname*100-100);\n hold on \n  title(\"Parallel and Serial All Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
      fi
 
      tmpavg_r="$avgratios ];\n"
      rmnull=`echo  $tmpavg_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_r="$savg_r $rmnull;  x=[1:1:size($avgrname,1)]; \n figure \n plot(x,$avgrname*100-100);\n title(\"Parallel and Serial Avg Time Comparisons per routine  : ${newpf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
+         savg_r[$pf]="$savg_r[$pf] $rmnull  x=[1:1:size($avgrname,1)]; \n plot(x,$avgrname*100-100);\n hold on \n  title(\"Parallel and Serial Avg Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
      fi
             real=`tail -20 $fil | grep real | awk '{print $2}'`
             user=`tail -20 $fil |grep user | awk '{print $2}'`
@@ -226,12 +242,165 @@ do
      fi
   done
 done
-echo -e $smax_r>> mfile.m
-echo -e $smax_d>> mfile.m
-echo -e $sall_r>> mfile.m
-echo -e $sall_d>> mfile.m
-echo -e $savg_r>> mfile.m
-echo -e $savg_d>> mfile.m
+
+###################################################
+neworder=`echo  "${!smax_r[@]}" | sed "s/[LE]//g" | tr ' ' '\n' | sort -t_ -k1,1n -k2,2n | sed "s/^/L/g; s/_/_E/g" | tr '\n' ' '`
+starting=`echo $neworder | awk '{print $1}'`
+startl=`echo $starting | cut -d"_" -f1`
+starte=`echo $starting | cut -d"_" -f2 | awk '{print "\x22"$1"\x22,"}'`
+for i in ${neworder}
+do
+  L=`echo $i|cut  -d"_" -f1`
+  E=`echo $i|cut  -d"_" -f2`
+  if [[ "$L" != "$startl" ]]; then
+     startl=$L
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+      starte="\"$E\","
+  else
+    if [[ $starte != \"${E}\", ]]; then
+     starte="$starte \"$E\","
+    fi
+  fi
+b=`echo ${smax_r[$i]} | sed "s/^\[[0-9LE_]*\]//g" | sed "s/^[0-9]* //g"`
+  echo -e "$b" >> mfile.m
+done
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+
+########################
+neworder=`echo  "${!smax_d[@]}" | sed "s/[LE]//g" | tr ' ' '\n' | sort -t_ -k1,1n -k2,2n | sed "s/^/L/g; s/_/_E/g" | tr '\n' ' '`
+starting=`echo $neworder | awk '{print $1}'`
+startl=`echo $starting | cut -d"_" -f1`
+starte=`echo $starting | cut -d"_" -f2 | awk '{print "\x22"$1"\x22,"}'`
+for i in ${neworder}
+do
+  L=`echo $i|cut  -d"_" -f1`
+  E=`echo $i|cut  -d"_" -f2`
+  if [[ "$L" != "$startl" ]]; then
+     startl=$L
+     leg=`echo $starte | sed "s/,$//g"`
+     echo "legend($leg);" >>  mfile.m  #figure ???
+      starte="\"$E\","
+  else
+    if [[ $starte != \"${E}\", ]]; then
+     starte="$starte \"$E\","
+    fi
+  fi
+b=`echo ${smax_d[$i]} | sed "s/^\[[0-9LE_]*\]//g" | sed "s/^[0-9]* //g"`
+  echo -e "$b" >> mfile.m
+done
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+
+
+
+########################
+neworder=`echo  "${!sall_r[@]}" | sed "s/[LE]//g" | tr ' ' '\n' | sort -t_ -k1,1n -k2,2n | sed "s/^/L/g; s/_/_E/g" | tr '\n' ' '`
+starting=`echo $neworder | awk '{print $1}'`
+startl=`echo $starting | cut -d"_" -f1`
+starte=`echo $starting | cut -d"_" -f2 | awk '{print "\x22"$1"\x22,"}'`
+for i in ${neworder}
+do
+  L=`echo $i|cut  -d"_" -f1`
+  E=`echo $i|cut  -d"_" -f2`
+  if [[ "$L" != "$startl" ]]; then
+     startl=$L
+     leg=`echo $starte | sed "s/,$//g"`
+     echo "legend($leg);" >>  mfile.m  #figure ???
+      starte="\"$E\","
+  else
+    if [[ $starte != \"${E}\", ]]; then
+     starte="$starte \"$E\","
+    fi
+  fi
+b=`echo ${sall_r[$i]} | sed "s/^\[[0-9LE_]*\]//g" | sed "s/^[0-9]* //g"`
+  echo -e "$b" >> mfile.m
+done
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+
+
+
+########################
+neworder=`echo  "${!sall_d[@]}" | sed "s/[LE]//g" | tr ' ' '\n' | sort -t_ -k1,1n -k2,2n | sed "s/^/L/g; s/_/_E/g" | tr '\n' ' '`
+starting=`echo $neworder | awk '{print $1}'`
+startl=`echo $starting | cut -d"_" -f1`
+starte=`echo $starting | cut -d"_" -f2 | awk '{print "\x22"$1"\x22,"}'`
+for i in ${neworder}
+do
+  L=`echo $i|cut  -d"_" -f1`
+  E=`echo $i|cut  -d"_" -f2`
+  if [[ "$L" != "$startl" ]]; then
+     startl=$L
+     leg=`echo $starte | sed "s/,$//g"`
+     echo "legend($leg);" >>  mfile.m  #figure ???
+      starte="\"$E\","
+  else
+    if [[ $starte != \"${E}\", ]]; then
+     starte="$starte \"$E\","
+    fi
+  fi
+b=`echo ${sall_d[$i]} | sed "s/^\[[0-9LE_]*\]//g" | sed "s/^[0-9]* //g"`
+  echo -e "$b" >> mfile.m
+done
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+
+
+
+########################
+neworder=`echo  "${!savg_r[@]}" | sed "s/[LE]//g" | tr ' ' '\n' | sort -t_ -k1,1n -k2,2n | sed "s/^/L/g; s/_/_E/g" | tr '\n' ' '`
+starting=`echo $neworder | awk '{print $1}'`
+startl=`echo $starting | cut -d"_" -f1`
+starte=`echo $starting | cut -d"_" -f2 | awk '{print "\x22"$1"\x22,"}'`
+for i in ${neworder}
+do
+  L=`echo $i|cut  -d"_" -f1`
+  E=`echo $i|cut  -d"_" -f2`
+  if [[ "$L" != "$startl" ]]; then
+     startl=$L
+     leg=`echo $starte | sed "s/,$//g"`
+     echo "legend($leg);" >>  mfile.m  #figure ???
+      starte="\"$E\","
+  else
+    if [[ $starte != \"${E}\", ]]; then
+     starte="$starte \"$E\","
+    fi
+  fi
+b=`echo ${savg_r[$i]} | sed "s/^\[[0-9LE_]*\]//g" | sed "s/^[0-9]* //g"`
+  echo -e "$b" >> mfile.m
+done
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+
+
+
+########################
+neworder=`echo  "${!savg_d[@]}" | sed "s/[LE]//g" | tr ' ' '\n' | sort -t_ -k1,1n -k2,2n | sed "s/^/L/g; s/_/_E/g" | tr '\n' ' '`
+starting=`echo $neworder | awk '{print $1}'`
+startl=`echo $starting | cut -d"_" -f1`
+starte=`echo $starting | cut -d"_" -f2 | awk '{print "\x22"$1"\x22,"}'`
+for i in ${neworder}
+do
+  L=`echo $i|cut  -d"_" -f1`
+  E=`echo $i|cut  -d"_" -f2`
+  if [[ "$L" != "$startl" ]]; then
+     startl=$L
+     leg=`echo $starte | sed "s/,$//g"`
+     echo "legend($leg);" >>  mfile.m  #figure ???
+      starte="\"$E\","
+  else
+    if [[ $starte != \"${E}\", ]]; then
+     starte="$starte \"$E\","
+    fi
+  fi
+b=`echo ${savg_d[$i]} | sed "s/^\[[0-9LE_]*\]//g" | sed "s/^[0-9]* //g"`
+  echo -e "$b" >> mfile.m
+done
+     leg=`echo $starte | sed "s/,$//g"`
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
+
 echo -n "names=" >> mfile.m
 echo -e $names >> mfile.m
 echo "};" >> mfile.m
