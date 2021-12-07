@@ -1,13 +1,11 @@
 rm mfile.m
 procs="add_mat add_scalar mult_scalar piecewisemult set_diff2_piecewisemult3 set_matmult set_mult1_add2_mat set_mult1_add2_scalars set_transpose"
-maxratios="["
-maxdiffs="["
-allratios="["
-alldiffs="["
-avgratios="["
-avgdiffs="["
-allratios="["
-alldiffs="["
+     smax_d=""
+     sall_d=""
+     savg_d=""
+     smax_r=""
+     sall_r=""
+     savg_r=""
 names="{"
 grep "\"784 " slurm-1*.out | awk -F\" '{print $2}' | tr " " "_" | sort -u | awk '{  dir=$1; print "if [ -d \x22"dir"\x22 ]; then"; print "  rm -rf "dir; print "fi"; print "mkdir "dir }' > doit
 grep "\"784 " slurm-1* | sed "s/ /_/g" | awk -F: '{a=match($2,"\""); dir = substr($2,a+1,length($2)-a-2);  print "cp "$1" "dir}' >> doit
@@ -84,7 +82,8 @@ do
             tot_trng_tim=`grep "Total Train Time" $fil | uniq | awk -F: '{ print $2 }' | sed 's/ ns/\/1000000000/g; s/ ms/\/1000/g'`
             tot_test_tim=`grep "Total Test Time" $fil | uniq | awk -F: '{ print $2 }' | sed 's/ ns/\/1000000000/g; s/ ms/\/1000/g'`
             network=$i
-            prefix1="L${layr}_E${epc}_${type}"
+            pf="L${layr}_E${epc}"
+            prefix1="${pf}_${type}"
             bldver=`grep "Build done" $fil`
             echo "${prefix1}_Build=\"$bldver\";" >> $filout
             echo "${prefix1}_Type=\"$type\";" >> $filout
@@ -95,19 +94,33 @@ do
             if [[ "$type" == "Serial" ]]; then
                comp1="PtoS"
                comp2="PdiffS"
-               prefix2="L${layr}_E${epc}_${comp1}"
-               prefix3="L${layr}_E${epc}_${comp2}"
-               altprefix1="L${layr}_E${epc}_Parallel"
-               echo -e "${prefix1}_tot_time=$tot_tim;\n L${layr}_E${epc}_tot_PtoS=${prefix1}_tot_time/${altprefix1}_tot_time; \n  L${layr}_E${epc}_tot_PdiffS=${prefix1}_tot_time-${altprefix1}_tot_time; \n L${layr}_E${epc}_all_tots=[   L${layr}_E${epc}_tot_PtoS L${layr}_E${epc}_tot_PdiffS];\n" >> $filout
-               echo -e "${prefix1}_tot_train=$tot_trng_tim; \n L${layr}_E${epc}_trg_PtoS=${prefix1}_tot_train/${altprefix1}_tot_train; \n  L${layr}_E${epc}_trg_PdiffS=${prefix1}_tot_train-${altprefix1}_tot_train; \n L${layr}_E${epc}_all_trgs=[   L${layr}_E${epc}_trg_PtoS L${layr}_E${epc}_trg_PdiffS];\n" >> $filout
-               echo -e "${prefix1}_tot_test=$tot_test_tim; \n  L${layr}_E${epc}_tst_PtoS=${prefix1}_tot_test/${altprefix1}_tot_test; \n   L${layr}_E${epc}_tst_PdiffS=${prefix1}_tot_test-${altprefix1}_tot_test;\n   L${layr}_E${epc}_all_tsts=[   L${layr}_E${epc}_tst_PtoS L${layr}_E${epc}_tst_PdiffS];\n " >> $filout
+               prefix2="${pf}_${comp1}"
+               prefix3="${pf}_${comp2}"
+               altprefix1="${pf}_Parallel"
+               echo -e "${prefix1}_tot_time=$tot_tim;\n ${pf}_tot_PtoS=${prefix1}_tot_time/${altprefix1}_tot_time; \n  ${pf}_tot_PdiffS=${prefix1}_tot_time-${altprefix1}_tot_time; \n ${pf}_all_tots=[   ${pf}_tot_PtoS ${pf}_tot_PdiffS];\n" >> $filout
+               echo -e "${prefix1}_tot_train=$tot_trng_tim; \n ${pf}_trg_PtoS=${prefix1}_tot_train/${altprefix1}_tot_train; \n  ${pf}_trg_PdiffS=${prefix1}_tot_train-${altprefix1}_tot_train; \n ${pf}_all_trgs=[   ${pf}_trg_PtoS ${pf}_trg_PdiffS];\n" >> $filout
+               echo -e "${prefix1}_tot_test=$tot_test_tim; \n  ${pf}_tst_PtoS=${prefix1}_tot_test/${altprefix1}_tot_test; \n   ${pf}_tst_PdiffS=${prefix1}_tot_test-${altprefix1}_tot_test;\n   ${pf}_all_tsts=[   ${pf}_tst_PtoS ${pf}_tst_PdiffS];\n " >> $filout
             else
                echo "${prefix1}_tot_time=$tot_tim;" >> $filout
                echo "${prefix1}_tot_train=$tot_trng_tim;" >> $filout
                echo "${prefix1}_tot_test=$tot_test_tim;" >> $filout
             fi
+            maxrname="max_ratios_${pf}"
+            maxdname="max_diffs_${pf}"
+            allrname="all_ratios_${pf}"
+            alldname="all_diffs_${pf}"
+            avgrname="avg_ratios_${pf}"
+            avgdname="avg_diffs_${pf}"
+            maxratios="$maxrname=["
+            maxdiffs="$maxdname=["
+            allratios="$allrname=["
+            alldiffs="$alldname=["
+            avgratios="$avgrname=["
+            avgdiffs="$avgdname=["
+            xtic="{"
      for k in $procs
      do
+            xtic="$xtic \"$k\" "
             grep -A 6 -w $k $fil > $i/tmp
             maxt=`grep Max $i/tmp | awk -F: '{print $2}' | sed 's/ ns/\/1000000000/g; s/ ms/\/1000/g'`
             allt=`grep All $i/tmp | awk -F: '{print $2}' | sed 's/ ns/\/1000000000/g; s/ ms/\/1000/g'`
@@ -118,9 +131,9 @@ do
             pref3="${prefix3}_${k}"
             altpref="${altprefix1}_${k}"
             if [[ "$type" == "Serial" ]]; then
-                maxt2="${pref}_max=$maxt;\n  ${pref2}_max=$maxt/${altpref}_max ; \n     ${pref3}_max=$maxt-${altpref}_max ; \n L${layr}_E${epc}_all_max= [  ${pref2}_max ${pref3}_max ];\n  "
-                allt2="${pref}_all=$allt; \n ${pref2}_all=$allt/${altpref}_all ;  \n    ${pref3}_all=$allt-${altpref}_all ;\n  L${layr}_E${epc}_all_all= [  ${pref2}_all ${pref3}_all ];\n  "
-                avgt2="${pref}_avg=$allt; \n ${pref2}_avg=$allt/${altpref}_avg ;  \n    ${pref3}_avg=$allt-${altpref}_avg ;\n  L${layr}_E${epc}_all_avg= [ ${pref2}_avg ${pref3}_avg ]; \n "
+                maxt2="${pref}_max=$maxt;\n  ${pref2}_max=$maxt/${altpref}_max ; \n     ${pref3}_max=$maxt-${altpref}_max ; \n ${pf}_all_max= [  ${pref2}_max ${pref3}_max ];\n  "
+                allt2="${pref}_all=$allt; \n ${pref2}_all=$allt/${altpref}_all ;  \n    ${pref3}_all=$allt-${altpref}_all ;\n  ${pf}_all_all= [  ${pref2}_all ${pref3}_all ];\n  "
+                avgt2="${pref}_avg=$allt; \n ${pref2}_avg=$allt/${altpref}_avg ;  \n    ${pref3}_avg=$allt-${altpref}_avg ;\n  ${pf}_all_avg= [ ${pref2}_avg ${pref3}_avg ]; \n "
                 maxratios="${maxratios}${pref2}_max;\n"
                 maxdiffs="${maxdiffs}${pref3}_max;\n"
                 allratios="${allratios}${pref2}_all;\n"
@@ -137,6 +150,42 @@ do
             echo -e $allt2 >> $filout
             echo -e $avgt2 >> $filout
      done
+     xtic="$xtic } "
+     tmpmax_d="$maxdiffs ];\n"
+     rmnull=`echo $tmpmax_d | sed "/\[ \];/d"`
+     if [ -n "$rmnull" ]; then
+         smax_d="$smax_d $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname); title(\"Diffs of Max Time for Routines : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
+     fi
+
+     tmpall_d="$alldiffs ];\n"
+     rmnull=`echo  $tmpall_d | sed "/\[ \];/d"`
+     if [ -n "$rmnull" ]; then
+         sall_d="$sall_d $rmnull;\n  x=[1:1:size($alldname,1)]; \n figure \n plot(x,$alldname);\n title(\"Diffs of All Time for Routines : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
+     fi
+
+     tmpavg_d="$avgdiffs ];\n"
+     rmnull=`echo  $avgmax_d | sed "/\[ \];/d"`
+     if [ -n "$rmnull" ]; then
+         savg_d="$savg_d $rmnull;\n  x=[1:1:size($avgdname,1)]; \n figure \n plot(x,$avgdname);\n  title(\"Diffs of Avg Time for Routines : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
+     fi
+
+     tmpmax_r="$maxratios ];\n"
+     rmnull=`echo  $tmpmax_r | sed "/\[ \];/d"`
+     if [ -n "$rmnull" ]; then
+         smax_r="$smax_r $rmnull;\n  x=[1:1:size($maxrname,1)]; \n figure \n plot(x,$maxrname*100);\n  title(\"Parallel and Serial Max Time Comparisons per routine : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial:Parallel Time Ratios (%)\")\n "
+     fi
+
+     tmpall_r="$allratios ];\n"
+     rmnull=`echo  $tmpall_r | sed "/\[ \];/d"`
+     if [ -n "$rmnull" ]; then
+         sall_r="$sall_r $rmnull;\n x=[1:1:size($allrname,1)]; \n figure \n plot(x,$allrname);\n title(\"Parallel and Serial All Time Comparisons per routine  : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
+     fi
+
+     tmpavg_r="$avgratios ];\n"
+     rmnull=`echo  $tmpavg_r | sed "/\[ \];/d"`
+     if [ -n "$rmnull" ]; then
+         savg_r="$savg_r $rmnull;  x=[1:1:size($avgrname,1)]; \n figure \n plot(x,$avgrname);\n title(\"Parallel and Serial Avg Time Comparisons per routine  : ${pf}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
+     fi
             real=`tail -20 $fil | grep real | awk '{print $2}'`
             user=`tail -20 $fil |grep user | awk '{print $2}'`
             sys=`tail -20 $fil |grep sys | awk '{print $2}'`
@@ -173,24 +222,12 @@ do
      fi
   done
 done
-echo -n "max_ratios=" >> mfile.m
-echo -e $maxratios >> mfile.m
-echo "];" >> mfile.m
-echo -n "max_diffs=" >> mfile.m
-echo -e $maxdiffs>> mfile.m
-echo "];" >> mfile.m
-echo -n "all_ratios=" >> mfile.m
-echo -e $allratios >> mfile.m
-echo "];" >> mfile.m
-echo -n "all_diffs=" >> mfile.m
-echo -e $alldiffs>> mfile.m
-echo "];" >> mfile.m
-echo -n "avg_ratios=" >> mfile.m
-echo -e $avgratios >> mfile.m
-echo "];" >> mfile.m
-echo -n "avg_diffs=" >> mfile.m
-echo -e $avgdiffs>> mfile.m
-echo "];" >> mfile.m
+echo -e $smax_r>> mfile.m
+echo -e $smax_d>> mfile.m
+echo -e $sall_r>> mfile.m
+echo -e $sall_d>> mfile.m
+echo -e $savg_r>> mfile.m
+echo -e $savg_d>> mfile.m
 echo -n "names=" >> mfile.m
 echo -e $names >> mfile.m
 echo "};" >> mfile.m
