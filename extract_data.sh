@@ -8,10 +8,18 @@ declare -A  savg_d=()
 declare -A  smax_r=()
 declare -A  sall_r=()
 declare -A  savg_r=()
+declare -a  plot_options
+plot_options[1]="\"o:\""
+plot_options[2]="\"*-.\""
+plot_options[3]="\"s.\""
+plot_options[4]="\"v--\""
+plot_options[5]="\"d:\""
+plot_options[6]="\"+-.\""
+cnt=1
 names="{"
 grep "\"784 " slurm-1*.out | awk -F\" '{print $2}' | tr " " "_" | sort -u | awk '{  dir=$1; print "if [ -d \x22"dir"\x22 ]; then"; print "  rm -rf "dir; print "fi"; print "mkdir "dir }' > doit
 grep "\"784 " slurm-1* | sed "s/ /_/g" | awk -F: '{a=match($2,"\""); dir = substr($2,a+1,length($2)-a-2);  print "cp "$1" "dir}' >> doit
-remove=`grep "Aborted\|Killed\|Valgrind cannot continue" slurm-1* | awk -F: '{print $1}'`
+remove=`grep "CANCELLED\|Aborted\|Killed\|Valgrind cannot continue" slurm-1* | awk -F: '{print $1}'`
 running=`squeue -u s4604901| tail -n +2 | awk '{print "slurm-"$1".out"}'`
 removeall=`echo -e "$remove\n$running" | uniq | tr " " "\n"`
 echo "removeall="$removeall
@@ -27,14 +35,6 @@ for i in $dirs
 do
   layr=`echo $i | awk -F_ '{print NF}'`
   files=`ls $i`
-#  epclst=`grep "Epochs in Training" $i/$files | awk -F: '{print $3}'|sort -u -n`
-#  hdr=""
-#  for e in $epclst
-#  do
-#set -x
-#     hdr="$hdr L${layr}_E${e}_all_tots=[];\nL${layr}_E${e}_all_trgs=[];\n L${layr}_E${e}_all_tsts=[];\n L${layr}_E${e}_all_max=[];\n L${layr}_E${e}_all_all=[];\n L${layr}_E${e}_all_avg=[];\n"
-#set +x
-#  done
   if [[ -z "$files" ]]; then
      continue
   fi
@@ -42,24 +42,40 @@ do
   echo
   for j in $files
   do
+if [[ "$i/$j" == "784_500_300_10/slurm-1305.out" ]]; then
+  set -x
+  echo "$i/$j is ================================================="
+fi
+if [[ "$i/$j" == "784_500_300_10/slurm-1368.out" ]]; then
+  set -x
+  echo "$i/$j is ================================================="
+fi
      if grep -q "Killed\|Valgrind cannot continue" $i/$j ; then
          rm -v $i/$j
      fi
      if [ -f $i/$j ]; then
-        type=`grep "Build type is :" $i/$j | awk -F: '{print $2}'| tr -s " " | tr -d " "`
-        if [ -z "$type" ]; then
-            echo "Build type not found in $i/$j, try older ref"
+            type=`grep "Build type is :" $i/$j | awk -F: '{print $2}'| tr -s " " | tr -d " "`
+            if [ -z "$type" ]; then
+                echo "Build type not found in $i/$j, try older ref"
 
-            if grep  -i serial $i/$j; then
+                if grep  -i serial $i/$j; then
+                   alttyp="Parallel"
+                   type="Serial"
+                elif  grep  -i parallel $i/$j; then
+                   alttyp="Serial"
+                   type="Parallel"
+                else
+                   echo "Alt Build type not found in $i/$j, skipping file"
+                   continue
+                fi
+            elif echo $type | grep -q -i serial ; then
                alttyp="Parallel"
-               type="Serial"
-            elif  grep  -i parallel $i/$j; then
+            elif echo $type | grep -q -i parallel ; then
                alttyp="Serial"
-               type="Parallel"
             else
+               echo "Build type not found so skipping "
                continue
             fi
-        fi
             epc=`grep "Epochs in Training" $i/$j | awk -F:  '{print $2}'| tr -s " " | tr -d " "`
             if [ -z "$epc" ]; then
                epc=`grep "Training epochs"  $i/$j | awk '{ print $NF }'`
@@ -67,15 +83,18 @@ do
                   continue
                fi
             fi
-            matefil=`grep "Build type is : $alttyp" $i/* | awk -F: '{print $1}' | sort -u`
-            if [ -z "$matefil" ]; then
+            matefil=`grep "Build type is : $alttyp" $i/*.out | awk -F: '{print $1}' | sort -u | tr '\n' ' '`
+echo "i******************************** matefil=$matefil"
+            if [[ -z "$matefil" ]]; then
+               echo "Skipping as no matching $alttyp file found for $build for $i on Epoch $epc"
                continue
             elif ! grep "Training epochs set to $epc\|Epochs in Training : $epc" $matefil; then
+               echo "Skipping as no matching $alttyp Epoch $epc exists in $type  $matefil"
                continue
             fi
             fil=$i/${type}_E${epc}_$j
             filout=${fil}.csv
-            mv -v $i/$j $fil
+            cp -v $i/$j $fil
             if [ -f "$filout" ]; then
                rm $filout
             fi
@@ -85,24 +104,24 @@ do
             tot_test_tim=`grep "Total Test Time" $fil | uniq | awk -F: '{ print $2 }' | sed 's/ ns/\/1000000000/g; s/ ms/\/1000/g'`
             network=$i
             pf="L${layr}_E${epc}"
-if [ -z "$smax_d[$pf]" ]; then
-    smax_d[$pf]="figure;\n"
-fi
-if [ -z "$sall_d[$pf]" ]; then
-  sall_d[$pf]="figure;\n"
-fi
-if [ -z "$savg_d[$pf]" ]; then
-  savg_d[$pf]="figure;\n"
-fi
-if [ -z "$smax_r[$pf]" ]; then
-  smax_r[$pf]="figure;\n"
-fi
-if [ -z "$sall_r[$pf]" ]; then
-  sall_r[$pf]="figure;\n"
-fi
-if [ -z "$savg_r[$pf]" ]; then
-  savg_r[$pf]="figure;\n"
-fi
+            if [ -z "$smax_d[$pf]" ]; then
+                smax_d[$pf]="figure;\n"
+            fi
+            if [ -z "$sall_d[$pf]" ]; then
+              sall_d[$pf]="figure;\n"
+            fi
+            if [ -z "$savg_d[$pf]" ]; then
+              savg_d[$pf]="figure;\n"
+            fi
+            if [ -z "$smax_r[$pf]" ]; then
+              smax_r[$pf]="figure;\n"
+            fi
+            if [ -z "$sall_r[$pf]" ]; then
+              sall_r[$pf]="figure;\n"
+            fi
+            if [ -z "$savg_r[$pf]" ]; then
+              savg_r[$pf]="figure;\n"
+            fi
             prefix1="${pf}_${type}"
             bldver=`grep "Build done" $fil`
             echo "${prefix1}_Build=\"$bldver\";" >> $filout
@@ -175,36 +194,41 @@ fi
      xtic=`echo $xtick | sed 's/_/\\\\_/g'`
      tmpmax_d="$maxdiffs ];\n"
      rmnull=`echo $tmpmax_d | sed "/\[ \];/d"`
+     opt=${plot_options[$cnt]}
      if [ -n "$rmnull" ]; then
-         smax_d[$pf]="$smax_d[$pf] $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname*100-100); \n hold on \n title(\"Diffs of Max Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
+         smax_d[$pf]="$smax_d[$pf] $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname*100-100,$opt); \n hold on \n title(\"Diffs of Max Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
      fi
 
      tmpall_d="$alldiffs ];\n"
      rmnull=`echo  $tmpall_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_d[$pf]="$sall_d[$pf] $rmnull\n  x=[1:1:size($alldname,1)]; \n plot(x,$alldname*100-100);\n  hold on \n title(\"Diffs of All Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
+         sall_d[$pf]="$sall_d[$pf] $rmnull\n  x=[1:1:size($alldname,1)]; \n plot(x,$alldname*100-100,$opt);\n  hold on \n title(\"Diffs of All Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
      fi
 
      tmpavg_d="$avgdiffs ];\n"
      rmnull=`echo  $avgmax_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_d[$pf]="$savg_d[$pf] $rmnull\n  x=[1:1:size($avgdname,1)]; \n plot(x,$avgdname*100-100);\n  hold on \n  title(\"Diffs of Avg Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
+         savg_d[$pf]="$savg_d[$pf] $rmnull\n  x=[1:1:size($avgdname,1)]; \n plot(x,$avgdname*100-100,$opt);\n  hold on \n  title(\"Diffs of Avg Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
      fi
      tmpmax_r="$maxratios ];\n"
      rmnull=`echo  $tmpmax_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         smax_r[$pf]="$smax_r[$pf] $rmnull\n  x=[1:1:size($maxrname,1)]; \n plot(x,$maxrname*100-100);\n  hold on \n  title(\"Parallel and Serial Max Time Comparisons per routine :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
+         smax_r[$pf]="$smax_r[$pf] $rmnull\n  x=[1:1:size($maxrname,1)]; \n plot(x,$maxrname*100-100,$opt);\n  hold on \n  title(\"Parallel and Serial Max Time Comparisons per routine :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
      fi
      tmpall_r="$allratios ];\n"
      rmnull=`echo  $tmpall_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_r[$pf]="$sall_r[$pf] $rmnull\n x=[1:1:size($allrname,1)]; \n plot(x,$allrname*100-100);\n hold on \n  title(\"Parallel and Serial All Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
+         sall_r[$pf]="$sall_r[$pf] $rmnull\n x=[1:1:size($allrname,1)]; \n plot(x,$allrname*100-100,$opt);\n hold on \n  title(\"Parallel and Serial All Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
      fi
 
      tmpavg_r="$avgratios ];\n"
      rmnull=`echo  $tmpavg_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_r[$pf]="$savg_r[$pf] $rmnull  x=[1:1:size($avgrname,1)]; \n plot(x,$avgrname*100-100);\n hold on \n  title(\"Parallel and Serial Avg Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
+         savg_r[$pf]="$savg_r[$pf] $rmnull  x=[1:1:size($avgrname,1)]; \n plot(x,$avgrname*100-100,$opt);\n hold on \n  title(\"Parallel and Serial Avg Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
+     fi
+     let "cnt=cnt+1"
+     if [ $cnt -eq 7 ]; then
+        cnt=1
      fi
             real=`tail -20 $fil | grep real | awk '{print $2}'`
             user=`tail -20 $fil |grep user | awk '{print $2}'`
@@ -215,6 +239,7 @@ fi
                echo  "${prefix1}_user=\"$user\";" >>  $filout
             fi
      fi
+set +x
   done
   newfiles=`ls  $i/*.csv |  cut -d"-" -f1 |sort -u`
   pfiles=""
@@ -280,7 +305,7 @@ do
   if [[ "$L" != "$startl" ]]; then
      startl=$L
      leg=`echo $starte | sed "s/,$//g"`
-     echo "legend($leg);" >>  mfile.m  #figure ???
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
       starte="\"$E\","
   else
     if [[ $starte != \"${E}\", ]]; then
@@ -307,7 +332,7 @@ do
   if [[ "$L" != "$startl" ]]; then
      startl=$L
      leg=`echo $starte | sed "s/,$//g"`
-     echo "legend($leg);" >>  mfile.m  #figure ???
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
       starte="\"$E\","
   else
     if [[ $starte != \"${E}\", ]]; then
@@ -334,7 +359,7 @@ do
   if [[ "$L" != "$startl" ]]; then
      startl=$L
      leg=`echo $starte | sed "s/,$//g"`
-     echo "legend($leg);" >>  mfile.m  #figure ???
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
       starte="\"$E\","
   else
     if [[ $starte != \"${E}\", ]]; then
@@ -361,7 +386,7 @@ do
   if [[ "$L" != "$startl" ]]; then
      startl=$L
      leg=`echo $starte | sed "s/,$//g"`
-     echo "legend($leg);" >>  mfile.m  #figure ???
+     echo -e "legend($leg); \n figure \n" >>  mfile.m  
       starte="\"$E\","
   else
     if [[ $starte != \"${E}\", ]]; then
@@ -388,7 +413,7 @@ do
   if [[ "$L" != "$startl" ]]; then
      startl=$L
      leg=`echo $starte | sed "s/,$//g"`
-     echo "legend($leg);" >>  mfile.m  #figure ???
+     echo -e "legend($leg);  \n figure \n" >>  mfile.m  
       starte="\"$E\","
   else
     if [[ $starte != \"${E}\", ]]; then
