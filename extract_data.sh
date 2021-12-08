@@ -30,6 +30,7 @@ do
 done
 chmod +x doit
 ./doit
+laylist=""
 dirs=`grep "\"784 " slurm-1* | sed "s/ /_/g" | awk -F: '{a=match($2,"\""); dir = substr($2,a+1,length($2)-a-2); print dir}'| sort -u`
 for i in $dirs
 do
@@ -123,6 +124,22 @@ echo "i******************************** matefil=$matefil"
               savg_r[$pf]="figure;\n"
             fi
             prefix1="${pf}_${type}"
+  if echo $laylist | grep -w $layr ; then
+    echo "Seen this layer before"
+  else
+     echo -e "L${layr}_all_tots_list=[]; \n" >>  $filout
+     echo -e "L${layr}_all_trng_list=[]; \n" >>  $filout
+     echo -e "L${layr}_all_test_list=[]; \n" >>  $filout
+     laylist="$laylist $layr"
+  fi
+            if [ -n "$initit1" ]; then
+                echo -e $initit1 >> $filout
+                echo -e $initit2 >> $filout
+                echo -e $initit2 >> $filout
+                initit1=""
+                initit2=""
+                initit3=""
+            fi
             bldver=`grep "Build done" $fil`
             echo "${prefix1}_Build=\"$bldver\";" >> $filout
             echo "${prefix1}_Type=\"$type\";" >> $filout
@@ -137,8 +154,11 @@ echo "i******************************** matefil=$matefil"
                prefix3="${pf}_${comp2}"
                altprefix1="${pf}_Parallel"
                echo -e "${prefix1}_tot_time=$tot_tim;\n ${pf}_tot_PtoS=${prefix1}_tot_time/${altprefix1}_tot_time; \n  ${pf}_tot_PdiffS=${prefix1}_tot_time-${altprefix1}_tot_time; \n ${pf}_all_tots=[   ${pf}_tot_PtoS ${pf}_tot_PdiffS];\n" >> $filout
+               echo -e "L${layr}_all_tots_list=[L${layr}_all_tots_list; \n  ${pf}_all_tots $epc];" >> $filout
                echo -e "${prefix1}_tot_train=$tot_trng_tim; \n ${pf}_trg_PtoS=${prefix1}_tot_train/${altprefix1}_tot_train; \n  ${pf}_trg_PdiffS=${prefix1}_tot_train-${altprefix1}_tot_train; \n ${pf}_all_trgs=[   ${pf}_trg_PtoS ${pf}_trg_PdiffS];\n" >> $filout
+               echo -e "L${layr}_all_trng_list=[L${layr}_all_trng_list; \n  ${pf}_all_trgs $epc];" >> $filout
                echo -e "${prefix1}_tot_test=$tot_test_tim; \n  ${pf}_tst_PtoS=${prefix1}_tot_test/${altprefix1}_tot_test; \n   ${pf}_tst_PdiffS=${prefix1}_tot_test-${altprefix1}_tot_test;\n   ${pf}_all_tsts=[   ${pf}_tst_PtoS ${pf}_tst_PdiffS];\n " >> $filout
+               echo -e "L${layr}_all_test_list=[L${layr}_all_test_list; \n  ${pf}_all_tsts $epc];" >> $filout
             else
                echo "${prefix1}_tot_time=$tot_tim;" >> $filout
                echo "${prefix1}_tot_train=$tot_trng_tim;" >> $filout
@@ -172,7 +192,7 @@ echo "i******************************** matefil=$matefil"
             if [[ "$type" == "Serial" ]]; then
                 maxt2="${pref}_max=$maxt;\n  ${pref2}_max=$maxt/${altpref}_max ; \n     ${pref3}_max=$maxt-${altpref}_max ; \n ${pf}_all_max= [  ${pref2}_max ${pref3}_max ];\n  "
                 allt2="${pref}_all=$allt; \n ${pref2}_all=$allt/${altpref}_all ;  \n    ${pref3}_all=$allt-${altpref}_all ;\n  ${pf}_all_all= [  ${pref2}_all ${pref3}_all ];\n  "
-                avgt2="${pref}_avg=$allt; \n ${pref2}_avg=$allt/${altpref}_avg ;  \n    ${pref3}_avg=$allt-${altpref}_avg ;\n  ${pf}_all_avg= [ ${pref2}_avg ${pref3}_avg ]; \n "
+                avgt2="${pref}_avg=$avgt; \n ${pref2}_avg=$avgt/${altpref}_avg ;  \n    ${pref3}_avg=$avgt-${altpref}_avg ;\n  ${pf}_all_avg= [ ${pref2}_avg ${pref3}_avg ]; \n "
                 maxratios="${maxratios}${pref2}_max;\n"
                 maxdiffs="${maxdiffs}${pref3}_max;\n"
                 allratios="${allratios}${pref2}_all;\n"
@@ -192,39 +212,41 @@ echo "i******************************** matefil=$matefil"
      newpf=`echo $pf |  sed 's/_/ /g'`
      xtick="$xtic } "
      xtic=`echo $xtick | sed 's/_/\\\\_/g'`
+     opt=${plot_options[$cnt]}
+     net=`echo $i | sed 's/_/\\\\_/g'`
+###################################
      tmpmax_d="$maxdiffs ];\n"
      rmnull=`echo $tmpmax_d | sed "/\[ \];/d"`
-     opt=${plot_options[$cnt]}
      if [ -n "$rmnull" ]; then
-         smax_d[$pf]="$smax_d[$pf] $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname*100-100,$opt); \n hold on \n title(\"Diffs of Max Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
+         smax_d[$pf]="$smax_d[$pf] $rmnull\n x=[1:1:size($maxdname,1)]; \n  plot(x,$maxdname*100-100,$opt); \n hold on \n title(\"Diffs of Max Time for Routines : Network Layers : ${layr} : $net\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Serial minus Max Parallel (Secs)\")\n "
      fi
 
      tmpall_d="$alldiffs ];\n"
      rmnull=`echo  $tmpall_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_d[$pf]="$sall_d[$pf] $rmnull\n  x=[1:1:size($alldname,1)]; \n plot(x,$alldname*100-100,$opt);\n  hold on \n title(\"Diffs of All Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
+         sall_d[$pf]="$sall_d[$pf] $rmnull\n  x=[1:1:size($alldname,1)]; \n plot(x,$alldname*100-100,$opt);\n  hold on \n title(\"Diffs of All Time for Routines : Network Layers : ${layr} : $net\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial minus All Parallel (Secs)\")\n "
      fi
 
      tmpavg_d="$avgdiffs ];\n"
      rmnull=`echo  $avgmax_d | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_d[$pf]="$savg_d[$pf] $rmnull\n  x=[1:1:size($avgdname,1)]; \n plot(x,$avgdname*100-100,$opt);\n  hold on \n  title(\"Diffs of Avg Time for Routines : Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
+         savg_d[$pf]="$savg_d[$pf] $rmnull\n  x=[1:1:size($avgdname,1)]; \n plot(x,$avgdname*100-100,$opt);\n  hold on \n  title(\"Diffs of Avg Time for Routines : Network Layers : ${layr} : $net\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial minus Avg Parallel (Secs)\")\n "
      fi
      tmpmax_r="$maxratios ];\n"
      rmnull=`echo  $tmpmax_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         smax_r[$pf]="$smax_r[$pf] $rmnull\n  x=[1:1:size($maxrname,1)]; \n plot(x,$maxrname*100-100,$opt);\n  hold on \n  title(\"Parallel and Serial Max Time Comparisons per routine :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
+         smax_r[$pf]="$smax_r[$pf] $rmnull\n  x=[1:1:size($maxrname,1)]; \n plot(x,$maxrname*100-100,$opt);\n  hold on \n  title(\"Parallel and Serial Max Time Comparisons per routine :  Network Layers : ${layr} : $net\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Max Routine Time Parallel faster than Serial (%)\")\n "
      fi
      tmpall_r="$allratios ];\n"
      rmnull=`echo  $tmpall_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         sall_r[$pf]="$sall_r[$pf] $rmnull\n x=[1:1:size($allrname,1)]; \n plot(x,$allrname*100-100,$opt);\n hold on \n  title(\"Parallel and Serial All Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
+         sall_r[$pf]="$sall_r[$pf] $rmnull\n x=[1:1:size($allrname,1)]; \n plot(x,$allrname*100-100,$opt);\n hold on \n  title(\"Parallel and Serial All Time Comparisons per routine  :  Network Layers : ${layr} : $net\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"All Serial:Parallel Time Ratios (%)\")\n "
      fi
 
      tmpavg_r="$avgratios ];\n"
      rmnull=`echo  $tmpavg_r | sed "/\[ \];/d"`
      if [ -n "$rmnull" ]; then
-         savg_r[$pf]="$savg_r[$pf] $rmnull  x=[1:1:size($avgrname,1)]; \n plot(x,$avgrname*100-100,$opt);\n hold on \n  title(\"Parallel and Serial Avg Time Comparisons per routine  :  Network Layers : ${layr}\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
+         savg_r[$pf]="$savg_r[$pf] $rmnull  x=[1:1:size($avgrname,1)]; \n plot(x,$avgrname*100-100,$opt);\n hold on \n  title(\"Parallel and Serial Avg Time Comparisons per routine  :  Network Layers : ${layr} : $net\"); \nxlabel(\"Routine\")\n set(gca,'XTick',x) \n set(gca,'XTickLabel',$xtic) \n ylabel(\"Avg Serial:Parallel Time Ratios (%)\")\n"
      fi
      let "cnt=cnt+1"
      if [ $cnt -eq 7 ]; then
