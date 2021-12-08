@@ -28,8 +28,8 @@
 #define MAX_PIXEL_VAL 255.0f
 #define IMAGE_OFFSET 16
 #define DEFAULT_HIDDEN 30
-#define DEFAULT_HIDDEN1 30
-#define DEFAULT_HIDDEN2 30
+#define DEFAULT_HIDDEN1 500
+#define DEFAULT_HIDDEN2 300
 #define DEFAULT_HIDDEN3 20
 #define DEFAULT_HIDDEN4 20
 #define DEFAULT_HIDDEN5 20
@@ -39,7 +39,7 @@
 #define EPSILON 1E-04
 #define TRAININGSAMPLES 60000
 #define TESTINGSAMPLES 10000
-#define EPOCHS 128
+#define EPOCHS 64
 #define THREADS_PER_2BLKDIM 32 
 #define THREADS_PER_1BLKDIM 256
 #define TILES 32
@@ -2084,7 +2084,7 @@ int main()
     for (int i = 0; i < err_summary.n_cols; i++)
         err_summary.ptr[i] = -1.0;
 
-    NumberOfLayers = 8;
+    NumberOfLayers = 4;
 
     try
     {
@@ -2103,10 +2103,10 @@ int main()
 //    nodes[c++] = DEFAULT_HIDDEN;
     nodes[c++] = DEFAULT_HIDDEN1;
     nodes[c++] = DEFAULT_HIDDEN2;
-    nodes[c++] = DEFAULT_HIDDEN3;
-    nodes[c++] = DEFAULT_HIDDEN4;
-    nodes[c++] = DEFAULT_HIDDEN5;
-    nodes[c++] = DEFAULT_HIDDEN6;
+//    nodes[c++] = DEFAULT_HIDDEN3;
+//    nodes[c++] = DEFAULT_HIDDEN4;
+//    nodes[c++] = DEFAULT_HIDDEN5;
+//    nodes[c++] = DEFAULT_HIDDEN6;
     nodes[c++] = OUTPUT_LINES;
     if (c != NumberOfLayers)
         ouch("Check of setup appears incorrect, as "+to_string(c)+" != "+to_string(NumberOfLayers)+" See line "+to_string(__LINE__));
