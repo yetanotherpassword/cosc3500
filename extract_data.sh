@@ -11,7 +11,7 @@ declare -A  savg_r=()
 declare -a  plot_options
 plot_options[1]="\"o:\""
 plot_options[2]="\"*-.\""
-plot_options[3]="\"s.\""
+plot_options[3]="\"s-\""
 plot_options[4]="\"v--\""
 plot_options[5]="\"d:\""
 plot_options[6]="\"+-.\""
